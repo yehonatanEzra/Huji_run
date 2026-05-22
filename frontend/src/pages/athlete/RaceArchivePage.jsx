@@ -1,0 +1,65 @@
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { listRaces } from '../../api/races';
+import Spinner from '../../components/ui/Spinner';
+
+export default function RaceArchivePage() {
+  const [races, setRaces] = useState([]);
+  const [search, setSearch] = useState('');
+  const [year, setYear] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = {};
+    if (search) params.search = search;
+    if (year) params.year = parseInt(year);
+    listRaces(params)
+      .then(({ data }) => setRaces(data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, [search, year]);
+
+  const years = [...new Set(races.map((r) => r.race_date.slice(0, 4)))].sort().reverse();
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">Race Archive</h2>
+
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text"
+          placeholder="Search races..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <select
+          value={year}
+          onChange={(e) => setYear(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Years</option>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      {loading ? <Spinner /> : races.length === 0 ? (
+        <p className="text-center text-gray-400 py-8">No races found</p>
+      ) : (
+        <div className="space-y-2">
+          {races.map((race) => (
+            <Link
+              key={race.id}
+              to={`/races/${race.id}`}
+              className="block bg-white border rounded-xl p-4 hover:shadow-sm transition"
+            >
+              <p className="font-semibold text-sm">{race.name}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{race.race_date}</p>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

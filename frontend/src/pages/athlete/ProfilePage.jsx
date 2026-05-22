@@ -1,0 +1,79 @@
+import { useState, useEffect } from 'react';
+import { getMyProfile } from '../../api/profile';
+import Spinner from '../../components/ui/Spinner';
+
+const DISTANCE_LABELS = {
+  1500: '1,500m', 3000: '3,000m', 5000: '5,000m',
+  10000: '10,000m', 21100: 'Half Marathon', 42200: 'Marathon',
+};
+
+export default function ProfilePage() {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getMyProfile()
+      .then(({ data }) => setProfile(data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <Spinner />;
+  if (!profile) return <p className="text-center text-gray-500">Failed to load profile</p>;
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h2 className="text-xl font-bold">{profile.full_name}</h2>
+        <span className="text-sm text-gray-500">{profile.gender === 'M' ? 'Male' : 'Female'}</span>
+      </div>
+
+      <h3 className="text-base font-semibold mb-3">Personal Bests</h3>
+      {profile.personal_bests.length === 0 ? (
+        <p className="text-sm text-gray-400 mb-6">No records yet</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          {profile.personal_bests.map((pb) => (
+            <div key={pb.distance_m} className="bg-white border rounded-xl p-3">
+              <p className="text-xs text-gray-500 font-medium">{DISTANCE_LABELS[pb.distance_m]}</p>
+              <p className="text-lg font-mono font-bold text-blue-700">{pb.time_display}</p>
+              <p className="text-xs text-gray-400">{pb.pace_display} /km</p>
+              <p className="text-xs text-gray-400 mt-1">{pb.race_name} - {pb.achieved_date}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 className="text-base font-semibold mb-3">Race History</h3>
+      {profile.race_history.length === 0 ? (
+        <p className="text-sm text-gray-400">No races yet</p>
+      ) : (
+        <div className="bg-white border rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left px-3 py-2 font-medium text-gray-500">Race</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-500">Dist</th>
+                <th className="text-right px-3 py-2 font-medium text-gray-500">Time</th>
+                <th className="text-right px-3 py-2 font-medium text-gray-500">#</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profile.race_history.map((r, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-3 py-2">
+                    <p className="font-medium">{r.race_name}</p>
+                    <p className="text-xs text-gray-400">{r.race_date}</p>
+                  </td>
+                  <td className="px-3 py-2 text-gray-600">{DISTANCE_LABELS[r.distance_m] || `${r.distance_m}m`}</td>
+                  <td className="px-3 py-2 text-right font-mono">{r.time_display}</td>
+                  <td className="px-3 py-2 text-right">{r.placement}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

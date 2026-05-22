@@ -1,0 +1,196 @@
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+from ..database import get_db
+from ..dependencies import get_current_user, require_coach
+from ..models.user import User
+from ..models.race import Race, Heat, Result, CANONICAL_DISTANCES
+from ..schemas.race import (
+    RaceCreate, RaceOut, HeatCreate, HeatOut,
+    ResultCreate, ResultOut, HeatWithResults, RaceDetail,
+)
+from ..services.time_utils import parse_time, seconds_to_display, format_pace
+from ..services.hall_of_fame import refresh_hall_of_fame
+
+router = APIRouter(prefix="/races", tags=["races"])
+
+
+@router.get("", response_model=list[RaceOut])
+def list_races(
+    search: Optional[str] = Query(None),
+    year: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    q = db.query(Race)
+    if search:
+        q = q.filter(Race.name.ilike(f"%{search}%"))
+    if year:
+        q = q.filter(func.strftime("%Y", Race.race_date) == str(year))
+    return q.order_by(Race.race_date.desc()).all()
+
+
+@router.get("/{race_id}", response_model=RaceDetail)
+def get_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    return race
+
+
+@router.get("/{race_id}/results", response_model=list[HeatWithResults])
+def get_race_results(
+    race_id: int,
+    distance_m: int = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    heats = db.query(Heat).filter(Heat.race_id == race_id, Heat.distance_m == distance_m).all()
+    output = []
+    for heat in heats:
+        sorted_results = sorted(heat.results, key=lambda r: r.time_seconds)
+        result_outs = []
+        for placement, r in enumerate(sorted_results, start=1):
+            result_outs.append(ResultOut(
+                id=r.id,
+                heat_id=r.heat_id,
+                athlete_name=r.athlete_name,
+                gender=r.gender,
+                time_seconds=r.time_seconds,
+                time_display=seconds_to_display(r.time_seconds),
+                pace_display=format_pace(r.time_seconds, distance_m),
+                placement=placement,
+            ))
+        output.append(HeatWithResults(heat=HeatOut.model_validate(heat), results=result_outs))
+    return output
+
+
+@router.get("/{race_id}/leaderboard")
+def get_race_leaderboard(
+    race_id: int,
+    distance_m: int = Query(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    heats = db.query(Heat).filter(Heat.race_id == race_id, Heat.distance_m == distance_m).all()
+    all_results = [r for heat in heats for r in heat.results]
+
+    def build_board(gender: str):
+        filtered = sorted(
+            [r for r in all_results if r.gender == gender],
+            key=lambda r: r.time_seconds
+        )
+        return [
+            {
+                "placement": i + 1,
+                "athlete_name": r.athlete_name,
+                "time_display": seconds_to_display(r.time_seconds),
+                "pace_display": format_pace(r.time_seconds, distance_m),
+                "time_seconds": r.time_seconds,
+            }
+            for i, r in enumerate(filtered)
+        ]
+
+    return {"men": build_board("M"), "women": build_board("F")}
+
+
+# ── Coach write endpoints ──────────────────────────────────────────────────────
+
+@router.post("", response_model=RaceOut, status_code=status.HTTP_201_CREATED)
+def create_race(
+    body: RaceCreate,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    race = Race(name=body.name.strip(), race_date=body.race_date, created_by=coach.id)
+    db.add(race)
+    db.commit()
+    db.refresh(race)
+    return race
+
+
+@router.post("/{race_id}/heats", response_model=HeatOut, status_code=status.HTTP_201_CREATED)
+def add_heat(
+    race_id: int,
+    body: HeatCreate,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    heat = Heat(race_id=race_id, distance_m=body.distance_m, label=body.label.strip())
+    db.add(heat)
+    db.commit()
+    db.refresh(heat)
+    return heat
+
+
+@router.post("/{race_id}/heats/{heat_id}/results", response_model=ResultOut, status_code=status.HTTP_201_CREATED)
+def add_result(
+    race_id: int,
+    heat_id: int,
+    body: ResultCreate,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    heat = db.get(Heat, heat_id)
+    if not heat or heat.race_id != race_id:
+        raise HTTPException(status_code=404, detail="Heat not found")
+
+    try:
+        time_sec = parse_time(body.time_raw)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Resolve athlete name to registered user
+    matched_user = db.query(User).filter(
+        func.lower(User.full_name) == func.lower(body.athlete_name.strip())
+    ).first()
+
+    gender = matched_user.gender if matched_user else body.gender
+    if gender is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Gender must be provided when athlete name doesn't match a registered user"
+        )
+
+    result = Result(
+        heat_id=heat_id,
+        athlete_name=body.athlete_name.strip(),
+        user_id=matched_user.id if matched_user else None,
+        gender=gender,
+        time_seconds=time_sec,
+    )
+    db.add(result)
+    db.flush()
+
+    # Trigger Hall of Fame refresh
+    refresh_hall_of_fame(db, heat.distance_m, gender)
+    db.commit()
+    db.refresh(result)
+
+    # Compute placement within this heat
+    siblings = sorted(heat.results, key=lambda r: r.time_seconds)
+    placement = next(i + 1 for i, r in enumerate(siblings) if r.id == result.id)
+
+    return ResultOut(
+        id=result.id,
+        heat_id=result.heat_id,
+        athlete_name=result.athlete_name,
+        gender=result.gender,
+        time_seconds=result.time_seconds,
+        time_display=seconds_to_display(result.time_seconds),
+        pace_display=format_pace(result.time_seconds, heat.distance_m),
+        placement=placement,
+    )
+
+
+@router.delete("/{race_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(require_coach)):
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    db.delete(race)
+    db.commit()

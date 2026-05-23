@@ -114,6 +114,7 @@ def _week_start(d: date) -> date:
 
 @router.get("/km-leaders")
 def get_km_leaders(
+    group_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -124,19 +125,29 @@ def get_km_leaders(
     month_start = today.replace(day=1)
     next_month = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
 
-    week_rows = (
+    group_athlete_ids = None
+    if group_id is not None:
+        group_athlete_ids = [
+            u.id for u in db.query(User).filter(User.training_group_id == group_id).all()
+        ]
+
+    week_q = (
         db.query(
             WorkoutLog.athlete_id,
             sa_func.sum(WorkoutLog.distance_km).label("total_km"),
         )
         .filter(WorkoutLog.date.in_(week_dates), WorkoutLog.distance_km.isnot(None))
-        .group_by(WorkoutLog.athlete_id)
+    )
+    if group_athlete_ids is not None:
+        week_q = week_q.filter(WorkoutLog.athlete_id.in_(group_athlete_ids))
+    week_rows = (
+        week_q.group_by(WorkoutLog.athlete_id)
         .order_by(sa_func.sum(WorkoutLog.distance_km).desc())
         .limit(10)
         .all()
     )
 
-    month_rows = (
+    month_q = (
         db.query(
             WorkoutLog.athlete_id,
             sa_func.sum(WorkoutLog.distance_km).label("total_km"),
@@ -146,7 +157,11 @@ def get_km_leaders(
             WorkoutLog.date < next_month,
             WorkoutLog.distance_km.isnot(None),
         )
-        .group_by(WorkoutLog.athlete_id)
+    )
+    if group_athlete_ids is not None:
+        month_q = month_q.filter(WorkoutLog.athlete_id.in_(group_athlete_ids))
+    month_rows = (
+        month_q.group_by(WorkoutLog.athlete_id)
         .order_by(sa_func.sum(WorkoutLog.distance_km).desc())
         .limit(10)
         .all()

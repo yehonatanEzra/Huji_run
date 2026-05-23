@@ -26,9 +26,6 @@ export default function HallOfFamePage() {
     getHofGroups()
       .then(({ data }) => setGroups(data))
       .catch(console.error);
-    getKmLeaders()
-      .then(({ data }) => setKmLeaders(data))
-      .catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -37,6 +34,9 @@ export default function HallOfFamePage() {
       .then(({ data }) => setData(data.distances))
       .catch(console.error)
       .finally(() => setLoading(false));
+    getKmLeaders(selectedGroup)
+      .then(({ data }) => setKmLeaders(data))
+      .catch(console.error);
   }, [selectedGroup]);
 
   return (

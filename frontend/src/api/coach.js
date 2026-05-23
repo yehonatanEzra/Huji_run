@@ -41,3 +41,6 @@ export const getAthleteProfile = (athleteId) =>
 
 export const getAthleteWeek = (athleteId, date) =>
   client.get(`/coach/athletes/${athleteId}/week`, { params: { day: date } });
+
+export const addAthletePB = (athleteId, data) =>
+  client.post(`/coach/athletes/${athleteId}/pb`, data);

@@ -362,6 +362,8 @@ def get_athlete_profile(
             {
                 "date": l.date.isoformat(),
                 "completed": l.completed,
+                "status": l.status,
+                "distance_km": l.distance_km,
                 "notes": l.notes,
             }
             for l in recent_logs
@@ -412,9 +414,75 @@ def get_athlete_week(
         gw = gw_map.get(d)
         days.append({
             "date": d.isoformat(),
-            "log": {"completed": log.completed, "status": log.status, "notes": log.notes} if log else None,
+            "log": {"completed": log.completed, "status": log.status, "distance_km": log.distance_km, "notes": log.notes} if log else None,
             "target": {"note": target.note, "override_group": target.override_group} if target else None,
             "group_workout": {"content": gw.content} if gw and gw.content else None,
         })
 
     return {"week_start": ws.isoformat(), "days": days}
+
+
+class AddPBRequest(BaseModel):
+    athlete_id: int
+    distance_m: int
+    time_seconds: int
+    competition_name: Optional[str] = None
+    race_id: Optional[int] = None
+    heat_id: Optional[int] = None
+
+
+@router.post("/athletes/{athlete_id}/pb")
+def add_athlete_pb(
+    athlete_id: int,
+    body: AddPBRequest,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    from ..services.hall_of_fame import refresh_hall_of_fame
+
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    if body.race_id and body.heat_id:
+        heat = db.get(Heat, body.heat_id)
+        if not heat or heat.race_id != body.race_id:
+            raise HTTPException(status_code=404, detail="Heat not found")
+        result = Result(
+            heat_id=body.heat_id,
+            athlete_name=athlete.full_name,
+            user_id=athlete.id,
+            gender=athlete.gender or "M",
+            time_seconds=body.time_seconds,
+        )
+        db.add(result)
+        db.commit()
+        refresh_hall_of_fame(db, heat.distance_m, result.gender)
+        return {"ok": True, "linked_to_race": True}
+
+    race_name = body.competition_name or "Manual PB"
+    race = Race(
+        name=race_name,
+        race_date=date.today(),
+        created_by=coach.id,
+    )
+    db.add(race)
+    db.flush()
+    heat = Heat(
+        race_id=race.id,
+        distance_m=body.distance_m,
+        label=f"{body.distance_m}m",
+    )
+    db.add(heat)
+    db.flush()
+    result = Result(
+        heat_id=heat.id,
+        athlete_name=athlete.full_name,
+        user_id=athlete.id,
+        gender=athlete.gender or "M",
+        time_seconds=body.time_seconds,
+    )
+    db.add(result)
+    db.commit()
+    refresh_hall_of_fame(db, body.distance_m, result.gender)
+    return {"ok": True, "linked_to_race": False, "race_id": race.id}

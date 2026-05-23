@@ -3,6 +3,9 @@ import client from './client';
 export const getMyProfile = () =>
   client.get('/profile/me');
 
+export const updateMyProfile = (data) =>
+  client.patch('/profile/me', data);
+
 export const uploadPhoto = (file) => {
   const form = new FormData();
   form.append('file', file);

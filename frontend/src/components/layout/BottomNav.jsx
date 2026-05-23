@@ -13,8 +13,9 @@ const coachItems = [
   { to: '/coach/dashboard', label: 'Tracking', icon: '📊' },
   { to: '/feed', label: 'Feed', icon: '📢' },
   { to: '/races', label: 'Races', icon: '🏆' },
-  { to: '/hall-of-fame', label: 'Hall of Fame', icon: '🥇' },
-  { to: '/coach/workouts', label: 'Coach', icon: '📋' },
+  { to: '/hall-of-fame', label: 'Records', icon: '🥇' },
+  { to: '/coach/workouts', label: 'Workouts', icon: '📋' },
+  { to: '/profile', label: 'Profile', icon: '👤' },
 ];
 
 export default function BottomNav() {

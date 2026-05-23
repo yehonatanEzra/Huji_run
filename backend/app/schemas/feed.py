@@ -20,6 +20,7 @@ class CommentOut(BaseModel):
     id: int
     user_name: str
     user_id: int
+    user_role: str = "athlete"
     photo_url: Optional[str] = None
     body: str
     created_at: datetime
@@ -30,6 +31,7 @@ class AnnouncementOut(BaseModel):
     title: str
     body: str
     author_name: str
+    author_role: str = "athlete"
     author_photo_url: Optional[str] = None
     training_group_id: Optional[int] = None
     created_at: datetime

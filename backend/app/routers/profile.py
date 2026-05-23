@@ -104,6 +104,18 @@ def my_profile(
     return _build_profile(current_user, db)
 
 
+@router.patch("/me")
+def update_my_profile(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if "full_name" in body and body["full_name"].strip():
+        current_user.full_name = body["full_name"].strip()
+        db.commit()
+    return {"full_name": current_user.full_name}
+
+
 @router.post("/photo")
 async def upload_photo(
     file: UploadFile = File(...),

@@ -4,16 +4,26 @@ from ..models.hall_of_fame import HallOfFame
 
 
 def refresh_hall_of_fame(db: Session, distance_m: int, gender: str) -> None:
-    """Recompute and cache the top-3 for a given distance+gender."""
-    top3 = (
+    """Recompute and cache the top-3 for a given distance+gender (one entry per athlete)."""
+    all_results = (
         db.query(Result, Heat, Race)
         .join(Heat, Result.heat_id == Heat.id)
         .join(Race, Heat.race_id == Race.id)
         .filter(Heat.distance_m == distance_m, Result.gender == gender)
         .order_by(Result.time_seconds.asc())
-        .limit(3)
         .all()
     )
+
+    seen = set()
+    top3 = []
+    for result, heat, race in all_results:
+        key = result.user_id or result.athlete_name
+        if key in seen:
+            continue
+        seen.add(key)
+        top3.append((result, heat, race))
+        if len(top3) >= 3:
+            break
 
     db.query(HallOfFame).filter_by(distance_m=distance_m, gender=gender).delete()
 

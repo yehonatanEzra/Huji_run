@@ -47,6 +47,7 @@ export default function CalendarPage() {
     setSelectedDay(day);
     setLogForm({
       status: day.workout_log?.status || 'missed',
+      distance_km: day.workout_log?.distance_km || '',
       notes: day.workout_log?.notes || '',
     });
   };
@@ -54,7 +55,11 @@ export default function CalendarPage() {
   const handleSaveLog = async () => {
     setSaving(true);
     try {
-      await submitLog({ date: selectedDay.date, ...logForm });
+      const payload = { date: selectedDay.date, status: logForm.status, notes: logForm.notes };
+      if (logForm.distance_km !== '' && logForm.distance_km != null) {
+        payload.distance_km = parseFloat(logForm.distance_km);
+      }
+      await submitLog(payload);
       setSelectedDay(null);
       fetchData();
     } catch (err) {
@@ -88,15 +93,20 @@ export default function CalendarPage() {
           <span className="text-sm font-semibold">
             {format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}
           </span>
-          {hasLog && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${
-              hasLog.status === 'completed' ? 'bg-green-100 text-green-700' :
-              hasLog.status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-red-100 text-red-700'
-            }`}>
-              {hasLog.status === 'completed' ? 'Done' : hasLog.status === 'partial' ? 'Partial' : 'Missed'}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {hasLog?.kudos_count > 0 && (
+              <span className="text-xs text-pink-600">👏 {hasLog.kudos_count}</span>
+            )}
+            {hasLog && (
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                hasLog.status === 'completed' ? 'bg-green-100 text-green-700' :
+                hasLog.status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {hasLog.status === 'completed' ? 'Done' : hasLog.status === 'partial' ? 'Partial' : 'Missed'}
+              </span>
+            )}
+          </div>
         </div>
         {day.group_workout && (
           <p className="text-sm text-gray-600 truncate">{day.group_workout.content}</p>
@@ -174,6 +184,18 @@ export default function CalendarPage() {
         >Monthly</button>
       </div>
 
+      {!loading && (() => {
+        const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
+        return weekKm > 0 ? (
+          <div className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 mb-4">
+            <span className="text-sm font-medium text-blue-700">
+              {view === 'weekly' ? 'Weekly' : 'Monthly'} Volume
+            </span>
+            <span className="text-lg font-bold text-blue-800">{weekKm.toFixed(1)} km</span>
+          </div>
+        ) : null;
+      })()}
+
       {loading ? <Spinner /> : view === 'weekly' ? (
         <div className="space-y-2">
           {days.map(renderDayCard)}
@@ -196,6 +218,15 @@ export default function CalendarPage() {
               </div>
             )}
 
+            {selectedDay.workout_log && selectedDay.workout_log.kudos_count > 0 && (
+              <div className="flex items-center gap-1.5 bg-pink-50 rounded-lg px-3 py-2">
+                <span className="text-lg">👏</span>
+                <span className="text-sm font-medium text-pink-700">
+                  {selectedDay.workout_log.kudos_count} kudos
+                </span>
+              </div>
+            )}
+
             <div className="border-t pt-4">
               <p className="text-sm font-medium mb-2">Workout Report</p>
               <div className="flex gap-2 mb-3">
@@ -215,6 +246,20 @@ export default function CalendarPage() {
                   </button>
                 ))}
               </div>
+              {logForm.status !== 'missed' && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">Distance (km)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g. 8.5"
+                    value={logForm.distance_km}
+                    onChange={(e) => setLogForm({ ...logForm, distance_km: e.target.value })}
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
               <textarea
                 placeholder="How did it go? Any notes..."
                 value={logForm.notes}

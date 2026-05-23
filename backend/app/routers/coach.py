@@ -1,20 +1,155 @@
 from datetime import date, timedelta
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_coach
 from ..models.user import User
-from ..models.workout import WorkoutLog
+from ..models.training_group import TrainingGroup
+from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
+from ..models.race import Race, Heat, Result
 from ..schemas.auth import UserOut
-from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut
+from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut, IndividualTargetOut, GroupWorkoutOut
+
+
+class UpdateAthleteName(BaseModel):
+    full_name: str
+
+
+class TrainingGroupCreate(BaseModel):
+    name: str
+
+
+class TrainingGroupOut(BaseModel):
+    id: int
+    name: str
+    member_count: int = 0
+    model_config = {"from_attributes": True}
+
+
+class TrainingGroupDetail(BaseModel):
+    id: int
+    name: str
+    members: list[UserOut]
+    model_config = {"from_attributes": True}
+
+
+class AssignAthleteBody(BaseModel):
+    athlete_id: int
+
 
 router = APIRouter(prefix="/coach", tags=["coach"])
 
 
 def _week_start(d: date) -> date:
-    return d - timedelta(days=d.weekday())
+    return d - timedelta(days=(d.weekday() + 1) % 7)
 
+
+# ── Training Groups ──────────────────────────────────────────────────────────
+
+@router.get("/groups", response_model=list[TrainingGroupOut])
+def list_groups(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    groups = db.query(TrainingGroup).order_by(TrainingGroup.name).all()
+    return [
+        TrainingGroupOut(id=g.id, name=g.name, member_count=len(g.members))
+        for g in groups
+    ]
+
+
+@router.post("/groups", response_model=TrainingGroupOut, status_code=201)
+def create_group(
+    body: TrainingGroupCreate,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    g = TrainingGroup(name=body.name.strip(), created_by=coach.id)
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+    return TrainingGroupOut(id=g.id, name=g.name, member_count=0)
+
+
+@router.get("/groups/{group_id}", response_model=TrainingGroupDetail)
+def get_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    g = db.get(TrainingGroup, group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return TrainingGroupDetail(id=g.id, name=g.name, members=g.members)
+
+
+@router.patch("/groups/{group_id}", response_model=TrainingGroupOut)
+def rename_group(
+    group_id: int,
+    body: TrainingGroupCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    g = db.get(TrainingGroup, group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    g.name = body.name.strip()
+    db.commit()
+    db.refresh(g)
+    return TrainingGroupOut(id=g.id, name=g.name, member_count=len(g.members))
+
+
+@router.delete("/groups/{group_id}", status_code=204)
+def delete_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    g = db.get(TrainingGroup, group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    for member in g.members:
+        member.training_group_id = None
+    db.delete(g)
+    db.commit()
+
+
+@router.post("/groups/{group_id}/members", status_code=200)
+def add_member_to_group(
+    group_id: int,
+    body: AssignAthleteBody,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    g = db.get(TrainingGroup, group_id)
+    if not g:
+        raise HTTPException(status_code=404, detail="Group not found")
+    athlete = db.get(User, body.athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    athlete.training_group_id = group_id
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/groups/{group_id}/members/{athlete_id}", status_code=204)
+def remove_member_from_group(
+    group_id: int,
+    athlete_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.training_group_id != group_id:
+        raise HTTPException(status_code=404, detail="Athlete not in this group")
+    athlete.training_group_id = None
+    db.commit()
+
+
+# ── Athletes ─────────────────────────────────────────────────────────────────
 
 @router.get("/athletes", response_model=list[UserOut])
 def list_athletes(
@@ -37,7 +172,7 @@ def search_athletes(
         .limit(10)
         .all()
     )
-    return [{"id": u.id, "full_name": u.full_name, "gender": u.gender} for u in results]
+    return [{"id": u.id, "full_name": u.full_name, "gender": u.gender, "training_group_id": u.training_group_id} for u in results]
 
 
 @router.get("/dashboard/week", response_model=CoachDashboardResponse)
@@ -51,26 +186,235 @@ def dashboard_week(
 
     athletes = db.query(User).filter(User.role == "athlete").order_by(User.full_name).all()
 
-    # Fetch all logs for the week in one query
-    logs = db.query(WorkoutLog).filter(
-        WorkoutLog.date.in_(week_dates)
-    ).all()
+    logs = db.query(WorkoutLog).filter(WorkoutLog.date.in_(week_dates)).all()
     log_map: dict[tuple, WorkoutLog] = {(l.athlete_id, l.date): l for l in logs}
+
+    targets = db.query(IndividualTarget).filter(IndividualTarget.date.in_(week_dates)).all()
+    target_map: dict[tuple, IndividualTarget] = {(t.athlete_id, t.date): t for t in targets}
+
+    group_workouts = db.query(GroupWorkout).filter(GroupWorkout.date.in_(week_dates)).all()
+    gw_map: dict[tuple, GroupWorkout] = {(gw.training_group_id, gw.date): gw for gw in group_workouts}
+
+    group_map = {g.id: g.name for g in db.query(TrainingGroup).all()}
 
     rows = []
     for athlete in athletes:
         days = []
         for d in week_dates:
             log = log_map.get((athlete.id, d))
+            target = target_map.get((athlete.id, d))
+            gw = gw_map.get((athlete.training_group_id, d)) if athlete.training_group_id else None
             days.append({
                 "date": d,
                 "log": WorkoutLogOut.model_validate(log) if log else None,
+                "target": IndividualTargetOut.model_validate(target) if target else None,
+                "group_workout": GroupWorkoutOut.model_validate(gw) if gw else None,
             })
         rows.append(AthleteWeekRow(
             id=athlete.id,
             full_name=athlete.full_name,
             gender=athlete.gender,
+            group_name=group_map.get(athlete.training_group_id),
             days=days,
         ))
 
     return CoachDashboardResponse(week_start=ws, athletes=rows)
+
+
+@router.patch("/athletes/{athlete_id}", response_model=UserOut)
+def update_athlete(
+    athlete_id: int,
+    body: UpdateAthleteName,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
+    athlete.full_name = body.full_name.strip()
+    db.commit()
+    db.refresh(athlete)
+    return athlete
+
+
+@router.delete("/athletes/{athlete_id}", status_code=204)
+def delete_athlete(
+    athlete_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
+    from ..models.hall_of_fame import HallOfFame
+    from ..services.hall_of_fame import refresh_hall_of_fame
+    db.query(WorkoutLog).filter(WorkoutLog.athlete_id == athlete_id).delete()
+    db.query(IndividualTarget).filter(IndividualTarget.athlete_id == athlete_id).delete()
+    athlete_results = db.query(Result).filter(Result.user_id == athlete_id).all()
+    hof_refresh = set()
+    for r in athlete_results:
+        heat = db.get(Heat, r.heat_id)
+        if heat:
+            hof_refresh.add((heat.distance_m, r.gender))
+        db.delete(r)
+    db.query(HallOfFame).filter(HallOfFame.user_id == athlete_id).delete()
+    db.delete(athlete)
+    db.commit()
+    for distance_m, gender in hof_refresh:
+        refresh_hall_of_fame(db, distance_m, gender)
+
+
+@router.get("/athletes/{athlete_id}/profile")
+def get_athlete_profile(
+    athlete_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    group_name = None
+    if athlete.training_group_id:
+        group = db.get(TrainingGroup, athlete.training_group_id)
+        if group:
+            group_name = group.name
+
+    total_logs = db.query(sa_func.count(WorkoutLog.id)).filter(
+        WorkoutLog.athlete_id == athlete_id
+    ).scalar()
+    completed_logs = db.query(sa_func.count(WorkoutLog.id)).filter(
+        WorkoutLog.athlete_id == athlete_id, WorkoutLog.completed == True
+    ).scalar()
+    missed_logs = total_logs - completed_logs
+
+    recent_logs = (
+        db.query(WorkoutLog)
+        .filter(WorkoutLog.athlete_id == athlete_id)
+        .order_by(WorkoutLog.date.desc())
+        .limit(10)
+        .all()
+    )
+
+    results = (
+        db.query(Result, Heat, Race)
+        .join(Heat, Result.heat_id == Heat.id)
+        .join(Race, Heat.race_id == Race.id)
+        .filter(Result.user_id == athlete_id)
+        .order_by(Race.race_date.desc())
+        .all()
+    )
+
+    def fmt_time(s):
+        m, sec = divmod(s, 60)
+        h, m = divmod(m, 60)
+        if h:
+            return f"{h}:{m:02d}:{sec:02d}"
+        return f"{m}:{sec:02d}"
+
+    def fmt_dist(d):
+        if d >= 1000:
+            km = d / 1000
+            return f"{km:.1f}km".replace(".0km", "km")
+        return f"{d}m"
+
+    race_history = []
+    for result, heat, race in results:
+        race_history.append({
+            "race_name": race.name,
+            "race_date": race.race_date.isoformat(),
+            "distance_m": heat.distance_m,
+            "distance_display": fmt_dist(heat.distance_m),
+            "heat_label": heat.label,
+            "time_seconds": result.time_seconds,
+            "time_display": fmt_time(result.time_seconds),
+        })
+
+    pbs = {}
+    for result, heat, race in results:
+        dist = heat.distance_m
+        if dist not in pbs or result.time_seconds < pbs[dist]["time_seconds"]:
+            pbs[dist] = {
+                "distance_m": dist,
+                "distance_display": fmt_dist(dist),
+                "time_seconds": result.time_seconds,
+                "time_display": fmt_time(result.time_seconds),
+                "race_name": race.name,
+                "race_date": race.race_date.isoformat(),
+            }
+    personal_bests = sorted(pbs.values(), key=lambda x: x["distance_m"])
+
+    return {
+        "id": athlete.id,
+        "full_name": athlete.full_name,
+        "username": athlete.username,
+        "gender": athlete.gender,
+        "group_name": group_name,
+        "training_group_id": athlete.training_group_id,
+        "created_at": athlete.created_at.isoformat() if athlete.created_at else None,
+        "stats": {
+            "total_logs": total_logs,
+            "completed": completed_logs,
+            "missed": missed_logs,
+            "completion_rate": round(completed_logs / total_logs * 100) if total_logs > 0 else 0,
+        },
+        "recent_logs": [
+            {
+                "date": l.date.isoformat(),
+                "completed": l.completed,
+                "notes": l.notes,
+            }
+            for l in recent_logs
+        ],
+        "race_history": race_history,
+        "personal_bests": personal_bests,
+    }
+
+
+@router.get("/athletes/{athlete_id}/week")
+def get_athlete_week(
+    athlete_id: int,
+    day: date = Query(default_factory=date.today),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    ws = _week_start(day)
+    week_dates = [ws + timedelta(days=i) for i in range(7)]
+
+    logs = db.query(WorkoutLog).filter(
+        WorkoutLog.athlete_id == athlete_id,
+        WorkoutLog.date.in_(week_dates),
+    ).all()
+    log_map = {l.date: l for l in logs}
+
+    targets = db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == athlete_id,
+        IndividualTarget.date.in_(week_dates),
+    ).all()
+    target_map = {t.date: t for t in targets}
+
+    gw_map = {}
+    if athlete.training_group_id:
+        gws = db.query(GroupWorkout).filter(
+            GroupWorkout.training_group_id == athlete.training_group_id,
+            GroupWorkout.date.in_(week_dates),
+        ).all()
+        gw_map = {gw.date: gw for gw in gws}
+
+    days = []
+    for d in week_dates:
+        log = log_map.get(d)
+        target = target_map.get(d)
+        gw = gw_map.get(d)
+        days.append({
+            "date": d.isoformat(),
+            "log": {"completed": log.completed, "status": log.status, "notes": log.notes} if log else None,
+            "target": {"note": target.note, "override_group": target.override_group} if target else None,
+            "group_workout": {"content": gw.content} if gw and gw.content else None,
+        })
+
+    return {"week_start": ws.isoformat(), "days": days}

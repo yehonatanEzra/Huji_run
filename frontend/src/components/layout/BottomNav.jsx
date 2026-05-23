@@ -1,20 +1,24 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
-const navItems = [
-  { to: '/calendar', label: 'Calendar', icon: '📅' },
+const athleteItems = [
+  { to: '/calendar', label: 'Training', icon: '🏋️' },
   { to: '/races', label: 'Races', icon: '🏆' },
   { to: '/hall-of-fame', label: 'Hall of Fame', icon: '🥇' },
   { to: '/profile', label: 'Profile', icon: '👤' },
 ];
 
 const coachItems = [
+  { to: '/coach/dashboard', label: 'Tracking', icon: '📊' },
+  { to: '/races', label: 'Races', icon: '🏆' },
+  { to: '/hall-of-fame', label: 'Hall of Fame', icon: '🥇' },
+  { to: '/profile', label: 'Profile', icon: '👤' },
   { to: '/coach/workouts', label: 'Coach', icon: '📋' },
 ];
 
 export default function BottomNav() {
   const { user } = useAuth();
-  const items = user?.role === 'coach' ? [...navItems, ...coachItems] : navItems;
+  const items = user?.role === 'coach' ? coachItems : athleteItems;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">

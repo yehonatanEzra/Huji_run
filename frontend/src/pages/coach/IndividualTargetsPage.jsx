@@ -59,7 +59,7 @@ export default function IndividualTargetsPage() {
     }
   };
 
-  const ws = startOfWeek(weekDate, { weekStartsOn: 1 });
+  const ws = startOfWeek(weekDate, { weekStartsOn: 0 });
 
   return (
     <div>

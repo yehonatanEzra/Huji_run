@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .models import User, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame
+from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame
 from .routers import auth, calendar, races, leaderboard, profile, coach
 
 # Create all tables on startup (dev convenience; use Alembic for prod migrations)

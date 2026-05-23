@@ -13,6 +13,7 @@ import WorkoutPublisherPage from './pages/coach/WorkoutPublisherPage';
 import IndividualTargetsPage from './pages/coach/IndividualTargetsPage';
 import TrackingDashboardPage from './pages/coach/TrackingDashboardPage';
 import RaceWizardPage from './pages/coach/RaceWizardPage';
+import SettingsPage from './pages/coach/SettingsPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/coach/targets" element={<ProtectedRoute requireCoach><IndividualTargetsPage /></ProtectedRoute>} />
         <Route path="/coach/dashboard" element={<ProtectedRoute requireCoach><TrackingDashboardPage /></ProtectedRoute>} />
         <Route path="/coach/race-wizard" element={<ProtectedRoute requireCoach><RaceWizardPage /></ProtectedRoute>} />
+        <Route path="/coach/settings" element={<ProtectedRoute requireCoach><SettingsPage /></ProtectedRoute>} />
       </Route>
 
       <Route path="*" element={<Navigate to={user ? "/calendar" : "/login"} replace />} />

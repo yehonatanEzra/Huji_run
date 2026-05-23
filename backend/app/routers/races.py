@@ -20,10 +20,20 @@ router = APIRouter(prefix="/races", tags=["races"])
 def list_races(
     search: Optional[str] = Query(None),
     year: Optional[int] = Query(None),
+    mine: bool = Query(False),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = db.query(Race)
+    if mine:
+        my_race_ids = (
+            db.query(Heat.race_id)
+            .join(Result, Result.heat_id == Heat.id)
+            .filter(Result.user_id == current_user.id)
+            .distinct()
+            .subquery()
+        )
+        q = q.filter(Race.id.in_(db.query(my_race_ids)))
     if search:
         q = q.filter(Race.name.ilike(f"%{search}%"))
     if year:
@@ -187,10 +197,115 @@ def add_result(
     )
 
 
+@router.patch("/{race_id}", response_model=RaceOut)
+def update_race(
+    race_id: int,
+    body: RaceCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    race.name = body.name.strip()
+    race.race_date = body.race_date
+    db.commit()
+    db.refresh(race)
+    return race
+
+
 @router.delete("/{race_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(require_coach)):
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
     db.delete(race)
+    db.commit()
+
+
+@router.delete("/{race_id}/heats/{heat_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_heat(
+    race_id: int,
+    heat_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    heat = db.get(Heat, heat_id)
+    if not heat or heat.race_id != race_id:
+        raise HTTPException(status_code=404, detail="Heat not found")
+    db.delete(heat)
+    db.commit()
+
+
+@router.patch("/{race_id}/heats/{heat_id}/results/{result_id}")
+def update_result(
+    race_id: int,
+    heat_id: int,
+    result_id: int,
+    body: ResultCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    heat = db.get(Heat, heat_id)
+    if not heat or heat.race_id != race_id:
+        raise HTTPException(status_code=404, detail="Heat not found")
+    result = db.get(Result, result_id)
+    if not result or result.heat_id != heat_id:
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    try:
+        time_sec = parse_time(body.time_raw)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    matched_user = db.query(User).filter(
+        func.lower(User.full_name) == func.lower(body.athlete_name.strip())
+    ).first()
+
+    old_gender = result.gender
+    result.athlete_name = body.athlete_name.strip()
+    result.time_seconds = time_sec
+    result.user_id = matched_user.id if matched_user else None
+    result.gender = matched_user.gender if matched_user else (body.gender or old_gender)
+    db.flush()
+
+    refresh_hall_of_fame(db, heat.distance_m, result.gender)
+    if old_gender != result.gender:
+        refresh_hall_of_fame(db, heat.distance_m, old_gender)
+    db.commit()
+    db.refresh(result)
+
+    siblings = sorted(heat.results, key=lambda r: r.time_seconds)
+    placement = next(i + 1 for i, r in enumerate(siblings) if r.id == result.id)
+
+    return ResultOut(
+        id=result.id,
+        heat_id=result.heat_id,
+        athlete_name=result.athlete_name,
+        gender=result.gender,
+        time_seconds=result.time_seconds,
+        time_display=seconds_to_display(result.time_seconds),
+        pace_display=format_pace(result.time_seconds, heat.distance_m),
+        placement=placement,
+    )
+
+
+@router.delete("/{race_id}/heats/{heat_id}/results/{result_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_result(
+    race_id: int,
+    heat_id: int,
+    result_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_coach),
+):
+    heat = db.get(Heat, heat_id)
+    if not heat or heat.race_id != race_id:
+        raise HTTPException(status_code=404, detail="Heat not found")
+    result = db.get(Result, result_id)
+    if not result or result.heat_id != heat_id:
+        raise HTTPException(status_code=404, detail="Result not found")
+    gender = result.gender
+    db.delete(result)
+    db.flush()
+    refresh_hall_of_fame(db, heat.distance_m, gender)
     db.commit()

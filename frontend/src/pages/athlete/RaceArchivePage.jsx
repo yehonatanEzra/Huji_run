@@ -1,30 +1,56 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { listRaces } from '../../api/races';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { listRaces, listMyRaces } from '../../api/races';
 import Spinner from '../../components/ui/Spinner';
 
 export default function RaceArchivePage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [races, setRaces] = useState([]);
   const [search, setSearch] = useState('');
   const [year, setYear] = useState('');
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('my');
 
   useEffect(() => {
     setLoading(true);
     const params = {};
     if (search) params.search = search;
     if (year) params.year = parseInt(year);
-    listRaces(params)
+    const fetcher = tab === 'my' ? listMyRaces : listRaces;
+    fetcher(params)
       .then(({ data }) => setRaces(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [search, year]);
+  }, [search, year, tab]);
 
   const years = [...new Set(races.map((r) => r.race_date.slice(0, 4)))].sort().reverse();
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Race Archive</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold">Races</h2>
+        {user?.role === 'coach' && (
+          <button
+            onClick={() => navigate('/coach/race-wizard')}
+            className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700"
+          >
+            + New Race
+          </button>
+        )}
+      </div>
+
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4">
+        <button
+          onClick={() => setTab('my')}
+          className={`flex-1 py-1.5 text-sm font-medium transition ${tab === 'my' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+        >My Races</button>
+        <button
+          onClick={() => setTab('all')}
+          className={`flex-1 py-1.5 text-sm font-medium transition ${tab === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+        >All Races</button>
+      </div>
 
       <div className="flex gap-2 mb-4">
         <input
@@ -45,7 +71,9 @@ export default function RaceArchivePage() {
       </div>
 
       {loading ? <Spinner /> : races.length === 0 ? (
-        <p className="text-center text-gray-400 py-8">No races found</p>
+        <p className="text-center text-gray-400 py-8">
+          {tab === 'my' ? 'No races found for you' : 'No races found'}
+        </p>
       ) : (
         <div className="space-y-2">
           {races.map((race) => (

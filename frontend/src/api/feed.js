@@ -14,3 +14,9 @@ export const deleteAnnouncement = (id) =>
 
 export const toggleReaction = (announcementId, emoji) =>
   client.post(`/feed/${announcementId}/react`, { emoji });
+
+export const addComment = (announcementId, body) =>
+  client.post(`/feed/${announcementId}/comment`, { body });
+
+export const deleteComment = (announcementId, commentId) =>
+  client.delete(`/feed/${announcementId}/comment/${commentId}`);

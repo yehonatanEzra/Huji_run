@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from .database import engine, Base
-from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, Kudos, Announcement, AnnouncementReaction, Challenge
+from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos, feed, challenges
 
 Base.metadata.create_all(bind=engine)
@@ -54,6 +54,24 @@ def _migrate():
                 )
             """))
             conn.execute(text("CREATE INDEX ix_ann_reactions_ann_id ON announcement_reactions(announcement_id)"))
+            conn.commit()
+
+        user_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(users)"))}
+        if "photo_filename" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN photo_filename VARCHAR(255)"))
+            conn.commit()
+
+        if "announcement_comments" not in tables:
+            conn.execute(text("""
+                CREATE TABLE announcement_comments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    body TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("CREATE INDEX ix_ann_comments_ann_id ON announcement_comments(announcement_id)"))
             conn.commit()
 
         if "challenges" not in tables:

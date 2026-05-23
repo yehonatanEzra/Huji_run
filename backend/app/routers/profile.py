@@ -1,5 +1,10 @@
+from __future__ import annotations
+import os
+import uuid
+from pathlib import Path
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -8,6 +13,9 @@ from ..models.user import User
 from ..models.race import Result, Heat, Race, CANONICAL_DISTANCES
 from ..schemas.profile import ProfileResponse, PBEntry, RaceHistoryEntry
 from ..services.time_utils import seconds_to_display, format_pace
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -77,10 +85,12 @@ def _build_profile(user: User, db: Session) -> ProfileResponse:
             placement=placement,
         ))
 
+    photo_url = f"/api/v1/profile/photo/{user.id}" if user.photo_filename else None
     return ProfileResponse(
         user_id=user.id,
         full_name=user.full_name,
         gender=user.gender,
+        photo_url=photo_url,
         personal_bests=sorted(personal_bests, key=lambda x: x.distance_m),
         race_history=race_history,
     )
@@ -92,6 +102,40 @@ def my_profile(
     db: Annotated[Session, Depends(get_db)],
 ):
     return _build_profile(current_user, db)
+
+
+@router.post("/photo")
+async def upload_photo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG or WebP allowed")
+    ext = file.content_type.split("/")[1]
+    if ext == "jpeg":
+        ext = "jpg"
+    filename = f"{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
+    if current_user.photo_filename:
+        old = UPLOAD_DIR / current_user.photo_filename
+        if old.exists():
+            old.unlink()
+    content = await file.read()
+    (UPLOAD_DIR / filename).write_bytes(content)
+    current_user.photo_filename = filename
+    db.commit()
+    return {"photo_url": f"/api/v1/profile/photo/{current_user.id}"}
+
+
+@router.get("/photo/{user_id}")
+def get_photo(user_id: int, db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if not user or not user.photo_filename:
+        raise HTTPException(status_code=404, detail="No photo")
+    path = UPLOAD_DIR / user.photo_filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="No photo")
+    return FileResponse(path)
 
 
 @router.get("/{user_id}", response_model=ProfileResponse)

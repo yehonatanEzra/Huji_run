@@ -6,8 +6,8 @@ from sqlalchemy import func as sa_func, desc
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
-from ..models.feed import Announcement, AnnouncementReaction
-from ..schemas.feed import AnnouncementCreate, AnnouncementOut, ReactionSummary, ReactionToggle
+from ..models.feed import Announcement, AnnouncementReaction, AnnouncementComment
+from ..schemas.feed import AnnouncementCreate, AnnouncementOut, ReactionSummary, ReactionToggle, CommentOut, CommentCreate
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -32,14 +32,37 @@ def _build_announcement_out(ann: Announcement, user_id: int, db: Session) -> Ann
         if count > 0 or emoji in my_reactions:
             reactions.append(ReactionSummary(emoji=emoji, count=count, reacted=emoji in my_reactions))
 
+    comment_rows = (
+        db.query(AnnouncementComment)
+        .filter(AnnouncementComment.announcement_id == ann.id)
+        .order_by(AnnouncementComment.created_at.asc())
+        .all()
+    )
+    comments = [
+        CommentOut(
+            id=c.id,
+            user_name=c.user.full_name,
+            user_id=c.user_id,
+            photo_url=f"/api/v1/profile/photo/{c.user_id}" if c.user.photo_filename else None,
+            body=c.body,
+            created_at=c.created_at,
+        )
+        for c in comment_rows
+    ]
+
+    author_photo = f"/api/v1/profile/photo/{ann.author_id}" if ann.author.photo_filename else None
+
     return AnnouncementOut(
         id=ann.id,
         title=ann.title,
         body=ann.body,
         author_name=ann.author.full_name,
+        author_photo_url=author_photo,
         training_group_id=ann.training_group_id,
         created_at=ann.created_at,
         reactions=reactions,
+        comments=comments,
+        comment_count=len(comments),
     )
 
 
@@ -129,3 +152,52 @@ def toggle_reaction(
         AnnouncementReaction.emoji == body.emoji,
     ).scalar()
     return {"emoji": body.emoji, "count": count, "reacted": existing is None}
+
+
+@router.post("/{announcement_id}/comment", response_model=CommentOut, status_code=201)
+def add_comment(
+    announcement_id: int,
+    body: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ann = db.get(Announcement, announcement_id)
+    if not ann:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not body.body.strip():
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+    comment = AnnouncementComment(
+        announcement_id=announcement_id,
+        user_id=current_user.id,
+        body=body.body.strip(),
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return CommentOut(
+        id=comment.id,
+        user_name=current_user.full_name,
+        user_id=current_user.id,
+        photo_url=f"/api/v1/profile/photo/{current_user.id}" if current_user.photo_filename else None,
+        body=comment.body,
+        created_at=comment.created_at,
+    )
+
+
+@router.delete("/{announcement_id}/comment/{comment_id}", status_code=204)
+def delete_comment(
+    announcement_id: int,
+    comment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    comment = db.query(AnnouncementComment).filter(
+        AnnouncementComment.id == comment_id,
+        AnnouncementComment.announcement_id == announcement_id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Not found")
+    if comment.user_id != current_user.id and current_user.role != "coach":
+        raise HTTPException(status_code=403, detail="Not allowed")
+    db.delete(comment)
+    db.commit()

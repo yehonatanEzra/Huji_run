@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getMyProfile } from '../../api/profile';
+import { useState, useEffect, useRef } from 'react';
+import { getMyProfile, uploadPhoto } from '../../api/profile';
 import Spinner from '../../components/ui/Spinner';
 
 const DISTANCE_LABELS = {
@@ -10,22 +10,71 @@ const DISTANCE_LABELS = {
 export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef();
 
-  useEffect(() => {
+  const fetchProfile = () => {
     getMyProfile()
       .then(({ data }) => setProfile(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchProfile(); }, []);
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await uploadPhoto(file);
+      fetchProfile();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (loading) return <Spinner />;
   if (!profile) return <p className="text-center text-gray-500">Failed to load profile</p>;
 
+  const photoSrc = profile.photo_url ? profile.photo_url + '?t=' + Date.now() : null;
+
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold">{profile.full_name}</h2>
-        <span className="text-sm text-gray-500">{profile.gender === 'M' ? 'Male' : 'Female'}</span>
+      <div className="flex items-center gap-4 mb-6">
+        <div className="relative">
+          {photoSrc ? (
+            <img
+              src={photoSrc}
+              alt={profile.full_name}
+              className="w-16 h-16 rounded-full object-cover border-2 border-blue-200"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-2xl font-bold text-blue-600">
+              {profile.full_name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="absolute -bottom-1 -right-1 w-6 h-6 bg-blue-600 text-white rounded-full text-xs flex items-center justify-center hover:bg-blue-700"
+          >
+            {uploading ? '...' : '📷'}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handlePhotoChange}
+            className="hidden"
+          />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold">{profile.full_name}</h2>
+          <span className="text-sm text-gray-500">{profile.gender === 'M' ? 'Male' : 'Female'}</span>
+        </div>
       </div>
 
       <h3 className="text-base font-semibold mb-3">Personal Bests</h3>

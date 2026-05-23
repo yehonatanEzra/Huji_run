@@ -4,7 +4,7 @@ import { register as registerApi } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ full_name: '', username: '', password: '', gender: 'M' });
+  const [form, setForm] = useState({ first_name: '', last_name: '', username: '', password: '', gender: 'M' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -15,7 +15,13 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     try {
-      const { data } = await registerApi(form);
+      const payload = {
+        full_name: `${form.first_name.trim()} ${form.last_name.trim()}`,
+        username: form.username,
+        password: form.password,
+        gender: form.gender,
+      };
+      const { data } = await registerApi(payload);
       login(data);
       navigate('/calendar');
     } catch (err) {
@@ -38,14 +44,24 @@ export default function RegisterPage() {
 
           {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2">{error}</p>}
 
-          <input
-            type="text"
-            placeholder="Full Name (must match coach's records)"
-            value={form.full_name}
-            onChange={update('full_name')}
-            required
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="First Name"
+              value={form.first_name}
+              onChange={update('first_name')}
+              required
+              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="text"
+              placeholder="Last Name"
+              value={form.last_name}
+              onChange={update('last_name')}
+              required
+              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
           <input
             type="text"
             placeholder="Username"

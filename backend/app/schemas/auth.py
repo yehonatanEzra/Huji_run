@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pydantic import BaseModel
-from typing import Literal
+from typing import Literal, Optional
 
 
 class RegisterRequest(BaseModel):
@@ -29,5 +29,6 @@ class UserOut(BaseModel):
     username: str
     gender: str
     role: str
+    training_group_id: Optional[int] = None
 
     model_config = {"from_attributes": True}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getHallOfFame, getHofGroups } from '../../api/leaderboard';
+import { getHallOfFame, getHofGroups, getKmLeaders } from '../../api/leaderboard';
 import Tabs from '../../components/ui/Tabs';
 import Spinner from '../../components/ui/Spinner';
 
@@ -20,10 +20,14 @@ export default function HallOfFamePage() {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
+  const [kmLeaders, setKmLeaders] = useState(null);
 
   useEffect(() => {
     getHofGroups()
       .then(({ data }) => setGroups(data))
+      .catch(console.error);
+    getKmLeaders()
+      .then(({ data }) => setKmLeaders(data))
       .catch(console.error);
   }, []);
 
@@ -68,6 +72,30 @@ export default function HallOfFamePage() {
         active={gender}
         onChange={setGender}
       />
+
+      {kmLeaders && (kmLeaders.weekly.length > 0 || kmLeaders.monthly.length > 0) && (
+        <div className="space-y-4 mb-6">
+          {[
+            { title: `Weekly km (${kmLeaders.week_start})`, entries: kmLeaders.weekly },
+            { title: `Monthly km (${kmLeaders.month})`, entries: kmLeaders.monthly },
+          ].map(({ title, entries }) => entries.length > 0 && (
+            <div key={title} className="bg-white rounded-xl border p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-3">{title}</h3>
+              <div className="space-y-2">
+                {entries.map((e) => (
+                  <div key={e.rank} className="flex items-center gap-3 p-2 rounded-lg bg-blue-50">
+                    <span className="text-2xl">{MEDAL[e.rank - 1] || `#${e.rank}`}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{e.athlete_name}</p>
+                    </div>
+                    <span className="font-bold text-sm text-blue-800">{e.total_km} km</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading ? <Spinner /> : !data ? (
         <p className="text-center text-gray-500">Failed to load</p>

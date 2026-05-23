@@ -5,3 +5,6 @@ export const getHallOfFame = (groupId) =>
 
 export const getHofGroups = () =>
   client.get('/hall-of-fame/groups');
+
+export const getKmLeaders = () =>
+  client.get('/hall-of-fame/km-leaders');

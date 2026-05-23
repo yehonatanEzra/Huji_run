@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from .database import engine, Base
-from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, Kudos
-from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
+from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, Kudos, Announcement, AnnouncementReaction
+from .routers import auth, calendar, races, leaderboard, profile, coach, kudos, feed
 
 Base.metadata.create_all(bind=engine)
 
@@ -32,6 +32,30 @@ def _migrate():
             conn.execute(text("CREATE INDEX ix_kudos_workout_log_id ON kudos(workout_log_id)"))
             conn.commit()
 
+        if "announcements" not in tables:
+            conn.execute(text("""
+                CREATE TABLE announcements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title VARCHAR(200) NOT NULL,
+                    body TEXT NOT NULL,
+                    author_id INTEGER NOT NULL REFERENCES users(id),
+                    training_group_id INTEGER REFERENCES training_groups(id),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("""
+                CREATE TABLE announcement_reactions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    emoji VARCHAR(10) NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(announcement_id, user_id, emoji)
+                )
+            """))
+            conn.execute(text("CREATE INDEX ix_ann_reactions_ann_id ON announcement_reactions(announcement_id)"))
+            conn.commit()
+
 _migrate()
 
 app = FastAPI(title="Huji Run API", version="1.0.0")
@@ -53,6 +77,7 @@ app.include_router(leaderboard.router, prefix=API_PREFIX)
 app.include_router(profile.router, prefix=API_PREFIX)
 app.include_router(coach.router, prefix=API_PREFIX)
 app.include_router(kudos.router, prefix=API_PREFIX)
+app.include_router(feed.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

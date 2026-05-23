@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const athleteItems = [
   { to: '/calendar', label: 'Training', icon: '🏋️' },
+  { to: '/feed', label: 'Feed', icon: '📢' },
   { to: '/races', label: 'Races', icon: '🏆' },
   { to: '/hall-of-fame', label: 'Hall of Fame', icon: '🥇' },
   { to: '/profile', label: 'Profile', icon: '👤' },
@@ -10,9 +11,9 @@ const athleteItems = [
 
 const coachItems = [
   { to: '/coach/dashboard', label: 'Tracking', icon: '📊' },
+  { to: '/feed', label: 'Feed', icon: '📢' },
   { to: '/races', label: 'Races', icon: '🏆' },
   { to: '/hall-of-fame', label: 'Hall of Fame', icon: '🥇' },
-  { to: '/profile', label: 'Profile', icon: '👤' },
   { to: '/coach/workouts', label: 'Coach', icon: '📋' },
 ];
 

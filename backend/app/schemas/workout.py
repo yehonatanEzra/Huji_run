@@ -5,18 +5,21 @@ from pydantic import BaseModel
 
 
 class GroupWorkoutUpsert(BaseModel):
-    content: str
+    content: Optional[str] = None
+    draft_content: Optional[str] = None
 
 
 class GroupWorkoutOut(BaseModel):
     id: int
     date: date
-    content: str
+    content: Optional[str]
+    draft_content: Optional[str]
     model_config = {"from_attributes": True}
 
 
 class IndividualTargetUpsert(BaseModel):
     note: str
+    override_group: bool = False
 
 
 class IndividualTargetOut(BaseModel):
@@ -24,12 +27,13 @@ class IndividualTargetOut(BaseModel):
     athlete_id: int
     date: date
     note: str
+    override_group: bool
     model_config = {"from_attributes": True}
 
 
 class WorkoutLogUpsert(BaseModel):
     date: date
-    completed: bool
+    status: str = "missed"
     notes: Optional[str] = None
 
 
@@ -37,6 +41,7 @@ class WorkoutLogOut(BaseModel):
     id: int
     date: date
     completed: bool
+    status: str
     notes: Optional[str]
     model_config = {"from_attributes": True}
 
@@ -57,6 +62,7 @@ class AthleteWeekRow(BaseModel):
     id: int
     full_name: str
     gender: str
+    group_name: Optional[str] = None
     days: list[dict]  # [{date, log: WorkoutLogOut|None}]
 
 

@@ -8,14 +8,19 @@ from ..database import Base
 
 class GroupWorkout(Base):
     __tablename__ = "group_workouts"
+    __table_args__ = (UniqueConstraint("training_group_id", "date", name="uq_group_workout_group_date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    date: Mapped[date] = mapped_column(Date, unique=True, nullable=False, index=True)
-    content: Mapped[str] = mapped_column(Text, nullable=False)
+    training_group_id: Mapped[int] = mapped_column(Integer, ForeignKey("training_groups.id"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    draft_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+    training_group = relationship("TrainingGroup", back_populates="workouts")
 
 
 class IndividualTarget(Base):
@@ -26,6 +31,7 @@ class IndividualTarget(Base):
     athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     note: Mapped[str] = mapped_column(Text, nullable=False)
+    override_group: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -42,6 +48,7 @@ class WorkoutLog(Base):
     athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="missed")
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     logged_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

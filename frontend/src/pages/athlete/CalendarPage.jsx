@@ -93,15 +93,20 @@ export default function CalendarPage() {
           <span className="text-sm font-semibold">
             {format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}
           </span>
-          {hasLog && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${
-              hasLog.status === 'completed' ? 'bg-green-100 text-green-700' :
-              hasLog.status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-red-100 text-red-700'
-            }`}>
-              {hasLog.status === 'completed' ? 'Done' : hasLog.status === 'partial' ? 'Partial' : 'Missed'}
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {hasLog?.kudos_count > 0 && (
+              <span className="text-xs text-pink-600">👏 {hasLog.kudos_count}</span>
+            )}
+            {hasLog && (
+              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                hasLog.status === 'completed' ? 'bg-green-100 text-green-700' :
+                hasLog.status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {hasLog.status === 'completed' ? 'Done' : hasLog.status === 'partial' ? 'Partial' : 'Missed'}
+              </span>
+            )}
+          </div>
         </div>
         {day.group_workout && (
           <p className="text-sm text-gray-600 truncate">{day.group_workout.content}</p>
@@ -210,6 +215,15 @@ export default function CalendarPage() {
               <div className="bg-blue-50 rounded-lg p-3">
                 <p className="text-xs font-medium text-blue-500 mb-1">Coach's Note for You</p>
                 <p className="text-sm">{selectedDay.individual_target.note}</p>
+              </div>
+            )}
+
+            {selectedDay.workout_log && selectedDay.workout_log.kudos_count > 0 && (
+              <div className="flex items-center gap-1.5 bg-pink-50 rounded-lg px-3 py-2">
+                <span className="text-lg">👏</span>
+                <span className="text-sm font-medium text-pink-700">
+                  {selectedDay.workout_log.kudos_count} kudos
+                </span>
               </div>
             )}
 

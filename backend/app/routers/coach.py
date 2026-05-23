@@ -179,7 +179,7 @@ def search_athletes(
 def dashboard_week(
     day: date = Query(default_factory=date.today),
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach_user: User = Depends(require_coach),
 ):
     ws = _week_start(day)
     week_dates = [ws + timedelta(days=i) for i in range(7)]
@@ -197,6 +197,23 @@ def dashboard_week(
 
     group_map = {g.id: g.name for g in db.query(TrainingGroup).all()}
 
+    from ..models.kudos import Kudos
+    log_ids = [l.id for l in logs]
+    kudos_counts = {}
+    my_kudos = set()
+    if log_ids:
+        kudos_counts = dict(
+            db.query(Kudos.workout_log_id, sa_func.count(Kudos.id))
+            .filter(Kudos.workout_log_id.in_(log_ids))
+            .group_by(Kudos.workout_log_id)
+            .all()
+        )
+        my_kudos = {
+            r[0] for r in db.query(Kudos.workout_log_id)
+            .filter(Kudos.workout_log_id.in_(log_ids), Kudos.giver_id == coach_user.id)
+            .all()
+        }
+
     rows = []
     for athlete in athletes:
         days = []
@@ -204,9 +221,14 @@ def dashboard_week(
             log = log_map.get((athlete.id, d))
             target = target_map.get((athlete.id, d))
             gw = gw_map.get((athlete.training_group_id, d)) if athlete.training_group_id else None
+            log_out = None
+            if log:
+                log_out = WorkoutLogOut.model_validate(log)
+                log_out.kudos_count = kudos_counts.get(log.id, 0)
+                log_out.has_kudos = log.id in my_kudos
             days.append({
                 "date": d,
-                "log": WorkoutLogOut.model_validate(log) if log else None,
+                "log": log_out,
                 "target": IndividualTargetOut.model_validate(target) if target else None,
                 "group_workout": GroupWorkoutOut.model_validate(gw) if gw else None,
             })
@@ -407,6 +429,17 @@ def get_athlete_week(
         ).all()
         gw_map = {gw.date: gw for gw in gws}
 
+    from ..models.kudos import Kudos
+    log_ids = [l.id for l in logs]
+    kudos_counts = {}
+    if log_ids:
+        kudos_counts = dict(
+            db.query(Kudos.workout_log_id, sa_func.count(Kudos.id))
+            .filter(Kudos.workout_log_id.in_(log_ids))
+            .group_by(Kudos.workout_log_id)
+            .all()
+        )
+
     days = []
     for d in week_dates:
         log = log_map.get(d)
@@ -414,7 +447,14 @@ def get_athlete_week(
         gw = gw_map.get(d)
         days.append({
             "date": d.isoformat(),
-            "log": {"completed": log.completed, "status": log.status, "distance_km": log.distance_km, "notes": log.notes} if log else None,
+            "log": {
+                "id": log.id,
+                "completed": log.completed,
+                "status": log.status,
+                "distance_km": log.distance_km,
+                "notes": log.notes,
+                "kudos_count": kudos_counts.get(log.id, 0),
+            } if log else None,
             "target": {"note": target.note, "override_group": target.override_group} if target else None,
             "group_workout": {"content": gw.content} if gw and gw.content else None,
         })

@@ -45,6 +45,8 @@ class WorkoutLogOut(BaseModel):
     status: str
     distance_km: Optional[float] = None
     notes: Optional[str]
+    kudos_count: int = 0
+    has_kudos: bool = False
     model_config = {"from_attributes": True}
 
 

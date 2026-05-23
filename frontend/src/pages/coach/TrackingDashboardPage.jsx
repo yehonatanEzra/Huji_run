@@ -3,6 +3,7 @@ import { format, addDays, startOfWeek, subWeeks, addWeeks } from 'date-fns';
 import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
 import { listRaces, getRace } from '../../api/races';
 import { upsertTarget, deleteTarget } from '../../api/calendar';
+import { toggleKudos } from '../../api/kudos';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
@@ -183,6 +184,9 @@ export default function TrackingDashboardPage() {
                           {text}
                           {hasTarget && (
                             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500" />
+                          )}
+                          {log?.kudos_count > 0 && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-pink-400" />
                           )}
                         </button>
                       </td>
@@ -457,6 +461,26 @@ export default function TrackingDashboardPage() {
                     (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'Half Completed' : 'Missed'
                   }</p>
                   {selected.day.log.notes && <p className="text-sm text-gray-600 mt-1">{selected.day.log.notes}</p>}
+                  {selected.day.log.id && (
+                    <button
+                      onClick={async () => {
+                        const { data: res } = await toggleKudos(selected.day.log.id);
+                        setSelected({
+                          ...selected,
+                          day: { ...selected.day, log: { ...selected.day.log, kudos_count: res.kudos_count, has_kudos: res.has_kudos } },
+                        });
+                        fetchData();
+                      }}
+                      className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                        selected.day.log.has_kudos
+                          ? 'bg-pink-100 text-pink-700 border border-pink-300'
+                          : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-pink-50'
+                      }`}
+                    >
+                      <span>👏</span>
+                      <span>{selected.day.log.kudos_count || 0}</span>
+                    </button>
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-gray-400 italic">No report submitted</p>

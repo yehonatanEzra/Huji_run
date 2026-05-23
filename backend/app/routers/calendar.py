@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
+from sqlalchemy import func as sa_func
 from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
+from ..models.kudos import Kudos
 from ..schemas.workout import (
     GroupWorkoutUpsert, GroupWorkoutOut,
     IndividualTargetUpsert, IndividualTargetOut,
@@ -20,9 +22,10 @@ def _week_start(d: date) -> date:
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
-def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = False, group_id: Optional[int] = None) -> WeekResponse:
+def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = False, group_id: Optional[int] = None, viewer_id: Optional[int] = None) -> WeekResponse:
     gid = group_id or athlete.training_group_id
     days = []
+    logs = []
     for i in range(7):
         day = week_start + timedelta(days=i)
         gw = None
@@ -46,12 +49,36 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
         ).first()
         if not is_coach and it and it.override_group:
             gw = None
+        if log:
+            logs.append(log)
         days.append(DayData(
             date=day,
             group_workout=GroupWorkoutOut.model_validate(gw) if gw else None,
             individual_target=IndividualTargetOut.model_validate(it) if it else None,
             workout_log=WorkoutLogOut.model_validate(log) if log else None,
         ))
+
+    if logs:
+        log_ids = [l.id for l in logs]
+        counts = dict(
+            db.query(Kudos.workout_log_id, sa_func.count(Kudos.id))
+            .filter(Kudos.workout_log_id.in_(log_ids))
+            .group_by(Kudos.workout_log_id)
+            .all()
+        )
+        viewer = viewer_id or (athlete.id if not is_coach else None)
+        my_kudos = set()
+        if viewer:
+            my_kudos = {
+                r[0] for r in db.query(Kudos.workout_log_id)
+                .filter(Kudos.workout_log_id.in_(log_ids), Kudos.giver_id == viewer)
+                .all()
+            }
+        for day_data in days:
+            if day_data.workout_log:
+                day_data.workout_log.kudos_count = counts.get(day_data.workout_log.id, 0)
+                day_data.workout_log.has_kudos = day_data.workout_log.id in my_kudos
+
     return WeekResponse(week_start=week_start, days=days)
 
 
@@ -68,6 +95,7 @@ def get_week(
         current_user, _week_start(day), db,
         is_coach=current_user.role == "coach",
         group_id=group_id,
+        viewer_id=current_user.id,
     )
 
 

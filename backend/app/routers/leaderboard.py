@@ -1,22 +1,45 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
 from ..models.user import User
+from ..models.training_group import TrainingGroup
 from ..models.hall_of_fame import HallOfFame
-from ..models.race import CANONICAL_DISTANCES
+from ..models.race import Result, Heat, Race, CANONICAL_DISTANCES
 from ..schemas.profile import HallOfFameEntry, HallOfFameDistance, HallOfFameResponse
 from ..services.time_utils import seconds_to_display, format_pace
 
 router = APIRouter(prefix="/hall-of-fame", tags=["hall-of-fame"])
 
 
+@router.get("/groups")
+def get_hof_groups(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    if current_user.role == "coach":
+        groups = db.query(TrainingGroup).order_by(TrainingGroup.name).all()
+        return [{"id": g.id, "name": g.name} for g in groups]
+    if current_user.training_group_id:
+        group = db.get(TrainingGroup, current_user.training_group_id)
+        if group:
+            return [{"id": group.id, "name": group.name}]
+    return []
+
+
 @router.get("", response_model=HallOfFameResponse)
 def get_hall_of_fame(
-    db: Annotated[Session, Depends(get_db)],
-    _: Annotated[User, Depends(get_current_user)],
+    group_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
 ):
+    if group_id is None:
+        return _get_overall_hof(db)
+    return _get_group_hof(db, group_id)
+
+
+def _get_overall_hof(db: Session) -> HallOfFameResponse:
     distances = []
     for dist in CANONICAL_DISTANCES:
         entries = db.query(HallOfFame).filter(HallOfFame.distance_m == dist).all()
@@ -32,14 +55,51 @@ def get_hall_of_fame(
                 race_id=e.race_id,
             )
 
-        men = sorted(
-            [to_entry(e) for e in entries if e.gender == "M"],
-            key=lambda x: x.rank,
-        )
-        women = sorted(
-            [to_entry(e) for e in entries if e.gender == "F"],
-            key=lambda x: x.rank,
-        )
+        men = sorted([to_entry(e) for e in entries if e.gender == "M"], key=lambda x: x.rank)
+        women = sorted([to_entry(e) for e in entries if e.gender == "F"], key=lambda x: x.rank)
         distances.append(HallOfFameDistance(distance_m=dist, men=men, women=women))
+
+    return HallOfFameResponse(distances=distances)
+
+
+def _get_group_hof(db: Session, group_id: int) -> HallOfFameResponse:
+    group_user_ids = [
+        u.id for u in db.query(User).filter(User.training_group_id == group_id).all()
+    ]
+
+    distances = []
+    for dist in CANONICAL_DISTANCES:
+        all_results = (
+            db.query(Result, Heat, Race)
+            .join(Heat, Result.heat_id == Heat.id)
+            .join(Race, Heat.race_id == Race.id)
+            .filter(Heat.distance_m == dist, Result.user_id.in_(group_user_ids))
+            .order_by(Result.time_seconds.asc())
+            .all()
+        ) if group_user_ids else []
+
+        def build_top3(gender: str):
+            filtered = [(r, h, race) for r, h, race in all_results if r.gender == gender]
+            seen = set()
+            top = []
+            for r, h, race in filtered:
+                key = r.user_id or r.athlete_name
+                if key in seen:
+                    continue
+                seen.add(key)
+                top.append(HallOfFameEntry(
+                    rank=len(top) + 1,
+                    athlete_name=r.athlete_name,
+                    time_seconds=r.time_seconds,
+                    time_display=seconds_to_display(r.time_seconds),
+                    pace_display=format_pace(r.time_seconds, dist),
+                    achieved_date=race.race_date,
+                    race_id=race.id,
+                ))
+                if len(top) >= 3:
+                    break
+            return top
+
+        distances.append(HallOfFameDistance(distance_m=dist, men=build_top3("M"), women=build_top3("F")))
 
     return HallOfFameResponse(distances=distances)

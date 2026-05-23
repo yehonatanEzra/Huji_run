@@ -34,10 +34,14 @@ export default function HallOfFamePage() {
       .then(({ data }) => setData(data.distances))
       .catch(console.error)
       .finally(() => setLoading(false));
-    getKmLeaders(selectedGroup)
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    const genderCode = gender === 'men' ? 'M' : 'F';
+    getKmLeaders(selectedGroup, genderCode)
       .then(({ data }) => setKmLeaders(data))
       .catch(console.error);
-  }, [selectedGroup]);
+  }, [selectedGroup, gender]);
 
   return (
     <div>

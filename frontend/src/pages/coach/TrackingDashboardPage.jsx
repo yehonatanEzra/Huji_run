@@ -1,27 +1,81 @@
 import { useState, useEffect } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks } from 'date-fns';
-import { getDashboardWeek } from '../../api/coach';
+import { getDashboardWeek, getAthleteProfile, getAthleteWeek } from '../../api/coach';
+import { upsertTarget, deleteTarget } from '../../api/calendar';
+import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
 export default function TrackingDashboardPage() {
   const [weekDate, setWeekDate] = useState(new Date());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [personalNote, setPersonalNote] = useState('');
+  const [overrideGroup, setOverrideGroup] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileWeekDate, setProfileWeekDate] = useState(new Date());
+  const [profileWeek, setProfileWeek] = useState(null);
 
-  useEffect(() => {
+  const fetchData = () => {
     setLoading(true);
     getDashboardWeek(format(weekDate, 'yyyy-MM-dd'))
       .then(({ data }) => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [weekDate]);
+  };
 
-  const ws = startOfWeek(weekDate, { weekStartsOn: 1 });
+  useEffect(() => { fetchData(); }, [weekDate]);
+
+  const openCell = (athlete, dayData) => {
+    setSelected({ athlete, day: dayData });
+    setPersonalNote(dayData.target?.note || '');
+    setOverrideGroup(dayData.target?.override_group || false);
+  };
+
+  const handleSavePersonal = async () => {
+    setSaving(true);
+    try {
+      if (personalNote.trim()) {
+        await upsertTarget(selected.athlete.id, selected.day.date, personalNote, overrideGroup);
+      } else {
+        await deleteTarget(selected.athlete.id, selected.day.date);
+      }
+      setSelected(null);
+      fetchData();
+    } catch (err) { console.error(err); }
+    finally { setSaving(false); }
+  };
+
+  const openProfile = (athleteId) => {
+    setProfileLoading(true);
+    setProfile(null);
+    setProfileWeek(null);
+    setProfileWeekDate(new Date());
+    getAthleteProfile(athleteId)
+      .then(({ data }) => {
+        setProfile(data);
+        return getAthleteWeek(athleteId, format(new Date(), 'yyyy-MM-dd'));
+      })
+      .then(({ data }) => setProfileWeek(data))
+      .catch(console.error)
+      .finally(() => setProfileLoading(false));
+  };
+
+  useEffect(() => {
+    if (!profile) return;
+    getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'))
+      .then(({ data }) => setProfileWeek(data))
+      .catch(console.error);
+  }, [profileWeekDate]);
+
+  const ws = startOfWeek(weekDate, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Team Tracking</h2>
+      <h2 className="text-xl font-bold mb-4">Athletes Tracking</h2>
 
       <div className="flex items-center justify-between mb-4">
         <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
@@ -38,7 +92,7 @@ export default function TrackingDashboardPage() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="px-2 py-2 text-left text-gray-500 font-medium sticky left-0 bg-gray-50 min-w-[120px]">Athlete</th>
+                <th className="px-2 py-2 text-left text-gray-500 font-medium sticky left-0 bg-gray-50 min-w-[140px]">Athlete</th>
                 {weekDays.map((d) => (
                   <th key={format(d, 'yyyy-MM-dd')} className="px-2 py-2 text-center text-gray-500 font-medium min-w-[48px]">
                     {format(d, 'EEE')}
@@ -49,22 +103,34 @@ export default function TrackingDashboardPage() {
             <tbody>
               {data.athletes.map((athlete) => (
                 <tr key={athlete.id} className="border-t">
-                  <td className="px-2 py-2 font-medium sticky left-0 bg-white truncate max-w-[120px]">
-                    {athlete.full_name}
+                  <td className="px-2 py-2 sticky left-0 bg-white">
+                    <button onClick={() => openProfile(athlete.id)} className="text-left">
+                      <div className="font-medium truncate max-w-[140px] text-blue-600 hover:underline">{athlete.full_name}</div>
+                      <div className="text-[10px] text-gray-400">{athlete.group_name || 'No group'}</div>
+                    </button>
                   </td>
                   {athlete.days.map((d) => {
                     const log = d.log;
+                    const hasTarget = !!d.target;
                     let bg = 'bg-gray-100';
                     let text = '-';
                     if (log) {
-                      bg = log.completed ? 'bg-green-100' : 'bg-red-100';
-                      text = log.completed ? 'V' : 'X';
+                      const st = log.status || (log.completed ? 'completed' : 'missed');
+                      bg = st === 'completed' ? 'bg-green-100' : st === 'partial' ? 'bg-yellow-100' : 'bg-red-100';
+                      text = st === 'completed' ? 'V' : st === 'partial' ? '~' : 'X';
                     }
                     return (
-                      <td key={d.date} className="px-2 py-2 text-center" title={log?.notes || ''}>
-                        <span className={`inline-block w-7 h-7 rounded-full ${bg} leading-7 font-bold text-xs`}>
+                      <td key={d.date} className="px-2 py-2 text-center">
+                        <button
+                          onClick={() => openCell(athlete, d)}
+                          className={`inline-block w-7 h-7 rounded-full ${bg} leading-7 font-bold text-xs hover:ring-2 hover:ring-blue-400 transition relative`}
+                          title={log?.notes || ''}
+                        >
                           {text}
-                        </span>
+                          {hasTarget && (
+                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500" />
+                          )}
+                        </button>
                       </td>
                     );
                   })}
@@ -74,6 +140,222 @@ export default function TrackingDashboardPage() {
           </table>
         </div>
       )}
+
+      <Modal open={profileLoading || !!profile} onClose={() => { setProfile(null); setProfileLoading(false); }}
+        title={profile ? profile.full_name : 'Loading...'}>
+        {profileLoading ? <Spinner /> : profile && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-lg">
+                {profile.full_name.charAt(0)}
+              </div>
+              <div>
+                <p className="font-semibold text-lg">{profile.full_name}</p>
+                <p className="text-sm text-gray-500">@{profile.username}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs">Gender</p>
+                <p className="font-medium">{profile.gender === 'M' ? 'Male' : 'Female'}</p>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-gray-500 text-xs">Group</p>
+                <p className="font-medium">{profile.group_name || 'No group'}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="bg-green-50 rounded-lg p-3">
+                <p className="text-2xl font-bold text-green-700">{profile.stats.completed}</p>
+                <p className="text-xs text-green-600">Completed</p>
+              </div>
+              <div className="bg-red-50 rounded-lg p-3">
+                <p className="text-2xl font-bold text-red-700">{profile.stats.missed}</p>
+                <p className="text-xs text-red-600">Missed</p>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-3">
+                <p className="text-2xl font-bold text-blue-700">{profile.stats.completion_rate}%</p>
+                <p className="text-xs text-blue-600">Rate</p>
+              </div>
+            </div>
+
+            {profileWeek && (() => {
+              const pws = startOfWeek(profileWeekDate, { weekStartsOn: 0 });
+              return (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-2">Training</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <button onClick={() => setProfileWeekDate(subWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&larr;</button>
+                    <span className="text-xs font-medium">{format(pws, 'MMM d')} - {format(addDays(pws, 6), 'MMM d')}</span>
+                    <button onClick={() => setProfileWeekDate(addWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&rarr;</button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {profileWeek.days.map((d) => {
+                      const dayDate = new Date(d.date + 'T00:00');
+                      const hasContent = d.group_workout?.content || d.target?.note;
+                      return (
+                        <div key={d.date} className={`rounded-lg px-3 py-2 text-sm ${d.log ? (
+                          d.log.completed ? 'bg-green-50' : d.log.status === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
+                        ) : 'bg-gray-50'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-700 text-xs">{format(dayDate, 'EEE, MMM d')}</span>
+                            <span className={`text-xs font-bold ${d.log ? (
+                              d.log.completed ? 'text-green-700' : d.log.status === 'partial' ? 'text-yellow-700' : 'text-red-700'
+                            ) : 'text-gray-400'}`}>
+                              {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
+                            </span>
+                          </div>
+                          {d.target?.override_group && d.target?.note ? (
+                            <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">{d.target.note}</p>
+                          ) : (
+                            <>
+                              {d.group_workout?.content && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{d.group_workout.content}</p>}
+                              {d.target?.note && <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">Personal: {d.target.note}</p>}
+                            </>
+                          )}
+                          {d.log?.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.log.notes}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {profile.personal_bests?.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">Personal Bests</p>
+                <div className="space-y-1.5">
+                  {profile.personal_bests.map((pb) => (
+                    <div key={pb.distance_m} className="flex items-center justify-between bg-yellow-50 rounded-lg px-3 py-2 text-sm">
+                      <span className="font-semibold text-yellow-800">{pb.distance_display}</span>
+                      <div className="text-right">
+                        <span className="font-bold text-yellow-900">{pb.time_display}</span>
+                        <span className="text-xs text-gray-500 ml-2">{pb.race_name}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {profile.race_history?.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">Race History</p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {profile.race_history.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-800">{r.race_name}</p>
+                        <p className="text-xs text-gray-500">{format(new Date(r.race_date + 'T00:00'), 'MMM d, yyyy')} · {r.distance_display}</p>
+                      </div>
+                      <span className="font-semibold text-gray-700">{r.time_display}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {profile.recent_logs?.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">Recent Activity</p>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {profile.recent_logs.map((log) => (
+                    <div key={log.date} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${log.completed ? 'bg-green-50' : 'bg-red-50'}`}>
+                      <span className="text-gray-700">{format(new Date(log.date + 'T00:00'), 'EEE, MMM d')}</span>
+                      <div className="flex items-center gap-2">
+                        {log.notes && <span className="text-xs text-gray-500 truncate max-w-[120px]">{log.notes}</span>}
+                        <span className={`font-medium ${log.completed ? 'text-green-700' : 'text-red-700'}`}>
+                          {log.completed ? 'V' : 'X'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {profile.created_at && (
+              <p className="text-xs text-gray-400 text-center">
+                Member since {format(new Date(profile.created_at), 'MMM d, yyyy')}
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!selected} onClose={() => setSelected(null)}
+        title={selected ? `${selected.athlete.full_name} — ${format(new Date(selected.day.date + 'T00:00'), 'EEE, MMM d')}` : ''}>
+        {selected && (
+          <div className="space-y-4">
+            {/* Group workout section */}
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-xs font-semibold text-gray-500 mb-1">
+                Group Workout ({selected.athlete.group_name || 'No group'})
+              </p>
+              {selected.day.group_workout?.content ? (
+                <p className="text-sm whitespace-pre-wrap">{selected.day.group_workout.content}</p>
+              ) : (
+                <p className="text-sm text-gray-400 italic">No group workout for this day</p>
+              )}
+            </div>
+
+            {/* Athlete report section */}
+            <div className={`rounded-lg p-3 ${selected.day.log ? (
+              (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'completed' ? 'bg-green-50' :
+              (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
+            ) : 'bg-gray-50'}`}>
+              <p className="text-xs font-semibold text-gray-500 mb-1">Athlete Report</p>
+              {selected.day.log ? (
+                <>
+                  <p className="text-sm font-medium">{
+                    (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'completed' ? 'Completed' :
+                    (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'Half Completed' : 'Missed'
+                  }</p>
+                  {selected.day.log.notes && <p className="text-sm text-gray-600 mt-1">{selected.day.log.notes}</p>}
+                </>
+              ) : (
+                <p className="text-sm text-gray-400 italic">No report submitted</p>
+              )}
+            </div>
+
+            {/* Personal workout section */}
+            <div className="border-t pt-3">
+              <p className="text-xs font-semibold text-blue-700 mb-2">Personal Workout</p>
+              <textarea
+                value={personalNote}
+                onChange={(e) => setPersonalNote(e.target.value)}
+                placeholder="Write a personal workout for this athlete..."
+                rows={2}
+                className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50/50"
+              />
+              {personalNote.trim() && (
+                <label className="flex items-center gap-2 mt-2">
+                  <input
+                    type="checkbox"
+                    checked={overrideGroup}
+                    onChange={(e) => setOverrideGroup(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-xs text-gray-600">Show this instead of group workout</span>
+                </label>
+              )}
+              <div className="flex gap-2 mt-3">
+                <button onClick={handleSavePersonal} disabled={saving}
+                  className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button onClick={() => setSelected(null)}
+                  className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from .database import engine, Base
-from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, Kudos, Announcement, AnnouncementReaction
-from .routers import auth, calendar, races, leaderboard, profile, coach, kudos, feed
+from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, Kudos, Announcement, AnnouncementReaction, Challenge
+from .routers import auth, calendar, races, leaderboard, profile, coach, kudos, feed, challenges
 
 Base.metadata.create_all(bind=engine)
 
@@ -56,6 +56,25 @@ def _migrate():
             conn.execute(text("CREATE INDEX ix_ann_reactions_ann_id ON announcement_reactions(announcement_id)"))
             conn.commit()
 
+        if "challenges" not in tables:
+            conn.execute(text("""
+                CREATE TABLE challenges (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name VARCHAR(200) NOT NULL,
+                    description TEXT,
+                    challenge_type VARCHAR(20) NOT NULL,
+                    target_distance_m INTEGER,
+                    target_km REAL,
+                    start_date DATE NOT NULL,
+                    end_date DATE NOT NULL,
+                    training_group_id INTEGER REFERENCES training_groups(id),
+                    created_by INTEGER NOT NULL REFERENCES users(id),
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("CREATE INDEX ix_challenges_end_date ON challenges(end_date)"))
+            conn.commit()
+
 _migrate()
 
 app = FastAPI(title="Huji Run API", version="1.0.0")
@@ -78,6 +97,7 @@ app.include_router(profile.router, prefix=API_PREFIX)
 app.include_router(coach.router, prefix=API_PREFIX)
 app.include_router(kudos.router, prefix=API_PREFIX)
 app.include_router(feed.router, prefix=API_PREFIX)
+app.include_router(challenges.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

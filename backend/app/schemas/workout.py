@@ -34,6 +34,7 @@ class IndividualTargetOut(BaseModel):
 class WorkoutLogUpsert(BaseModel):
     date: date
     status: str = "missed"
+    distance_km: Optional[float] = None
     notes: Optional[str] = None
 
 
@@ -42,6 +43,7 @@ class WorkoutLogOut(BaseModel):
     date: date
     completed: bool
     status: str
+    distance_km: Optional[float] = None
     notes: Optional[str]
     model_config = {"from_attributes": True}
 

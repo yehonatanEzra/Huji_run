@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import date, datetime
-from sqlalchemy import Integer, String, Text, Boolean, Date, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import Integer, String, Text, Boolean, Date, DateTime, Float, ForeignKey, func, UniqueConstraint
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
@@ -49,6 +49,7 @@ class WorkoutLog(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="missed")
+    distance_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     logged_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

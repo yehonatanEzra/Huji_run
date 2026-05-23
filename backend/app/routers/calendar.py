@@ -84,6 +84,7 @@ def submit_log(
     if log:
         log.status = body.status
         log.completed = body.status == "completed"
+        log.distance_km = body.distance_km
         log.notes = body.notes
     else:
         log = WorkoutLog(
@@ -91,6 +92,7 @@ def submit_log(
             date=body.date,
             status=body.status,
             completed=body.status == "completed",
+            distance_km=body.distance_km,
             notes=body.notes,
         )
         db.add(log)

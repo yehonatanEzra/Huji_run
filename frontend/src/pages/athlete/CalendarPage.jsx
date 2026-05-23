@@ -47,6 +47,7 @@ export default function CalendarPage() {
     setSelectedDay(day);
     setLogForm({
       status: day.workout_log?.status || 'missed',
+      distance_km: day.workout_log?.distance_km || '',
       notes: day.workout_log?.notes || '',
     });
   };
@@ -54,7 +55,11 @@ export default function CalendarPage() {
   const handleSaveLog = async () => {
     setSaving(true);
     try {
-      await submitLog({ date: selectedDay.date, ...logForm });
+      const payload = { date: selectedDay.date, status: logForm.status, notes: logForm.notes };
+      if (logForm.distance_km !== '' && logForm.distance_km != null) {
+        payload.distance_km = parseFloat(logForm.distance_km);
+      }
+      await submitLog(payload);
       setSelectedDay(null);
       fetchData();
     } catch (err) {
@@ -174,6 +179,18 @@ export default function CalendarPage() {
         >Monthly</button>
       </div>
 
+      {!loading && (() => {
+        const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
+        return weekKm > 0 ? (
+          <div className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 mb-4">
+            <span className="text-sm font-medium text-blue-700">
+              {view === 'weekly' ? 'Weekly' : 'Monthly'} Volume
+            </span>
+            <span className="text-lg font-bold text-blue-800">{weekKm.toFixed(1)} km</span>
+          </div>
+        ) : null;
+      })()}
+
       {loading ? <Spinner /> : view === 'weekly' ? (
         <div className="space-y-2">
           {days.map(renderDayCard)}
@@ -215,6 +232,20 @@ export default function CalendarPage() {
                   </button>
                 ))}
               </div>
+              {logForm.status !== 'missed' && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">Distance (km)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    placeholder="e.g. 8.5"
+                    value={logForm.distance_km}
+                    onChange={(e) => setLogForm({ ...logForm, distance_km: e.target.value })}
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
               <textarea
                 placeholder="How did it go? Any notes..."
                 value={logForm.notes}

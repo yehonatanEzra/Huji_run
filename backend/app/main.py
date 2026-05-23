@@ -1,11 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from .database import engine, Base
 from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame
 from .routers import auth, calendar, races, leaderboard, profile, coach
 
-# Create all tables on startup (dev convenience; use Alembic for prod migrations)
 Base.metadata.create_all(bind=engine)
+
+def _migrate():
+    with engine.connect() as conn:
+        cols = {r[1] for r in conn.execute(text("PRAGMA table_info(workout_logs)"))}
+        if "status" not in cols:
+            conn.execute(text("ALTER TABLE workout_logs ADD COLUMN status VARCHAR(10) NOT NULL DEFAULT 'missed'"))
+            conn.execute(text("UPDATE workout_logs SET status = CASE WHEN completed = 1 THEN 'completed' ELSE 'missed' END"))
+            conn.commit()
+        if "distance_km" not in cols:
+            conn.execute(text("ALTER TABLE workout_logs ADD COLUMN distance_km REAL"))
+            conn.commit()
+
+_migrate()
 
 app = FastAPI(title="Huji Run API", version="1.0.0")
 

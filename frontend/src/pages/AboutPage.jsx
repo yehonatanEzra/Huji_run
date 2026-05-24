@@ -40,10 +40,9 @@ export default function AboutPage() {
         <div className="space-y-3 text-sm leading-relaxed max-w-prose">
           <p>
             Hi, I'm Yehonatan. I am a Computer Science Graduate and a competitive
-            middle-distance athlete, currently working in Chip Design Verification at
-            Amazon Web Services (AWS) / Annapurna Labs. Living at the intersection of
+            middle-distance athlete Living at the intersection of
             engineering and elite athletics, my running career includes competing at the
-            national level in the Israeli Track &amp; Field Championships, capturing the
+            national level, capturing the
             Bronze medal at the 2025 Israeli 5K Championships, and competing in the
             Canadian National Cross-Country Championships while on an exchange semester
             at the University of British Columbia (UBC) in Vancouver.

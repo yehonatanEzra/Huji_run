@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks } from 'date-fns';
-import { getDashboardWeek, getAthleteProfile, getAthleteWeek } from '../../api/coach';
+import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
+import { listRaces, getRace } from '../../api/races';
 import { upsertTarget, deleteTarget } from '../../api/calendar';
+import { toggleKudos } from '../../api/kudos';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
@@ -17,6 +19,14 @@ export default function TrackingDashboardPage() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileWeekDate, setProfileWeekDate] = useState(new Date());
   const [profileWeek, setProfileWeek] = useState(null);
+  const [showPBForm, setShowPBForm] = useState(false);
+  const [pbMode, setPbMode] = useState('manual');
+  const [pbForm, setPbForm] = useState({ distance_m: '', time_min: '', time_sec: '', competition_name: '' });
+  const [pbRaces, setPbRaces] = useState([]);
+  const [pbSelectedRace, setPbSelectedRace] = useState(null);
+  const [pbHeats, setPbHeats] = useState([]);
+  const [pbSelectedHeat, setPbSelectedHeat] = useState(null);
+  const [pbSaving, setPbSaving] = useState(false);
 
   const fetchData = () => {
     setLoading(true);
@@ -70,6 +80,50 @@ export default function TrackingDashboardPage() {
       .catch(console.error);
   }, [profileWeekDate]);
 
+  const openPBForm = () => {
+    setShowPBForm(true);
+    setPbMode('manual');
+    setPbForm({ distance_m: '', time_min: '', time_sec: '', competition_name: '' });
+    setPbSelectedRace(null);
+    setPbHeats([]);
+    setPbSelectedHeat(null);
+    listRaces().then(({ data }) => setPbRaces(data)).catch(console.error);
+  };
+
+  const handleSelectRace = async (raceId) => {
+    if (!raceId) { setPbSelectedRace(null); setPbHeats([]); setPbSelectedHeat(null); return; }
+    try {
+      const { data } = await getRace(raceId);
+      setPbSelectedRace(data);
+      setPbHeats(data.heats || []);
+      setPbSelectedHeat(null);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleSavePB = async () => {
+    const timeSeconds = (parseInt(pbForm.time_min) || 0) * 60 + (parseInt(pbForm.time_sec) || 0);
+    if (timeSeconds <= 0) return;
+
+    setPbSaving(true);
+    try {
+      const payload = { athlete_id: profile.id, time_seconds: timeSeconds };
+      if (pbMode === 'race' && pbSelectedRace && pbSelectedHeat) {
+        payload.race_id = pbSelectedRace.id;
+        payload.heat_id = pbSelectedHeat.id;
+        payload.distance_m = pbSelectedHeat.distance_m;
+      } else {
+        payload.distance_m = parseInt(pbForm.distance_m);
+        if (!payload.distance_m) { setPbSaving(false); return; }
+        payload.competition_name = pbForm.competition_name || undefined;
+      }
+      await addAthletePB(profile.id, payload);
+      setShowPBForm(false);
+      const { data } = await getAthleteProfile(profile.id);
+      setProfile(data);
+    } catch (err) { console.error(err); }
+    finally { setPbSaving(false); }
+  };
+
   const ws = startOfWeek(weekDate, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
 
@@ -98,6 +152,7 @@ export default function TrackingDashboardPage() {
                     {format(d, 'EEE')}
                   </th>
                 ))}
+                <th className="px-2 py-2 text-center text-gray-500 font-medium min-w-[48px]">km</th>
               </tr>
             </thead>
             <tbody>
@@ -130,10 +185,23 @@ export default function TrackingDashboardPage() {
                           {hasTarget && (
                             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-blue-500" />
                           )}
+                          {log?.kudos_count > 0 && (
+                            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-pink-400" />
+                          )}
                         </button>
                       </td>
                     );
                   })}
+                  <td className="px-2 py-2 text-center">
+                    {(() => {
+                      const total = athlete.days.reduce((s, d) => s + (d.log?.distance_km || 0), 0);
+                      return total > 0 ? (
+                        <span className="text-xs font-bold text-blue-700">{total.toFixed(1)}</span>
+                      ) : (
+                        <span className="text-xs text-gray-300">-</span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -224,9 +292,85 @@ export default function TrackingDashboardPage() {
               );
             })()}
 
-            {profile.personal_bests?.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Personal Bests</p>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-500">Personal Bests</p>
+                <button onClick={openPBForm} className="text-xs text-blue-600 hover:underline font-medium">+ Add PB</button>
+              </div>
+              {showPBForm && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-2 space-y-3">
+                  <div className="flex rounded-lg border border-yellow-300 overflow-hidden">
+                    <button onClick={() => setPbMode('manual')}
+                      className={`flex-1 py-1.5 text-xs font-medium transition ${pbMode === 'manual' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600'}`}>
+                      Manual Entry
+                    </button>
+                    <button onClick={() => setPbMode('race')}
+                      className={`flex-1 py-1.5 text-xs font-medium transition ${pbMode === 'race' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600'}`}>
+                      From Race
+                    </button>
+                  </div>
+
+                  {pbMode === 'manual' ? (
+                    <>
+                      <select value={pbForm.distance_m} onChange={(e) => setPbForm({ ...pbForm, distance_m: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm">
+                        <option value="">Select distance</option>
+                        <option value="1500">1,500m</option>
+                        <option value="3000">3,000m</option>
+                        <option value="5000">5,000m</option>
+                        <option value="10000">10,000m</option>
+                        <option value="21100">Half Marathon</option>
+                        <option value="42200">Marathon</option>
+                      </select>
+                      <input placeholder="Competition name (optional)" value={pbForm.competition_name}
+                        onChange={(e) => setPbForm({ ...pbForm, competition_name: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                    </>
+                  ) : (
+                    <>
+                      <select onChange={(e) => handleSelectRace(e.target.value)}
+                        className="w-full border rounded-lg px-3 py-2 text-sm">
+                        <option value="">Select race</option>
+                        {pbRaces.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.race_date})</option>)}
+                      </select>
+                      {pbHeats.length > 0 && (
+                        <select onChange={(e) => setPbSelectedHeat(pbHeats.find(h => h.id === parseInt(e.target.value)) || null)}
+                          className="w-full border rounded-lg px-3 py-2 text-sm">
+                          <option value="">Select heat</option>
+                          {pbHeats.map((h) => <option key={h.id} value={h.id}>{h.label} ({h.distance_m}m)</option>)}
+                        </select>
+                      )}
+                    </>
+                  )}
+
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500">Min</label>
+                      <input type="number" min="0" placeholder="mm" value={pbForm.time_min}
+                        onChange={(e) => setPbForm({ ...pbForm, time_min: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500">Sec</label>
+                      <input type="number" min="0" max="59" placeholder="ss" value={pbForm.time_sec}
+                        onChange={(e) => setPbForm({ ...pbForm, time_sec: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button onClick={handleSavePB} disabled={pbSaving}
+                      className="flex-1 bg-yellow-500 text-white rounded-lg py-2 text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
+                      {pbSaving ? 'Saving...' : 'Save PB'}
+                    </button>
+                    <button onClick={() => setShowPBForm(false)}
+                      className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+              {profile.personal_bests?.length > 0 ? (
                 <div className="space-y-1.5">
                   {profile.personal_bests.map((pb) => (
                     <div key={pb.distance_m} className="flex items-center justify-between bg-yellow-50 rounded-lg px-3 py-2 text-sm">
@@ -238,8 +382,10 @@ export default function TrackingDashboardPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : !showPBForm && (
+                <p className="text-xs text-gray-400 text-center py-2">No personal bests yet</p>
+              )}
+            </div>
 
             {profile.race_history?.length > 0 && (
               <div>
@@ -315,6 +461,26 @@ export default function TrackingDashboardPage() {
                     (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'Half Completed' : 'Missed'
                   }</p>
                   {selected.day.log.notes && <p className="text-sm text-gray-600 mt-1">{selected.day.log.notes}</p>}
+                  {selected.day.log.id && (
+                    <button
+                      onClick={async () => {
+                        const { data: res } = await toggleKudos(selected.day.log.id);
+                        setSelected({
+                          ...selected,
+                          day: { ...selected.day, log: { ...selected.day.log, kudos_count: res.kudos_count, has_kudos: res.has_kudos } },
+                        });
+                        fetchData();
+                      }}
+                      className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition ${
+                        selected.day.log.has_kudos
+                          ? 'bg-pink-100 text-pink-700 border border-pink-300'
+                          : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-pink-50'
+                      }`}
+                    >
+                      <span>👏</span>
+                      <span>{selected.day.log.kudos_count || 0}</span>
+                    </button>
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-gray-400 italic">No report submitted</p>

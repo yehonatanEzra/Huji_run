@@ -29,6 +29,7 @@ class ProfileResponse(BaseModel):
     user_id: int
     full_name: str
     gender: str
+    photo_url: Optional[str] = None
     personal_bests: list[PBEntry]
     race_history: list[RaceHistoryEntry]
 

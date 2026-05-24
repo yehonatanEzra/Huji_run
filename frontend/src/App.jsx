@@ -15,6 +15,7 @@ import TrackingDashboardPage from './pages/coach/TrackingDashboardPage';
 import RaceWizardPage from './pages/coach/RaceWizardPage';
 import SettingsPage from './pages/coach/SettingsPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
+import FeedPage from './pages/FeedPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -26,6 +27,7 @@ export default function App() {
 
       <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/feed" element={<FeedPage />} />
         <Route path="/races" element={<RaceArchivePage />} />
         <Route path="/races/:raceId" element={<RaceDetailPage />} />
         <Route path="/hall-of-fame" element={<HallOfFamePage />} />

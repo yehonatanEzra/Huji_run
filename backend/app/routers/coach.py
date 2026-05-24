@@ -179,7 +179,7 @@ def search_athletes(
 def dashboard_week(
     day: date = Query(default_factory=date.today),
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach_user: User = Depends(require_coach),
 ):
     ws = _week_start(day)
     week_dates = [ws + timedelta(days=i) for i in range(7)]
@@ -197,6 +197,23 @@ def dashboard_week(
 
     group_map = {g.id: g.name for g in db.query(TrainingGroup).all()}
 
+    from ..models.kudos import Kudos
+    log_ids = [l.id for l in logs]
+    kudos_counts = {}
+    my_kudos = set()
+    if log_ids:
+        kudos_counts = dict(
+            db.query(Kudos.workout_log_id, sa_func.count(Kudos.id))
+            .filter(Kudos.workout_log_id.in_(log_ids))
+            .group_by(Kudos.workout_log_id)
+            .all()
+        )
+        my_kudos = {
+            r[0] for r in db.query(Kudos.workout_log_id)
+            .filter(Kudos.workout_log_id.in_(log_ids), Kudos.giver_id == coach_user.id)
+            .all()
+        }
+
     rows = []
     for athlete in athletes:
         days = []
@@ -204,9 +221,14 @@ def dashboard_week(
             log = log_map.get((athlete.id, d))
             target = target_map.get((athlete.id, d))
             gw = gw_map.get((athlete.training_group_id, d)) if athlete.training_group_id else None
+            log_out = None
+            if log:
+                log_out = WorkoutLogOut.model_validate(log)
+                log_out.kudos_count = kudos_counts.get(log.id, 0)
+                log_out.has_kudos = log.id in my_kudos
             days.append({
                 "date": d,
-                "log": WorkoutLogOut.model_validate(log) if log else None,
+                "log": log_out,
                 "target": IndividualTargetOut.model_validate(target) if target else None,
                 "group_workout": GroupWorkoutOut.model_validate(gw) if gw else None,
             })
@@ -362,6 +384,8 @@ def get_athlete_profile(
             {
                 "date": l.date.isoformat(),
                 "completed": l.completed,
+                "status": l.status,
+                "distance_km": l.distance_km,
                 "notes": l.notes,
             }
             for l in recent_logs
@@ -405,6 +429,17 @@ def get_athlete_week(
         ).all()
         gw_map = {gw.date: gw for gw in gws}
 
+    from ..models.kudos import Kudos
+    log_ids = [l.id for l in logs]
+    kudos_counts = {}
+    if log_ids:
+        kudos_counts = dict(
+            db.query(Kudos.workout_log_id, sa_func.count(Kudos.id))
+            .filter(Kudos.workout_log_id.in_(log_ids))
+            .group_by(Kudos.workout_log_id)
+            .all()
+        )
+
     days = []
     for d in week_dates:
         log = log_map.get(d)
@@ -412,9 +447,82 @@ def get_athlete_week(
         gw = gw_map.get(d)
         days.append({
             "date": d.isoformat(),
-            "log": {"completed": log.completed, "status": log.status, "notes": log.notes} if log else None,
+            "log": {
+                "id": log.id,
+                "completed": log.completed,
+                "status": log.status,
+                "distance_km": log.distance_km,
+                "notes": log.notes,
+                "kudos_count": kudos_counts.get(log.id, 0),
+            } if log else None,
             "target": {"note": target.note, "override_group": target.override_group} if target else None,
             "group_workout": {"content": gw.content} if gw and gw.content else None,
         })
 
     return {"week_start": ws.isoformat(), "days": days}
+
+
+class AddPBRequest(BaseModel):
+    athlete_id: int
+    distance_m: int
+    time_seconds: int
+    competition_name: Optional[str] = None
+    race_id: Optional[int] = None
+    heat_id: Optional[int] = None
+
+
+@router.post("/athletes/{athlete_id}/pb")
+def add_athlete_pb(
+    athlete_id: int,
+    body: AddPBRequest,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    from ..services.hall_of_fame import refresh_hall_of_fame
+
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    if body.race_id and body.heat_id:
+        heat = db.get(Heat, body.heat_id)
+        if not heat or heat.race_id != body.race_id:
+            raise HTTPException(status_code=404, detail="Heat not found")
+        result = Result(
+            heat_id=body.heat_id,
+            athlete_name=athlete.full_name,
+            user_id=athlete.id,
+            gender=athlete.gender or "M",
+            time_seconds=body.time_seconds,
+        )
+        db.add(result)
+        db.commit()
+        refresh_hall_of_fame(db, heat.distance_m, result.gender)
+        return {"ok": True, "linked_to_race": True}
+
+    race_name = body.competition_name or "Manual PB"
+    race = Race(
+        name=race_name,
+        race_date=date.today(),
+        created_by=coach.id,
+    )
+    db.add(race)
+    db.flush()
+    heat = Heat(
+        race_id=race.id,
+        distance_m=body.distance_m,
+        label=f"{body.distance_m}m",
+    )
+    db.add(heat)
+    db.flush()
+    result = Result(
+        heat_id=heat.id,
+        athlete_name=athlete.full_name,
+        user_id=athlete.id,
+        gender=athlete.gender or "M",
+        time_seconds=body.time_seconds,
+    )
+    db.add(result)
+    db.commit()
+    refresh_hall_of_fame(db, body.distance_m, result.gender)
+    return {"ok": True, "linked_to_race": False, "race_id": race.id}

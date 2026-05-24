@@ -18,6 +18,7 @@ class User(Base):
         Enum("athlete", "coach", name="role_enum"), nullable=False, default="athlete"
     )
     training_group_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("training_groups.id"), nullable=True)
+    photo_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     training_group = relationship("TrainingGroup", back_populates="members", foreign_keys=[training_group_id])

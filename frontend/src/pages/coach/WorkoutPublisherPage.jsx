@@ -425,8 +425,8 @@ export default function WorkoutPublisherPage() {
               {/* Actions */}
               <div className="flex gap-2 pt-1">
                 <button onClick={() => handleSave()}
-                  disabled={saving || (!hasPublishedContent && !form.draft_content.trim())}
-                  className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  disabled={saving || (!hasPublishedContent && !form.title.trim() && !form.draft_content.trim())}
+                  className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   {saving ? 'Saving...' : 'Save'}</button>
                 <button onClick={() => setSelectedDay(null)}
                   className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">

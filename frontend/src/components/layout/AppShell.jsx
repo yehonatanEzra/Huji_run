@@ -15,7 +15,7 @@ export default function AppShell() {
 
   return (
     <div className="flex flex-col min-h-dvh">
-      <header className="bg-blue-700 text-white px-4 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-blue-700 text-white px-4 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-2">
           {!isRoot && (
             <button
@@ -27,6 +27,12 @@ export default function AppShell() {
             </button>
           )}
           <h1 className="text-lg font-bold tracking-tight">Huji Run</h1>
+          <button
+            onClick={() => navigate('/about')}
+            className="ml-1 text-xs font-medium bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-0.5 transition"
+          >
+            About
+          </button>
         </div>
         <div className="flex items-center gap-3 text-sm">
           <span className="opacity-80">{user?.full_name}</span>

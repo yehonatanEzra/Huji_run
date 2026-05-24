@@ -16,6 +16,7 @@ import RaceWizardPage from './pages/coach/RaceWizardPage';
 import SettingsPage from './pages/coach/SettingsPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
+import AboutPage from './pages/AboutPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/races/:raceId" element={<RaceDetailPage />} />
         <Route path="/hall-of-fame" element={<HallOfFamePage />} />
         <Route path="/health-wellness" element={<HealthWellnessPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/profile" element={<ProfilePage />} />
 
         <Route path="/coach/workouts" element={<ProtectedRoute requireCoach><WorkoutPublisherPage /></ProtectedRoute>} />

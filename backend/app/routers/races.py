@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
-from ..models.race import Race, Heat, Result, CANONICAL_DISTANCES
+from ..models.race import Race, Heat, Result, RaceRegistration, CANONICAL_DISTANCES
 from ..schemas.race import (
     RaceCreate, RaceOut, HeatCreate, HeatOut,
     ResultCreate, ResultOut, HeatWithResults, RaceDetail,
+    RegistrationCreate, RegistrationUpdate, RegistrationOut,
 )
 from ..services.time_utils import parse_time, seconds_to_display, format_pace
 from ..services.hall_of_fame import refresh_hall_of_fame
@@ -16,29 +17,58 @@ from ..services.hall_of_fame import refresh_hall_of_fame
 router = APIRouter(prefix="/races", tags=["races"])
 
 
+def _race_status(db: Session, race_id: int) -> str:
+    has_result = db.query(Result).join(Heat, Result.heat_id == Heat.id).filter(Heat.race_id == race_id).first()
+    return "completed" if has_result else "upcoming"
+
+
+def _attach_race_meta(db: Session, race: Race) -> dict:
+    status_val = _race_status(db, race.id)
+    reg_count = db.query(func.count(RaceRegistration.id)).filter(RaceRegistration.race_id == race.id).scalar() or 0
+    heat_count = db.query(func.count(Heat.id)).filter(Heat.race_id == race.id).scalar() or 0
+    return {
+        "id": race.id,
+        "name": race.name,
+        "race_date": race.race_date,
+        "status": status_val,
+        "registration_count": reg_count,
+        "heat_count": heat_count,
+    }
+
+
 @router.get("", response_model=list[RaceOut])
 def list_races(
     search: Optional[str] = Query(None),
     year: Optional[int] = Query(None),
     mine: bool = Query(False),
+    status_filter: Optional[str] = Query(None, alias="status"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     q = db.query(Race)
     if mine:
-        my_race_ids = (
+        result_race_ids = (
             db.query(Heat.race_id)
             .join(Result, Result.heat_id == Heat.id)
             .filter(Result.user_id == current_user.id)
             .distinct()
-            .subquery()
         )
-        q = q.filter(Race.id.in_(db.query(my_race_ids)))
+        registered_race_ids = (
+            db.query(RaceRegistration.race_id)
+            .filter(RaceRegistration.user_id == current_user.id)
+            .distinct()
+        )
+        my_ids = {r[0] for r in result_race_ids.all()} | {r[0] for r in registered_race_ids.all()}
+        q = q.filter(Race.id.in_(my_ids))
     if search:
         q = q.filter(Race.name.ilike(f"%{search}%"))
     if year:
         q = q.filter(func.strftime("%Y", Race.race_date) == str(year))
-    return q.order_by(Race.race_date.desc()).all()
+    races = q.order_by(Race.race_date.desc()).all()
+    out = [_attach_race_meta(db, r) for r in races]
+    if status_filter in ("upcoming", "completed"):
+        out = [r for r in out if r["status"] == status_filter]
+    return out
 
 
 @router.get("/{race_id}", response_model=RaceDetail)
@@ -46,7 +76,149 @@ def get_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(get_
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
-    return race
+    return {
+        "id": race.id,
+        "name": race.name,
+        "race_date": race.race_date,
+        "heats": [{"id": h.id, "race_id": h.race_id, "distance_m": h.distance_m, "label": h.label} for h in race.heats],
+        "status": _race_status(db, race.id),
+    }
+
+
+@router.get("/{race_id}/registrations", response_model=list[RegistrationOut])
+def list_registrations(
+    race_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+    regs = (
+        db.query(RaceRegistration)
+        .filter(RaceRegistration.race_id == race_id)
+        .order_by(RaceRegistration.registered_at.asc())
+        .all()
+    )
+    out = []
+    for r in regs:
+        out.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "athlete_name": r.user.full_name,
+            "heat_id": r.heat_id,
+            "heat_label": r.heat.label if r.heat else None,
+            "heat_distance_m": r.heat.distance_m if r.heat else None,
+            "registered_at": r.registered_at.isoformat(),
+        })
+    return out
+
+
+@router.post("/{race_id}/registrations", response_model=RegistrationOut, status_code=status.HTTP_201_CREATED)
+def create_registration(
+    race_id: int,
+    payload: RegistrationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    race = db.get(Race, race_id)
+    if not race:
+        raise HTTPException(status_code=404, detail="Race not found")
+
+    target_user_id = payload.user_id or current_user.id
+    if target_user_id != current_user.id and current_user.role != "coach":
+        raise HTTPException(status_code=403, detail="Only coaches can register others")
+
+    target = db.get(User, target_user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    if payload.heat_id is not None:
+        heat = db.get(Heat, payload.heat_id)
+        if not heat or heat.race_id != race_id:
+            raise HTTPException(status_code=400, detail="Heat does not belong to this race")
+
+    existing = db.query(RaceRegistration).filter(
+        RaceRegistration.race_id == race_id,
+        RaceRegistration.user_id == target_user_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Already registered. Update instead.")
+
+    reg = RaceRegistration(
+        race_id=race_id,
+        user_id=target_user_id,
+        heat_id=payload.heat_id,
+        registered_by=current_user.id,
+    )
+    db.add(reg)
+    db.commit()
+    db.refresh(reg)
+    return {
+        "id": reg.id,
+        "user_id": reg.user_id,
+        "athlete_name": target.full_name,
+        "heat_id": reg.heat_id,
+        "heat_label": reg.heat.label if reg.heat else None,
+        "heat_distance_m": reg.heat.distance_m if reg.heat else None,
+        "registered_at": reg.registered_at.isoformat(),
+    }
+
+
+@router.put("/{race_id}/registrations/{user_id}", response_model=RegistrationOut)
+def update_registration(
+    race_id: int,
+    user_id: int,
+    payload: RegistrationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if user_id != current_user.id and current_user.role != "coach":
+        raise HTTPException(status_code=403, detail="Only coaches can update others' registrations")
+
+    reg = db.query(RaceRegistration).filter(
+        RaceRegistration.race_id == race_id,
+        RaceRegistration.user_id == user_id,
+    ).first()
+    if not reg:
+        raise HTTPException(status_code=404, detail="Registration not found")
+
+    if payload.heat_id is not None:
+        heat = db.get(Heat, payload.heat_id)
+        if not heat or heat.race_id != race_id:
+            raise HTTPException(status_code=400, detail="Heat does not belong to this race")
+
+    reg.heat_id = payload.heat_id
+    db.commit()
+    db.refresh(reg)
+    return {
+        "id": reg.id,
+        "user_id": reg.user_id,
+        "athlete_name": reg.user.full_name,
+        "heat_id": reg.heat_id,
+        "heat_label": reg.heat.label if reg.heat else None,
+        "heat_distance_m": reg.heat.distance_m if reg.heat else None,
+        "registered_at": reg.registered_at.isoformat(),
+    }
+
+
+@router.delete("/{race_id}/registrations/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_registration(
+    race_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if user_id != current_user.id and current_user.role != "coach":
+        raise HTTPException(status_code=403, detail="Only coaches can remove others")
+    reg = db.query(RaceRegistration).filter(
+        RaceRegistration.race_id == race_id,
+        RaceRegistration.user_id == user_id,
+    ).first()
+    if not reg:
+        return
+    db.delete(reg)
+    db.commit()
 
 
 @router.get("/{race_id}/results", response_model=list[HeatWithResults])

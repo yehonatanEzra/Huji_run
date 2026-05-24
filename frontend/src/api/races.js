@@ -38,3 +38,15 @@ export const updateResult = (raceId, heatId, resultId, data) =>
 
 export const deleteResult = (raceId, heatId, resultId) =>
   client.delete(`/races/${raceId}/heats/${heatId}/results/${resultId}`);
+
+export const listRegistrations = (raceId) =>
+  client.get(`/races/${raceId}/registrations`);
+
+export const register = (raceId, data) =>
+  client.post(`/races/${raceId}/registrations`, data);
+
+export const updateRegistration = (raceId, userId, data) =>
+  client.put(`/races/${raceId}/registrations/${userId}`, data);
+
+export const unregister = (raceId, userId) =>
+  client.delete(`/races/${raceId}/registrations/${userId}`);

@@ -50,3 +50,21 @@ class Result(Base):
 
     heat = relationship("Heat", back_populates="results")
     user = relationship("User", back_populates="results")
+
+
+class RaceRegistration(Base):
+    __tablename__ = "race_registrations"
+    __table_args__ = (
+        UniqueConstraint("race_id", "user_id", name="uq_registration_race_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    race_id: Mapped[int] = mapped_column(Integer, ForeignKey("races.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    heat_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("heats.id", ondelete="SET NULL"), nullable=True, index=True)
+    registered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    registered_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+
+    race = relationship("Race", foreign_keys=[race_id])
+    user = relationship("User", foreign_keys=[user_id])
+    heat = relationship("Heat", foreign_keys=[heat_id])

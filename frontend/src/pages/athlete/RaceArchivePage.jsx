@@ -11,19 +11,20 @@ export default function RaceArchivePage() {
   const [search, setSearch] = useState('');
   const [year, setYear] = useState('');
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('my');
+  const [statusTab, setStatusTab] = useState('upcoming');
+  const [scopeTab, setScopeTab] = useState('all');
 
   useEffect(() => {
     setLoading(true);
-    const params = {};
+    const params = { status: statusTab };
     if (search) params.search = search;
     if (year) params.year = parseInt(year);
-    const fetcher = tab === 'my' ? listMyRaces : listRaces;
+    const fetcher = scopeTab === 'my' ? listMyRaces : listRaces;
     fetcher(params)
       .then(({ data }) => setRaces(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [search, year, tab]);
+  }, [search, year, statusTab, scopeTab]);
 
   const years = [...new Set(races.map((r) => r.race_date.slice(0, 4)))].sort().reverse();
 
@@ -41,15 +42,28 @@ export default function RaceArchivePage() {
         )}
       </div>
 
-      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4">
+      {/* Top-level: Upcoming / Completed */}
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-3">
         <button
-          onClick={() => setTab('my')}
-          className={`flex-1 py-1.5 text-sm font-medium transition ${tab === 'my' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
-        >My Races</button>
+          onClick={() => setStatusTab('upcoming')}
+          className={`flex-1 py-2 text-sm font-medium transition ${statusTab === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+        >Upcoming</button>
         <button
-          onClick={() => setTab('all')}
-          className={`flex-1 py-1.5 text-sm font-medium transition ${tab === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
-        >All Races</button>
+          onClick={() => setStatusTab('completed')}
+          className={`flex-1 py-2 text-sm font-medium transition ${statusTab === 'completed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+        >Completed</button>
+      </div>
+
+      {/* Sub-filter: My / All */}
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4 text-xs">
+        <button
+          onClick={() => setScopeTab('my')}
+          className={`flex-1 py-1 font-medium transition ${scopeTab === 'my' ? 'bg-gray-700 text-white' : 'bg-white text-gray-500'}`}
+        >My</button>
+        <button
+          onClick={() => setScopeTab('all')}
+          className={`flex-1 py-1 font-medium transition ${scopeTab === 'all' ? 'bg-gray-700 text-white' : 'bg-white text-gray-500'}`}
+        >All</button>
       </div>
 
       <div className="flex gap-2 mb-4">
@@ -72,7 +86,7 @@ export default function RaceArchivePage() {
 
       {loading ? <Spinner /> : races.length === 0 ? (
         <p className="text-center text-gray-400 py-8">
-          {tab === 'my' ? 'No races found for you' : 'No races found'}
+          {statusTab === 'upcoming' ? 'No upcoming races' : 'No races found'}
         </p>
       ) : (
         <div className="space-y-2">
@@ -82,8 +96,17 @@ export default function RaceArchivePage() {
               to={`/races/${race.id}`}
               className="block bg-white border rounded-xl p-4 hover:shadow-sm transition"
             >
-              <p className="font-semibold text-sm">{race.name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{race.race_date}</p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm truncate">{race.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{race.race_date}</p>
+                </div>
+                {race.status === 'upcoming' && (
+                  <span className="text-xs bg-blue-50 text-blue-700 font-medium rounded-full px-2 py-0.5 whitespace-nowrap">
+                    {race.registration_count} registered
+                  </span>
+                )}
+              </div>
             </Link>
           ))}
         </div>

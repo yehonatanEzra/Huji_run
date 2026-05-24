@@ -14,6 +14,9 @@ class RaceOut(BaseModel):
     id: int
     name: str
     race_date: date
+    status: str = "upcoming"  # "upcoming" or "completed"
+    registration_count: int = 0
+    heat_count: int = 0
     model_config = {"from_attributes": True}
 
 
@@ -65,4 +68,25 @@ class RaceDetail(BaseModel):
     name: str
     race_date: date
     heats: list[HeatOut]
+    status: str = "upcoming"
+    model_config = {"from_attributes": True}
+
+
+class RegistrationCreate(BaseModel):
+    user_id: Optional[int] = None  # if None, defaults to current user
+    heat_id: Optional[int] = None
+
+
+class RegistrationUpdate(BaseModel):
+    heat_id: Optional[int] = None
+
+
+class RegistrationOut(BaseModel):
+    id: int
+    user_id: int
+    athlete_name: str
+    heat_id: Optional[int] = None
+    heat_label: Optional[str] = None
+    heat_distance_m: Optional[int] = None
+    registered_at: str
     model_config = {"from_attributes": True}

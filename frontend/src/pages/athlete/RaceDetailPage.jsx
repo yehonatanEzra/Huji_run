@@ -6,6 +6,7 @@ import { searchAthletes } from '../../api/coach';
 import Tabs from '../../components/ui/Tabs';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import UpcomingRaceView from './UpcomingRaceView';
 
 const DISTANCE_LABELS = {
   1500: '1,500m', 3000: '3,000m', 5000: '5,000m',
@@ -223,6 +224,36 @@ export default function RaceDetailPage() {
         )}
       </div>
 
+      {race.status === 'upcoming' ? (
+        <>
+          {isCoach && (
+            <div className="mb-3">
+              {addingHeat ? (
+                <div className="flex gap-2 items-center">
+                  <select value={newHeatDist} onChange={(e) => setNewHeatDist(parseInt(e.target.value))}
+                    className="border rounded-lg px-2 py-1.5 text-sm">
+                    {DISTANCE_OPTIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+                  </select>
+                  <input type="text" placeholder="Heat label" value={newHeatLabel}
+                    onChange={(e) => setNewHeatLabel(e.target.value)}
+                    className="flex-1 border rounded-lg px-2 py-1.5 text-sm" />
+                  <button onClick={handleAddHeat} disabled={saving || !newHeatLabel.trim()}
+                    className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm disabled:opacity-50">Add</button>
+                  <button onClick={() => setAddingHeat(false)} className="text-gray-500 text-sm">Cancel</button>
+                </div>
+              ) : (
+                <button onClick={() => setAddingHeat(true)} className="text-blue-600 text-sm font-medium">+ Add Heat</button>
+              )}
+            </div>
+          )}
+          <UpcomingRaceView
+            race={race}
+            onResultsAdded={() => { fetchRace(); fetchResults(); }}
+            refreshRace={fetchRace}
+          />
+        </>
+      ) : (
+        <>
       <Tabs
         tabs={[{ value: 'heats', label: 'Heat Results' }, { value: 'leaderboard', label: 'Leaderboard' }]}
         active={tab}
@@ -390,6 +421,8 @@ export default function RaceDetailPage() {
           ))}
         </div>
       ) : <Spinner />}
+        </>
+      )}
 
       {/* Edit Race Modal */}
       <Modal open={editing} onClose={() => setEditing(false)} title="Edit Race">

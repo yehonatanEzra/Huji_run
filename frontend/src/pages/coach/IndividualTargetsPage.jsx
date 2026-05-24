@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks } from 'date-fns';
-import { listAthletes } from '../../api/coach';
-import { getWeek, upsertTarget, deleteTarget } from '../../api/calendar';
+import { listAthletes, getAthleteWeek } from '../../api/coach';
+import { upsertTarget, deleteTarget } from '../../api/calendar';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
@@ -26,7 +26,7 @@ export default function IndividualTargetsPage() {
     if (!selectedAthlete) return;
     setLoading(true);
     try {
-      const { data } = await getWeek(format(weekDate, 'yyyy-MM-dd'));
+      const { data } = await getAthleteWeek(selectedAthlete.id, format(weekDate, 'yyyy-MM-dd'));
       setDays(data.days);
     } catch (err) {
       console.error(err);
@@ -39,7 +39,7 @@ export default function IndividualTargetsPage() {
 
   const openEdit = (day) => {
     setEditDay(day);
-    setNote(day.individual_target?.note || '');
+    setNote(day.target?.note || '');
   };
 
   const handleSave = async () => {
@@ -92,8 +92,8 @@ export default function IndividualTargetsPage() {
               className="w-full text-left p-3 rounded-xl border border-gray-200 bg-white hover:shadow-sm transition"
             >
               <span className="text-sm font-semibold">{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
-              {day.individual_target ? (
-                <p className="text-sm text-blue-600 mt-1">{day.individual_target.note}</p>
+              {day.target ? (
+                <p className="text-sm text-blue-600 mt-1">{day.target.note}</p>
               ) : (
                 <p className="text-sm text-gray-400 mt-1 italic">No target set</p>
               )}

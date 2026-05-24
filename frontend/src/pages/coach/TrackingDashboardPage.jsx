@@ -54,6 +54,10 @@ export default function TrackingDashboardPage() {
       }
       setSelected(null);
       fetchData();
+      if (profile && profile.id === selected.athlete.id) {
+        const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
+        setProfileWeek(data);
+      }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
   };
@@ -251,9 +255,15 @@ export default function TrackingDashboardPage() {
 
             {profileWeek && (() => {
               const pws = startOfWeek(profileWeekDate, { weekStartsOn: 0 });
+              const weekVolume = profileWeek.days.reduce((s, d) => s + (d.log?.distance_km || 0), 0);
               return (
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 mb-2">Training</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500">Training</p>
+                    <span className="text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-2.5 py-0.5">
+                      {weekVolume > 0 ? `${weekVolume.toFixed(1)} km this week` : 'No km logged'}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between mb-2">
                     <button onClick={() => setProfileWeekDate(subWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&larr;</button>
                     <span className="text-xs font-medium">{format(pws, 'MMM d')} - {format(addDays(pws, 6), 'MMM d')}</span>
@@ -264,9 +274,12 @@ export default function TrackingDashboardPage() {
                       const dayDate = new Date(d.date + 'T00:00');
                       const hasContent = d.group_workout?.content || d.target?.note;
                       return (
-                        <div key={d.date} className={`rounded-lg px-3 py-2 text-sm ${d.log ? (
-                          d.log.completed ? 'bg-green-50' : d.log.status === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
-                        ) : 'bg-gray-50'}`}>
+                        <button
+                          key={d.date}
+                          onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
+                          className={`w-full text-left rounded-lg px-3 py-2 text-sm hover:ring-2 hover:ring-blue-300 transition ${d.log ? (
+                            d.log.completed ? 'bg-green-50' : d.log.status === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
+                          ) : 'bg-gray-50'}`}>
                           <div className="flex items-center justify-between">
                             <span className="font-medium text-gray-700 text-xs">{format(dayDate, 'EEE, MMM d')}</span>
                             <span className={`text-xs font-bold ${d.log ? (
@@ -284,7 +297,7 @@ export default function TrackingDashboardPage() {
                             </>
                           )}
                           {d.log?.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.log.notes}</p>}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>

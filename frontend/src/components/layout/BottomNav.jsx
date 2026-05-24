@@ -26,13 +26,13 @@ export default function BottomNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
-      <div className="flex justify-around items-center h-16 max-w-lg mx-auto">
+      <div className="flex overflow-x-auto scrollbar-hide items-center h-16 px-1">
         {items.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 text-xs transition-colors ${
+              `flex flex-col items-center gap-0.5 text-xs transition-colors flex-shrink-0 min-w-[64px] px-1 ${
                 isActive ? 'text-blue-600 font-semibold' : 'text-gray-500'
               }`
             }

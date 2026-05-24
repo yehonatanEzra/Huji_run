@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from .database import engine, Base
-from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, HealthProfessional, HealthReview, Kudos
+from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, HealthProfessional, HealthReview, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness
+from .routers import health_wellness, feed, challenges
 
 Base.metadata.create_all(bind=engine)
 
@@ -55,6 +55,8 @@ app.include_router(profile.router, prefix=API_PREFIX)
 app.include_router(coach.router, prefix=API_PREFIX)
 app.include_router(kudos.router, prefix=API_PREFIX)
 app.include_router(health_wellness.router, prefix=API_PREFIX)
+app.include_router(feed.router, prefix=API_PREFIX)
+app.include_router(challenges.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

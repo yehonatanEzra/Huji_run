@@ -13,3 +13,8 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}

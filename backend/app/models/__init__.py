@@ -5,3 +5,5 @@ from .race import Race, Heat, Result
 from .hall_of_fame import HallOfFame
 from .health_wellness import HealthProfessional, HealthReview
 from .kudos import Kudos
+from .feed import Announcement, AnnouncementReaction, AnnouncementComment
+from .challenge import Challenge

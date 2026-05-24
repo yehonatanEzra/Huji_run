@@ -35,7 +35,8 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
                 GroupWorkout.date == day,
             ).first()
             if gw and not is_coach:
-                if not gw.content:
+                has_published = bool(gw.content or gw.warmup or gw.main_session or gw.cooldown or gw.title)
+                if not has_published:
                     gw = None
                 else:
                     gw.draft_content = None

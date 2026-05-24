@@ -210,7 +210,7 @@ export default function CalendarPage() {
           <div className="space-y-4">
             {selectedDay.group_workout && (() => {
               const gw = selectedDay.group_workout;
-              const TYPE_LABELS = { simple: 'Simple', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
               const TYPE_COLOR = {
                 simple: 'bg-gray-100 text-gray-700',
                 easy: 'bg-emerald-100 text-emerald-700',
@@ -219,7 +219,7 @@ export default function CalendarPage() {
                 intervals: 'bg-red-100 text-red-700',
                 fartlek: 'bg-pink-100 text-pink-700',
               };
-              const isStructured = ['long', 'intervals', 'fartlek'].includes(gw.workout_type);
+              const isStructured = ['tempo', 'long', 'intervals', 'fartlek'].includes(gw.workout_type);
               return (
                 <div className="bg-gray-50 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">

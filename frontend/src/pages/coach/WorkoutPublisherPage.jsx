@@ -7,9 +7,9 @@ import Spinner from '../../components/ui/Spinner';
 import { Link } from 'react-router-dom';
 
 const WORKOUT_TYPES = [
-  { value: 'simple',    label: 'Simple',    color: 'bg-gray-100 text-gray-700',     structured: false },
+  { value: 'simple',    label: 'Other',     color: 'bg-gray-100 text-gray-700',     structured: false },
   { value: 'easy',      label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700', structured: false },
-  { value: 'tempo',     label: 'Tempo',     color: 'bg-orange-100 text-orange-700', structured: false },
+  { value: 'tempo',     label: 'Tempo',     color: 'bg-orange-100 text-orange-700', structured: true },
   { value: 'long',      label: 'Long run',  color: 'bg-purple-100 text-purple-700', structured: true },
   { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',       structured: true },
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',     structured: true },
@@ -113,11 +113,11 @@ export default function WorkoutPublisherPage() {
     try {
       const payload = { ...form, ...overrides };
       // Clear fields not applicable to the selected type so the DB doesn't carry stale data
-      if (['simple', 'easy', 'tempo'].includes(payload.workout_type)) {
+      if (['simple', 'easy'].includes(payload.workout_type)) {
         payload.warmup = '';
         payload.main_session = '';
         payload.cooldown = '';
-      } else if (['long', 'intervals', 'fartlek'].includes(payload.workout_type)) {
+      } else if (['tempo', 'long', 'intervals', 'fartlek'].includes(payload.workout_type)) {
         payload.content = '';
       }
       await upsertGroupWorkout(selectedGroup.id, selectedDay.date, payload);

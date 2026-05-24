@@ -108,9 +108,12 @@ export default function CalendarPage() {
             )}
           </div>
         </div>
-        {day.group_workout && (
-          <p className="text-sm text-gray-600 truncate">{day.group_workout.content}</p>
-        )}
+        {day.group_workout && (() => {
+          const gw = day.group_workout;
+          const snippet = gw.title || gw.content || gw.main_session || gw.warmup;
+          if (!snippet) return null;
+          return <p className="text-sm text-gray-700 font-medium truncate">{snippet}</p>;
+        })()}
         {day.individual_target && (
           <p className="text-xs text-blue-600 mt-1">Coach note: {day.individual_target.note}</p>
         )}
@@ -205,12 +208,39 @@ export default function CalendarPage() {
       <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''}>
         {selectedDay && (
           <div className="space-y-4">
-            {selectedDay.group_workout && (
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs font-medium text-gray-500 mb-1">Group Workout</p>
-                <p className="text-sm whitespace-pre-wrap">{selectedDay.group_workout.content}</p>
-              </div>
-            )}
+            {selectedDay.group_workout && (() => {
+              const gw = selectedDay.group_workout;
+              const TYPE_LABELS = { simple: 'Simple', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+              const TYPE_COLOR = {
+                simple: 'bg-gray-100 text-gray-700',
+                easy: 'bg-emerald-100 text-emerald-700',
+                tempo: 'bg-orange-100 text-orange-700',
+                long: 'bg-purple-100 text-purple-700',
+                intervals: 'bg-red-100 text-red-700',
+                fartlek: 'bg-pink-100 text-pink-700',
+              };
+              const isStructured = ['long', 'intervals', 'fartlek'].includes(gw.workout_type);
+              return (
+                <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-gray-500">Group Workout</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[gw.workout_type] || TYPE_COLOR.simple}`}>
+                      {TYPE_LABELS[gw.workout_type] || 'Simple'}
+                    </span>
+                  </div>
+                  {gw.title && <p className="text-base font-semibold">{gw.title}</p>}
+                  {isStructured ? (
+                    <div className="space-y-1.5 text-sm">
+                      {gw.warmup && <p><span className="text-xs uppercase tracking-wider text-gray-400">Warm-up · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
+                      {gw.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">Main · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                      {gw.cooldown && <p><span className="text-xs uppercase tracking-wider text-gray-400">Cool-down · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
+                    </div>
+                  ) : (
+                    gw.content && <p className="text-sm whitespace-pre-wrap">{gw.content}</p>
+                  )}
+                </div>
+              );
+            })()}
             {selectedDay.individual_target && (
               <div className="bg-blue-50 rounded-lg p-3">
                 <p className="text-xs font-medium text-blue-500 mb-1">Coach's Note for You</p>

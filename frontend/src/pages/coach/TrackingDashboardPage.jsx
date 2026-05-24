@@ -564,11 +564,33 @@ export default function TrackingDashboardPage() {
               <p className="text-xs font-semibold text-gray-500 mb-1">
                 Group Workout ({selected.athlete.group_name || 'No group'})
               </p>
-              {selected.day.group_workout?.content ? (
-                <p className="text-sm whitespace-pre-wrap">{selected.day.group_workout.content}</p>
-              ) : (
-                <p className="text-sm text-gray-400 italic">No group workout for this day</p>
-              )}
+              {(() => {
+                const gw = selected.day.group_workout;
+                if (!gw) return <p className="text-sm text-gray-400 italic">No group workout for this day</p>;
+                const isStructured = ['long', 'intervals', 'fartlek'].includes(gw.workout_type);
+                const TYPE_LABELS = { simple: 'Simple', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+                return (
+                  <div className="space-y-1.5">
+                    {(gw.title || gw.workout_type) && (
+                      <div className="flex items-center gap-2">
+                        {gw.title && <p className="text-sm font-semibold">{gw.title}</p>}
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-medium">
+                          {TYPE_LABELS[gw.workout_type] || 'Simple'}
+                        </span>
+                      </div>
+                    )}
+                    {isStructured ? (
+                      <div className="text-sm space-y-1">
+                        {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
+                        {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">Main · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                        {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
+                      </div>
+                    ) : (
+                      gw.content && <p className="text-sm whitespace-pre-wrap">{gw.content}</p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Athlete report section */}

@@ -139,21 +139,46 @@ def upsert_group_workout(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
+    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek"}
+
+    def _clean(s):
+        if s is None:
+            return None
+        s = s.strip()
+        return s if s else None
+
     gw = db.query(GroupWorkout).filter(
         GroupWorkout.training_group_id == group_id,
         GroupWorkout.date == day,
     ).first()
+
     if gw:
+        if body.workout_type is not None and body.workout_type in ALLOWED_TYPES:
+            gw.workout_type = body.workout_type
+        if body.title is not None:
+            gw.title = _clean(body.title)
         if body.content is not None:
-            gw.content = body.content if body.content.strip() else None
+            gw.content = _clean(body.content)
+        if body.warmup is not None:
+            gw.warmup = _clean(body.warmup)
+        if body.main_session is not None:
+            gw.main_session = _clean(body.main_session)
+        if body.cooldown is not None:
+            gw.cooldown = _clean(body.cooldown)
         if body.draft_content is not None:
-            gw.draft_content = body.draft_content if body.draft_content.strip() else None
+            gw.draft_content = _clean(body.draft_content)
     else:
+        wt = body.workout_type if body.workout_type in ALLOWED_TYPES else "simple"
         gw = GroupWorkout(
             training_group_id=group_id,
             date=day,
-            content=body.content if body.content and body.content.strip() else None,
-            draft_content=body.draft_content if body.draft_content and body.draft_content.strip() else None,
+            workout_type=wt,
+            title=_clean(body.title),
+            content=_clean(body.content),
+            warmup=_clean(body.warmup),
+            main_session=_clean(body.main_session),
+            cooldown=_clean(body.cooldown),
+            draft_content=_clean(body.draft_content),
             created_by=coach.id,
         )
         db.add(gw)

@@ -5,15 +5,25 @@ from pydantic import BaseModel
 
 
 class GroupWorkoutUpsert(BaseModel):
+    workout_type: Optional[str] = None  # simple|easy|tempo|long|intervals|fartlek
+    title: Optional[str] = None
     content: Optional[str] = None
+    warmup: Optional[str] = None
+    main_session: Optional[str] = None
+    cooldown: Optional[str] = None
     draft_content: Optional[str] = None
 
 
 class GroupWorkoutOut(BaseModel):
     id: int
     date: date
-    content: Optional[str]
-    draft_content: Optional[str]
+    workout_type: str = "simple"
+    title: Optional[str] = None
+    content: Optional[str] = None
+    warmup: Optional[str] = None
+    main_session: Optional[str] = None
+    cooldown: Optional[str] = None
+    draft_content: Optional[str] = None
     model_config = {"from_attributes": True}
 
 

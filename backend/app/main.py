@@ -59,6 +59,35 @@ def _migrate_sqlite():
 if engine.dialect.name == "sqlite":
     _migrate_sqlite()
 
+
+def _migrate_group_workout_columns():
+    """Add structured-workout columns to group_workouts if missing. Works on SQLite + Postgres."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "group_workouts" not in inspector.get_table_names():
+        return  # create_all will handle it
+    existing = {c["name"] for c in inspector.get_columns("group_workouts")}
+    to_add = []
+    if "workout_type" not in existing:
+        to_add.append(("workout_type", "VARCHAR(20) NOT NULL DEFAULT 'simple'"))
+    if "title" not in existing:
+        to_add.append(("title", "VARCHAR(200)"))
+    if "warmup" not in existing:
+        to_add.append(("warmup", "TEXT"))
+    if "main_session" not in existing:
+        to_add.append(("main_session", "TEXT"))
+    if "cooldown" not in existing:
+        to_add.append(("cooldown", "TEXT"))
+    if not to_add:
+        return
+    with engine.connect() as conn:
+        for col, ddl in to_add:
+            conn.execute(text(f"ALTER TABLE group_workouts ADD COLUMN {col} {ddl}"))
+        conn.commit()
+
+
+_migrate_group_workout_columns()
+
 app = FastAPI(title="Huji Run API", version="1.0.0")
 
 app.add_middleware(

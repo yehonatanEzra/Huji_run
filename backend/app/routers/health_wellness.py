@@ -130,6 +130,36 @@ def list_reviews(
     ]
 
 
+@router.put("/{professional_id}/reviews/{review_id}", response_model=ReviewOut)
+def update_review(
+    professional_id: int,
+    review_id: int,
+    data: ReviewCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    review = db.query(HealthReview).filter(
+        HealthReview.id == review_id,
+        HealthReview.professional_id == professional_id,
+    ).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    if review.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only edit your own review")
+    review.rating = data.rating
+    review.comment = data.comment
+    db.commit()
+    db.refresh(review)
+    return ReviewOut(
+        id=review.id,
+        user_id=review.user_id,
+        reviewer_name=current_user.full_name,
+        rating=review.rating,
+        comment=review.comment,
+        created_at=review.created_at,
+    )
+
+
 @router.post("/{professional_id}/reviews", response_model=ReviewOut, status_code=201)
 def add_review(
     professional_id: int,
@@ -140,6 +170,12 @@ def add_review(
     p = db.get(HealthProfessional, professional_id)
     if not p:
         raise HTTPException(status_code=404, detail="Professional not found")
+    existing = db.query(HealthReview).filter(
+        HealthReview.professional_id == professional_id,
+        HealthReview.user_id == current_user.id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="You have already reviewed this professional")
     review = HealthReview(
         professional_id=professional_id,
         user_id=current_user.id,

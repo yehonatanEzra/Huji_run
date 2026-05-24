@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Integer, String, Float, Text, DateTime, ForeignKey, func, CheckConstraint
+from sqlalchemy import Integer, String, Float, Text, DateTime, ForeignKey, func, CheckConstraint, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 
@@ -27,6 +27,7 @@ class HealthReview(Base):
     __tablename__ = "health_reviews"
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="ck_rating_range"),
+        UniqueConstraint("professional_id", "user_id", name="uq_review_per_user"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

@@ -44,6 +44,8 @@ function ReviewsModal({ professional, onClose }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+  const [editingReview, setEditingReview] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,10 +59,13 @@ function ReviewsModal({ professional, onClose }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const myReview = reviews.find((r) => r.user_id === user.id);
+
   async function submitReview(e) {
     e.preventDefault();
     if (!rating) return;
     setSubmitting(true);
+    setReviewError('');
     try {
       await api.post(`/health-wellness/${professional.id}/reviews`, {
         rating,
@@ -69,6 +74,35 @@ function ReviewsModal({ professional, onClose }) {
       setRating(0);
       setComment('');
       load();
+    } catch (err) {
+      setReviewError(
+        err.response?.status === 409
+          ? 'You have already reviewed this professional.'
+          : 'Something went wrong. Please try again.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEdit(review) {
+    setEditingReview({ ...review });
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    if (!editingReview.rating) return;
+    setSubmitting(true);
+    setReviewError('');
+    try {
+      await api.put(`/health-wellness/${professional.id}/reviews/${editingReview.id}`, {
+        rating: editingReview.rating,
+        comment: editingReview.comment?.trim() || null,
+      });
+      setEditingReview(null);
+      load();
+    } catch {
+      setReviewError('Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -79,24 +113,73 @@ function ReviewsModal({ professional, onClose }) {
       <h2 className="text-lg font-bold mb-1">{professional.name}</h2>
       <p className="text-sm text-gray-500 mb-4">{professional.specialty} · {professional.city}</p>
 
-      <form onSubmit={submitReview} className="bg-gray-50 rounded-lg p-3 mb-4 space-y-2">
-        <p className="text-sm font-semibold text-gray-700">Leave a rating</p>
-        <StarRating value={rating} onChange={setRating} />
-        <textarea
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Share your experience (optional)"
-          rows={2}
-          className="w-full text-sm border border-gray-300 rounded p-2 resize-none"
-        />
-        <button
-          type="submit"
-          disabled={!rating || submitting}
-          className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded disabled:opacity-40"
-        >
-          {submitting ? 'Submitting…' : 'Submit'}
-        </button>
-      </form>
+      {editingReview ? (
+        <form onSubmit={saveEdit} className="bg-gray-50 rounded-lg p-3 mb-4 space-y-2">
+          <p className="text-sm font-semibold text-gray-700">Edit your review</p>
+          {reviewError && <p className="text-xs text-red-600">{reviewError}</p>}
+          <StarRating
+            value={editingReview.rating}
+            onChange={(v) => setEditingReview((r) => ({ ...r, rating: v }))}
+          />
+          <textarea
+            value={editingReview.comment ?? ''}
+            onChange={(e) => setEditingReview((r) => ({ ...r, comment: e.target.value }))}
+            placeholder="Share your experience (optional)"
+            rows={2}
+            className="w-full text-sm border border-gray-300 rounded p-2 resize-none"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={!editingReview.rating || submitting}
+              className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded disabled:opacity-40"
+            >
+              {submitting ? 'Saving…' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditingReview(null)}
+              className="text-sm text-gray-500 px-4 py-1.5 rounded border border-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : myReview ? (
+        <div className="bg-blue-50 rounded-lg p-3 mb-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-700">Your review</p>
+            <button
+              onClick={() => startEdit(myReview)}
+              className="text-xs text-blue-600 underline"
+            >
+              Edit
+            </button>
+          </div>
+          <StarRating value={myReview.rating} size="sm" />
+          {myReview.comment && <p className="text-sm text-gray-600 mt-1">{myReview.comment}</p>}
+        </div>
+      ) : (
+        <form onSubmit={submitReview} className="bg-gray-50 rounded-lg p-3 mb-4 space-y-2">
+          <p className="text-sm font-semibold text-gray-700">Leave a rating</p>
+          {reviewError && <p className="text-xs text-red-600">{reviewError}</p>}
+          <StarRating value={rating} onChange={setRating} />
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Share your experience (optional)"
+            rows={2}
+            className="w-full text-sm border border-gray-300 rounded p-2 resize-none"
+          />
+          <button
+            type="submit"
+            disabled={!rating || submitting}
+            className="bg-blue-600 text-white text-sm px-4 py-1.5 rounded disabled:opacity-40"
+          >
+            {submitting ? 'Submitting…' : 'Submit'}
+          </button>
+        </form>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-4"><Spinner /></div>

@@ -198,21 +198,24 @@ def dashboard_week(
     group_map = {g.id: g.name for g in db.query(TrainingGroup).all()}
 
     from ..models.kudos import Kudos
+    from ..routers.kudos import ALLOWED_EMOJI as KUDOS_EMOJI
     log_ids = [l.id for l in logs]
-    kudos_counts = {}
-    my_kudos = set()
+    per_log_counts: dict[int, dict[str, int]] = {}
+    per_log_mine: dict[int, set[str]] = {}
     if log_ids:
-        kudos_counts = dict(
-            db.query(Kudos.workout_log_id, sa_func.count(Kudos.id))
+        for log_id, emoji, c in (
+            db.query(Kudos.workout_log_id, Kudos.emoji, sa_func.count(Kudos.id))
             .filter(Kudos.workout_log_id.in_(log_ids))
-            .group_by(Kudos.workout_log_id)
+            .group_by(Kudos.workout_log_id, Kudos.emoji)
             .all()
-        )
-        my_kudos = {
-            r[0] for r in db.query(Kudos.workout_log_id)
+        ):
+            per_log_counts.setdefault(log_id, {})[emoji] = c
+        for log_id, emoji in (
+            db.query(Kudos.workout_log_id, Kudos.emoji)
             .filter(Kudos.workout_log_id.in_(log_ids), Kudos.giver_id == coach_user.id)
             .all()
-        }
+        ):
+            per_log_mine.setdefault(log_id, set()).add(emoji)
 
     rows = []
     for athlete in athletes:
@@ -224,8 +227,14 @@ def dashboard_week(
             log_out = None
             if log:
                 log_out = WorkoutLogOut.model_validate(log)
-                log_out.kudos_count = kudos_counts.get(log.id, 0)
-                log_out.has_kudos = log.id in my_kudos
+                counts = per_log_counts.get(log.id, {})
+                mine = per_log_mine.get(log.id, set())
+                log_out.reactions = [
+                    {"emoji": e, "count": counts.get(e, 0), "reacted": e in mine}
+                    for e in KUDOS_EMOJI if counts.get(e, 0) > 0 or e in mine
+                ]
+                log_out.kudos_count = sum(counts.values())
+                log_out.has_kudos = bool(mine)
             days.append({
                 "date": d,
                 "log": log_out,
@@ -400,7 +409,7 @@ def get_athlete_week(
     athlete_id: int,
     day: date = Query(default_factory=date.today),
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach_user: User = Depends(require_coach),
 ):
     athlete = db.get(User, athlete_id)
     if not athlete or athlete.role != "athlete":
@@ -430,15 +439,41 @@ def get_athlete_week(
         gw_map = {gw.date: gw for gw in gws}
 
     from ..models.kudos import Kudos
+    from ..routers.kudos import ALLOWED_EMOJI as KUDOS_EMOJI
     log_ids = [l.id for l in logs]
-    kudos_counts = {}
+    per_log_counts: dict[int, dict[str, int]] = {}
+    per_log_mine: dict[int, set[str]] = {}
     if log_ids:
-        kudos_counts = dict(
-            db.query(Kudos.workout_log_id, sa_func.count(Kudos.id))
+        for log_id, emoji, c in (
+            db.query(Kudos.workout_log_id, Kudos.emoji, sa_func.count(Kudos.id))
             .filter(Kudos.workout_log_id.in_(log_ids))
-            .group_by(Kudos.workout_log_id)
+            .group_by(Kudos.workout_log_id, Kudos.emoji)
             .all()
-        )
+        ):
+            per_log_counts.setdefault(log_id, {})[emoji] = c
+        for log_id, emoji in (
+            db.query(Kudos.workout_log_id, Kudos.emoji)
+            .filter(Kudos.workout_log_id.in_(log_ids), Kudos.giver_id == coach_user.id)
+            .all()
+        ):
+            per_log_mine.setdefault(log_id, set()).add(emoji)
+
+    def _log_payload(log):
+        counts = per_log_counts.get(log.id, {})
+        mine = per_log_mine.get(log.id, set())
+        reactions = [
+            {"emoji": e, "count": counts.get(e, 0), "reacted": e in mine}
+            for e in KUDOS_EMOJI if counts.get(e, 0) > 0 or e in mine
+        ]
+        return {
+            "id": log.id,
+            "completed": log.completed,
+            "status": log.status,
+            "distance_km": log.distance_km,
+            "notes": log.notes,
+            "kudos_count": sum(counts.values()),
+            "reactions": reactions,
+        }
 
     days = []
     for d in week_dates:
@@ -447,14 +482,7 @@ def get_athlete_week(
         gw = gw_map.get(d)
         days.append({
             "date": d.isoformat(),
-            "log": {
-                "id": log.id,
-                "completed": log.completed,
-                "status": log.status,
-                "distance_km": log.distance_km,
-                "notes": log.notes,
-                "kudos_count": kudos_counts.get(log.id, 0),
-            } if log else None,
+            "log": _log_payload(log) if log else None,
             "target": {"note": target.note, "override_group": target.override_group} if target else None,
             "group_workout": {"content": gw.content} if gw and gw.content else None,
         })

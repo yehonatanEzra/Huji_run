@@ -11,7 +11,7 @@ from ..schemas.feed import AnnouncementCreate, AnnouncementOut, ReactionSummary,
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
-ALLOWED_EMOJI = {"thumbsup", "fire", "muscle"}
+ALLOWED_EMOJI = {"thumbsup", "fire", "muscle", "dislike", "sad"}
 
 
 def _build_announcement_out(ann: Announcement, user_id: int, db: Session) -> AnnouncementOut:

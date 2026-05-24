@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { format, addDays, startOfWeek, subWeeks, addWeeks } from 'date-fns';
+import { format, addDays, startOfWeek, subWeeks, addWeeks, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
 import { listRaces, getRace } from '../../api/races';
 import { upsertTarget, deleteTarget } from '../../api/calendar';
@@ -19,6 +19,9 @@ export default function TrackingDashboardPage() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileWeekDate, setProfileWeekDate] = useState(new Date());
   const [profileWeek, setProfileWeek] = useState(null);
+  const [profileViewMode, setProfileViewMode] = useState('week');
+  const [profileMonthDate, setProfileMonthDate] = useState(new Date());
+  const [profileMonth, setProfileMonth] = useState(null);
   const [showPBForm, setShowPBForm] = useState(false);
   const [pbMode, setPbMode] = useState('manual');
   const [pbForm, setPbForm] = useState({ distance_m: '', time_min: '', time_sec: '', competition_name: '' });
@@ -57,6 +60,10 @@ export default function TrackingDashboardPage() {
       if (profile && profile.id === selected.athlete.id) {
         const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
         setProfileWeek(data);
+        if (profileViewMode === 'month') {
+          const m = await fetchProfileMonth(profile.id, profileMonthDate);
+          setProfileMonth(m);
+        }
       }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
@@ -83,6 +90,28 @@ export default function TrackingDashboardPage() {
       .then(({ data }) => setProfileWeek(data))
       .catch(console.error);
   }, [profileWeekDate]);
+
+  const fetchProfileMonth = async (athleteId, monthDate) => {
+    const monthStart = startOfMonth(monthDate);
+    const monthEnd = endOfMonth(monthDate);
+    let cursor = startOfWeek(monthStart, { weekStartsOn: 0 });
+    const promises = [];
+    while (cursor <= monthEnd) {
+      promises.push(getAthleteWeek(athleteId, format(cursor, 'yyyy-MM-dd')));
+      cursor = addWeeks(cursor, 1);
+    }
+    const results = await Promise.all(promises);
+    const weeks = results.map(r => r.data.days);
+    return { weeks };
+  };
+
+  useEffect(() => {
+    if (!profile || profileViewMode !== 'month') return;
+    setProfileMonth(null);
+    fetchProfileMonth(profile.id, profileMonthDate)
+      .then(setProfileMonth)
+      .catch(console.error);
+  }, [profile?.id, profileMonthDate, profileViewMode]);
 
   const openPBForm = () => {
     setShowPBForm(true);
@@ -176,13 +205,17 @@ export default function TrackingDashboardPage() {
                     if (log) {
                       const st = log.status || (log.completed ? 'completed' : 'missed');
                       bg = st === 'completed' ? 'bg-green-100' : st === 'partial' ? 'bg-yellow-100' : 'bg-red-100';
-                      text = st === 'completed' ? 'V' : st === 'partial' ? '~' : 'X';
+                      if (log.distance_km && log.distance_km > 0) {
+                        text = log.distance_km < 10 ? log.distance_km.toFixed(1) : Math.round(log.distance_km).toString();
+                      } else {
+                        text = st === 'completed' ? 'V' : st === 'partial' ? '~' : 'X';
+                      }
                     }
                     return (
                       <td key={d.date} className="px-2 py-2 text-center">
                         <button
                           onClick={() => openCell(athlete, d)}
-                          className={`inline-block w-7 h-7 rounded-full ${bg} leading-7 font-bold text-xs hover:ring-2 hover:ring-blue-400 transition relative`}
+                          className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${bg} font-bold text-[10px] hover:ring-2 hover:ring-blue-400 transition relative`}
                           title={log?.notes || ''}
                         >
                           {text}
@@ -253,54 +286,131 @@ export default function TrackingDashboardPage() {
               </div>
             </div>
 
-            {profileWeek && (() => {
-              const pws = startOfWeek(profileWeekDate, { weekStartsOn: 0 });
-              const weekVolume = profileWeek.days.reduce((s, d) => s + (d.log?.distance_km || 0), 0);
+            {(() => {
+              const renderDay = (d) => {
+                const dayDate = new Date(d.date + 'T00:00');
+                return (
+                  <button
+                    key={d.date}
+                    onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
+                    className={`w-full text-left rounded-lg px-3 py-2 text-sm hover:ring-2 hover:ring-blue-300 transition ${d.log ? (
+                      d.log.completed ? 'bg-green-50' : d.log.status === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
+                    ) : 'bg-gray-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-700 text-xs">{format(dayDate, 'EEE, MMM d')}</span>
+                      <span className={`text-xs font-bold ${d.log ? (
+                        d.log.completed ? 'text-green-700' : d.log.status === 'partial' ? 'text-yellow-700' : 'text-red-700'
+                      ) : 'text-gray-400'}`}>
+                        {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
+                      </span>
+                    </div>
+                    {d.target?.override_group && d.target?.note ? (
+                      <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">{d.target.note}</p>
+                    ) : (
+                      <>
+                        {d.group_workout?.content && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{d.group_workout.content}</p>}
+                        {d.target?.note && <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">Personal: {d.target.note}</p>}
+                      </>
+                    )}
+                    {d.log?.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.log.notes}</p>}
+                  </button>
+                );
+              };
+
+              const monthDays = profileMonth ? profileMonth.weeks.flat().filter(d => isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) : null;
+              const days = profileViewMode === 'month' ? monthDays : profileWeek?.days;
+              const volume = days ? days.reduce((s, d) => s + (d.log?.distance_km || 0), 0) : 0;
+              const volumeLabel = profileViewMode === 'month' ? 'this month' : 'this week';
+
               return (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-semibold text-gray-500">Training</p>
+                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                      <button
+                        onClick={() => setProfileViewMode('week')}
+                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'week' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>
+                        Week
+                      </button>
+                      <button
+                        onClick={() => setProfileViewMode('month')}
+                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'month' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>
+                        Month
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end mb-2">
                     <span className="text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-2.5 py-0.5">
-                      {weekVolume > 0 ? `${weekVolume.toFixed(1)} km this week` : 'No km logged'}
+                      {volume > 0 ? `${volume.toFixed(1)} km ${volumeLabel}` : 'No km logged'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between mb-2">
-                    <button onClick={() => setProfileWeekDate(subWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&larr;</button>
-                    <span className="text-xs font-medium">{format(pws, 'MMM d')} - {format(addDays(pws, 6), 'MMM d')}</span>
-                    <button onClick={() => setProfileWeekDate(addWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&rarr;</button>
-                  </div>
-                  <div className="space-y-1.5">
-                    {profileWeek.days.map((d) => {
-                      const dayDate = new Date(d.date + 'T00:00');
-                      const hasContent = d.group_workout?.content || d.target?.note;
-                      return (
-                        <button
-                          key={d.date}
-                          onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                          className={`w-full text-left rounded-lg px-3 py-2 text-sm hover:ring-2 hover:ring-blue-300 transition ${d.log ? (
-                            d.log.completed ? 'bg-green-50' : d.log.status === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
-                          ) : 'bg-gray-50'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-gray-700 text-xs">{format(dayDate, 'EEE, MMM d')}</span>
-                            <span className={`text-xs font-bold ${d.log ? (
-                              d.log.completed ? 'text-green-700' : d.log.status === 'partial' ? 'text-yellow-700' : 'text-red-700'
-                            ) : 'text-gray-400'}`}>
-                              {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
-                            </span>
+
+                  {profileViewMode === 'week' ? (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <button onClick={() => setProfileWeekDate(subWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&larr;</button>
+                        <span className="text-xs font-medium">
+                          {format(startOfWeek(profileWeekDate, { weekStartsOn: 0 }), 'MMM d')} - {format(addDays(startOfWeek(profileWeekDate, { weekStartsOn: 0 }), 6), 'MMM d')}
+                        </span>
+                        <button onClick={() => setProfileWeekDate(addWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&rarr;</button>
+                      </div>
+                      {profileWeek ? (
+                        <div className="space-y-1.5">{profileWeek.days.map(renderDay)}</div>
+                      ) : <Spinner />}
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <button onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))} className="text-blue-600 text-xs">&larr;</button>
+                        <span className="text-xs font-medium">{format(profileMonthDate, 'MMMM yyyy')}</span>
+                        <button onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))} className="text-blue-600 text-xs">&rarr;</button>
+                      </div>
+                      {profileMonth ? (
+                        <div className="max-h-[60vh] overflow-y-auto">
+                          <div className="grid grid-cols-7 gap-0.5 mb-1 text-[10px] text-gray-400 text-center font-medium">
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
                           </div>
-                          {d.target?.override_group && d.target?.note ? (
-                            <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">{d.target.note}</p>
-                          ) : (
-                            <>
-                              {d.group_workout?.content && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{d.group_workout.content}</p>}
-                              {d.target?.note && <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">Personal: {d.target.note}</p>}
-                            </>
-                          )}
-                          {d.log?.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.log.notes}</p>}
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <div className="space-y-0.5">
+                            {profileMonth.weeks.map((week, wi) => (
+                              <div key={wi} className="grid grid-cols-7 gap-0.5">
+                                {week.map(d => {
+                                  const dayDate = new Date(d.date + 'T00:00');
+                                  const inMonth = isSameMonth(dayDate, profileMonthDate);
+                                  const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
+                                  const bg = !inMonth ? 'bg-transparent' :
+                                    status === 'completed' ? 'bg-green-100 hover:bg-green-200' :
+                                    status === 'partial' ? 'bg-yellow-100 hover:bg-yellow-200' :
+                                    status === 'missed' ? 'bg-red-100 hover:bg-red-200' :
+                                    'bg-gray-50 hover:bg-gray-100';
+                                  const icon = status === 'completed' ? 'V' : status === 'partial' ? '~' : status === 'missed' ? 'X' : '';
+                                  const hasPersonal = d.target?.note;
+                                  if (!inMonth) {
+                                    return <div key={d.date} className="aspect-square" />;
+                                  }
+                                  return (
+                                    <button
+                                      key={d.date}
+                                      onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
+                                      className={`aspect-square rounded-md ${bg} relative flex flex-col items-center justify-center transition`}
+                                      title={d.group_workout?.content || d.target?.note || ''}
+                                    >
+                                      <span className="text-[10px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
+                                      {icon && <span className="text-xs font-bold leading-none mt-0.5">{icon}</span>}
+                                      {hasPersonal && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                                      {d.log?.distance_km > 0 && (
+                                        <span className="text-[9px] text-blue-700 font-semibold leading-none mt-0.5">{d.log.distance_km.toFixed(1)}k</span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : <Spinner />}
+                    </>
+                  )}
                 </div>
               );
             })()}
@@ -469,31 +579,62 @@ export default function TrackingDashboardPage() {
               <p className="text-xs font-semibold text-gray-500 mb-1">Athlete Report</p>
               {selected.day.log ? (
                 <>
-                  <p className="text-sm font-medium">{
-                    (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'completed' ? 'Completed' :
-                    (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'Half Completed' : 'Missed'
-                  }</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">{
+                      (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'completed' ? 'Completed' :
+                      (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'Half Completed' : 'Missed'
+                    }</p>
+                    <span className="text-sm font-bold text-blue-700">
+                      {selected.day.log.distance_km > 0 ? `${selected.day.log.distance_km.toFixed(1)} km` : '— km'}
+                    </span>
+                  </div>
                   {selected.day.log.notes && <p className="text-sm text-gray-600 mt-1">{selected.day.log.notes}</p>}
-                  {selected.day.log.id && (
-                    <button
-                      onClick={async () => {
-                        const { data: res } = await toggleKudos(selected.day.log.id);
-                        setSelected({
-                          ...selected,
-                          day: { ...selected.day, log: { ...selected.day.log, kudos_count: res.kudos_count, has_kudos: res.has_kudos } },
-                        });
-                        fetchData();
-                      }}
-                      className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                        selected.day.log.has_kudos
-                          ? 'bg-pink-100 text-pink-700 border border-pink-300'
-                          : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-pink-50'
-                      }`}
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {selected.day.log.id && (() => {
+                      const REACTIONS = [
+                        { key: 'clap', icon: '👏', activeBg: 'bg-pink-100', activeText: 'text-pink-700', activeBorder: 'border-pink-300', hoverBg: 'hover:bg-pink-50' },
+                        { key: 'heart', icon: '❤️', activeBg: 'bg-red-100', activeText: 'text-red-700', activeBorder: 'border-red-300', hoverBg: 'hover:bg-red-50' },
+                        { key: 'dislike', icon: '👎', activeBg: 'bg-gray-200', activeText: 'text-gray-800', activeBorder: 'border-gray-400', hoverBg: 'hover:bg-gray-100' },
+                      ];
+                      const reactions = selected.day.log.reactions || [];
+                      const find = (key) => reactions.find(r => r.emoji === key);
+                      return REACTIONS.map(({ key, icon, activeBg, activeText, activeBorder, hoverBg }) => {
+                        const r = find(key);
+                        const reacted = r?.reacted;
+                        const count = r?.count || 0;
+                        return (
+                          <button
+                            key={key}
+                            onClick={async () => {
+                              const { data: res } = await toggleKudos(selected.day.log.id, key);
+                              const total = (res.reactions || []).reduce((s, x) => s + x.count, 0);
+                              setSelected({
+                                ...selected,
+                                day: { ...selected.day, log: { ...selected.day.log, reactions: res.reactions, kudos_count: total } },
+                              });
+                              fetchData();
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition border ${
+                              reacted ? `${activeBg} ${activeText} ${activeBorder}` : `bg-gray-50 text-gray-500 border-gray-200 ${hoverBg}`
+                            }`}
+                          >
+                            <span>{icon}</span>
+                            {count > 0 && <span>{count}</span>}
+                          </button>
+                        );
+                      });
+                    })()}
+                    <a
+                      href="https://www.strava.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200 transition"
+                      title="Strava integration coming soon"
                     >
-                      <span>👏</span>
-                      <span>{selected.day.log.kudos_count || 0}</span>
-                    </button>
-                  )}
+                      <span>🏃</span>
+                      <span>Open in Strava</span>
+                    </a>
+                  </div>
                 </>
               ) : (
                 <p className="text-sm text-gray-400 italic">No report submitted</p>

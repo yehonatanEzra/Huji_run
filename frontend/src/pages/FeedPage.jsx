@@ -9,6 +9,8 @@ const EMOJI_MAP = {
   thumbsup: '👍',
   fire: '🔥',
   muscle: '💪',
+  dislike: '👎',
+  sad: '😢',
 };
 
 function timeAgo(dateStr) {

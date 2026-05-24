@@ -1,88 +1,119 @@
-# מסמך אפיון מערכת: אפליקציית ניהול קבוצת ריצה (Running Club Management App)
+# Huji Run 
 
-## 1. סקירה כללית (Overview)
-המערכת היא אפליקציית Full-Stack מותאמת אישית לניהול קבוצת ריצה. האפליקציה משמשת כמרכז הקהילתי והמקצועי של הקבוצה. היא מאפשרת למאמן (אדמין) לנהל תוכניות אימונים קבוצתיות ואישיות, להזין תוצאות של מרוצים ותחרויות, ולנהל היכל תהילה קבוצתי. עבור המתאמנים, האפליקציה מהווה יומן אימונים יומי, ארכיון מרוצים אישי וקבוצתי, ומקור מוטיבציה חברתי.
+A web app for managing a running club - built specifically for the Hebrew University track and field team (huji_run).
 
----
+## Why I built it
 
-## 2. מודל משתמשים והרשאות (Authentication & Roles)
-המערכת תומכת בשני סוגי משתמשים עם מערכת התחברות (שם משתמש וסיסמה):
+I'm an athlete and one of the coaches of huji_run, the Hebrew University track and field team. Day-to-day, we kept running into the same problems: weekly training programs scattered across WhatsApp messages, race results lost in old screenshots, personal bests no one could remember, and no easy way for a coach to see who actually did the work that week. I wanted a single place where everything - workouts, races, records, motivation - lives together, so the team can focus on training instead of chasing information.
 
-### א. משתמש מתאמן (User)
-*   **פרופיל חובה בהרשמה:** שם מלא, מגדר (בן / בת).
-*   *דגש קריטי:* השם המלא חייב להיות תואם בדיוק לשם שהמאמן מזין במערכת המרוצים כדי לאפשר שיוך אוטומטי של תוצאות ושיאים.
-
-### ב. משתמש מאמן (Admin)
-*   בעל גישה למסכי ניהול, כתיבת אימונים, והזנת מרוצים ותוצאות.
+This app is the result. It's used both by athletes to follow their training and by coaches to plan, monitor, and motivate the group.
 
 ---
 
-## 3. ארכיטקטורת מסכים וחווית משתמש (App Architecture & Screens)
+## Athlete features
 
-### מסכי המתאמן (Athletes Frontend)
+### Training calendar
 
-#### מסך 1: לוח השנה (האימונים היומיים) 📅
-*   **תצוגה:** לוח שנה אינטראקטיבי (שבועי או חודשי) שבו כל יום הוא "תא" לחיץ.
-*   **תוכן התא היומי:**
-    1.  **תוכנית קבוצתית:** טקסט קבוע הנכתב על ידי המאמן ומשתקף אוטומטית אצל כל חברי הקבוצה (למשל: תוכנית אימון הפוגות).
-    2.  **דגשים אישיים:** שורת טקסט ספציפית שהמאמן שותל למתאמן הספציפי לאותו היום. אם אין דגש, חלק זה נשאר חבוי.
-*   **דיווח אימון:** כפתור בתחתית התא הפותח חלונית פופ-אפ שבה המתאמן מסמן `V` (בוצע / לא בוצע) וכותב הערות חופשיות ("הרגשתי עומס ברגל", "היה קצב מצוין").
-*   *הכנה לעתיד:* כפתור סנכרון ישיר מול Strava API למשיכת מרחק וקצב אמיתיים.
+Every athlete sees a calendar with the workout for each day. Two layers appear on the same day:
 
-#### מסך 2: ארכיון התחרויות הקבוצתי 🏆
-*   **תצוגה ראשית:** רשימה של כל המרוצים שהקבוצה השתתפה בהם אי פעם, כולל תיבת חיפוש וסינון לפי שם מרוץ או שנה.
-*   **דף מרוץ ספציפי (לאחר לחיצה על מרוץ מהרשימה):**
-    *   הדף מחולק לשתי לשוניות (Tabs) מרכזיות:
-    *   **לשונית א': תוצאות המקצים:**
-        *   סרגל עליון לבחירת המרחק שהיה במרוץ (למשל: 5 ק"מ, 10 ק"מ).
-        *   תחת המרחק הנבחר, יוצגו זה תחת זה כל ה**מקצים** השונים שהיו באותו מרחק (למשל: מקצה אליפות, מקצה עממי).
-        *   כל מקצה מוצג כטבלה נקייה הממוינת אוטומטית מהמהיר ביותר לאיטי ביותר.
-        *   עמודות הטבלה: מיקום קבוצתי, שם המתאמן, תוצאה (זמן), ו**קצב ממוצע לק"מ** (מחושב אוטומטית על ידי המערכת: זמן כולל חלקי מרחק המקצה).
-    *   **לשונית ב': סטטיסטיקות המרוץ (האיחוד הגדול):**
-        *   המערכת מאחדת אוטומטית את כל המקצים של אותו מרחק ומציגה שתי טבלאות נפרדות ממוינות מהמהיר לאיטי:
-        1.  טבלת גברים מהירים ביותר במרוץ (מכל המקצים יחד לאותו מרחק).
-        2.  טבלת נשים מהירות ביותר במרוץ (מכל המקצים יחד לאותו מרחק).
+- **Group workout:**  written by the coach for the whole training group.
+- **Personal note:**  a per-athlete instruction the coach can pin to a specific day (e.g. "easy run only, you raced yesterday").
 
-#### מסך 3: היכל התהילה (Top 3 הקבוצתי) 🥇
-*   **תצוגה:** לוח מרכזי המציג את 3 הרצים המהירים ביותר בהיסטוריה של הקבוצה.
-*   **חלוקה:** טאב נפרד לבנים וטאב נפרד לבנות.
-*   **מקצים נתמכים:** 1500 מ', 3000 מ', 5000 מ', 10000 מ', חצי מרתון (21.1 ק"מ), מרתון מלא.
-*   **אוטומציה:** הטבלאות מתעדכנות לבד לחלוטין ברגע שהאדמין מזין תוצאה חדשה שעוקפת את אחד משיאי העבר בקבוצה.
+After each session, the athlete reports the workout with one of three statuses (**completed**, **half-completed**, or **missed) ** along with the distance in km and free-text notes ("legs felt heavy", "perfect tempo", etc.).
 
-#### מסך 4: הפרופיל האישי שלי 👤
-*   **שיאים אישיים (Personal Bests - PB):** קוביות מעוצבות המציגות את הזמן הכי טוב של המתאמן במקצים השונים ותאריך השגתם (נמשך אוטומטית מבסיס הנתונים).
-*   **היסטוריית תחרויות אישית:** טבלה כרונולוגית המציגה אך ורק את המרוצים והתוצאות של המתאמן הספציפי הזה לאורך השנים.
+- All Races: every race the club has ever participated in, searchable.
+- My Races:  only the races the athlete personally ran in.
+- Each race page has tabs for **Heats** (sorted by time, with auto-calculated pace per km) and **Overall** (combined men's and women's leaderboards across all heats of the same distance).
 
----
+### Races
 
-### מסכי המאמן (Admin Backend & Frontend)
+### Hall of Fame
 
-1.  **יומן כתיבת אימונים קבוצתי:** לוח שנה שבו האדמין לוחץ על יום ומקליד את האימון שיופיע לכלל חברי הקבוצה בבת אחת.
-2.  **מערכת דגשים אישיים:** ממשק המציג את רשימת הרצים. בחירה ברץ מאפשרת לכתוב לו דגש ספציפי ליום מסוים בשבוע.
-3.  **מסך מעקב ודיווחים (Dashboard):** מסך ריכוז המציג למאמן מי מהספורטאים ביצע את האימונים השבוע, מי סימן שלא, ואת ההערות שהם כתבו (במקום לעבור אחד אחד).
-4.  **ממשק הזנת מרוץ חדש (טופס בשלבים):**
-    *   *שלב 1:* הזנת שם המרוץ ותאריך.
-    *   *שלב 2:* הוספת מקצים דינמיים (בחירת מרחק רשמי מתוך רשימה סגורה + מתן שם חופשי למקצה).
-    *   *שלב 3:* הזנת תוצאות הרצים תחת כל מקצה. השדה של שם הרץ כולל השלמה אוטומטית (Autocomplete) מתוך רשימת המשתמשים הרשומים באפליקציה, והמגדר נמשך אוטומטית מפרופיל המשתמש ללא צורך בהזנה ידנית. האדמין מזין רק את תוצאת הזמן (`HH:MM:SS` או `MM:SS`).
+The club's all-time top runners, separated by gender, across standard distances: 1500m, 3000m, 5000m, 10K, half marathon, full marathon. Records update automatically whenever a new result beats a previous PB. There's also a **weekly and monthly km leaderboard** showing who's putting in the most volume right now.
+
+### Profile
+
+Personal page with:
+
+- Personal Bests across all distances
+- Race history (every race the athlete ran, chronological)
+- Profile photo
+- Membership info
+
+### Team Feed
+
+A shared feed where coaches post announcements (training cancellations, race info, motivation). Anyone can react with emojis (👍 🔥 💪 👎 😢) and add comments. Coaches can post; everyone can engage.
+
+### Health & Wellness directory
+
+A community-maintained directory of sports-medicine professionals (physiotherapists, masseuses, chiropractors, orthopedists). Any user can add a practitioner. Anyone can leave a 1–5 star rating and a written review. Filterable by city and specialty. The directory is global - every club, every athlete, can benefit from the shared list.
+
+### Back navigation
+
+A persistent back arrow in the header on every sub-page so navigation feels natural on mobile.
 
 ---
 
-## 4. דרישות טכנולוגיות ולוגיקת קוד (Technical Stack & Logic)
+## Coach features
 
-### א. הטכנולוגיות הנבחרות
-*   **Backend:** Python עם Flask או FastAPI. פייתון נבחרה בשל היכולת שלה לנתח נתונים בקלות (באמצעות ספריות כמו `pandas`).
-*   **Frontend:** אפליקציית ווב מודרנית (React / Vue, או HTML5/JavaScript נקי עם Tailwind CSS לעיצוב רספונסיבי ומהיר שמתאים לניידים).
-*   **Database:** בסיס נתונים רלציוני (כמו SQLite לשלב הפיתוח או PostgreSQL) כדי לנהל את הקשרים בין משתמשים, מרוצים, מקצים ותוצאות.
+The coach has all the athlete features above, plus:
 
-### ב. לוגיקה מתמטית מרכזית (זמנים וקצבים)
-1.  **המרת זמנים לשניות:** כדי לבצע מיונים (מהמהיר לאיטי) ולזהות שיאים, המערכת תמיר כל מחרוזת זמן (למשל `18:45`) למספר שניות כולל (`1125` שניות) בבסיס הנתונים. זמנים נמוכים יותר ייחשבו לתוצאות טובות יותר (שיאים).
-2.  **חישוב קצב אוטומטי (Pace):** המערכת תחשב קצב לק"מ על ידי חלוקת סך השניות במרחק המקצה בק"מ, והמרת התוצאה חזרה לפורמט של דקות ושניות לקילומטר (`MM:SS`).
+### Tracking Dashboard
 
----
+A weekly grid view of **every athlete's training**. Each cell is a colored circle:
 
-## 5. שלבי פיתוח מומלצים (Development Roadmap)
-*   **שלב א':** בניית בסיס הנתונים (טבלאות משתמשים, מרוצים, תוצאות ויומן אימונים) ומערכת ה-Authentication (הרשמה והתחברות).
-*   **שלב ב':** פיתוח ממשק האדמין להזנת מרוצים ומקצים, ופיתוח לוגיקת חישוב הקצבים והמיונים האוטומטיים.
-*   **שלב ג':** בניית מסכי המתאמן: לוח השנה היומי (אימונים ודיווחים), ארכיון המרוצים, והיכל התהילה הקבוצתי.
-*   **שלב ד':** עיצוב רספונסיבי למובייל (Tailwind) וטסטים על נתונים אמיתיים.
-*   **שלב ה':** אינטגרציה עתידית עם Strava API.
+- Green = completed, yellow = half-completed, red = missed, gray = no report
+- Inside the circle: the **km** the athlete logged.
+- Indicators for personal targets and reactions
+- Weekly total km per athlete in the rightmost column
+
+Click any cell to open a detailed editor for that day (group workout + athlete's report + personal note).
+
+### Athlete profiles
+
+Clicking an athlete's name opens a deep profile view with:
+
+- Stats (completed / missed / completion rate)
+- **Toggle between week and month view** - month view is a calendar grid (4-5 rows × 7 days) showing the full month at a glance with status colors, km, and personal target indicators
+- Weekly/monthly km volume
+- Every day is clickable to edit the workout / log / personal note
+- Personal Bests (with a built-in PB editor - manual entry or linked to a race)
+- Race history
+
+### Reactions on workouts
+
+On every athlete report, the coach can react with 👏 (clap), ❤️ (heart), or 👎 (dislike) to give quick feedback or kudos. Reactions are visible to the athlete.
+
+### Workout publisher
+
+Write group workouts for any training group, any day. The workout instantly appears on every athlete in that group's calendar.
+
+### Individual targets
+
+Pick an athlete, pick a week, and write personal notes for specific days — visible only to that athlete (or shown instead of the group workout if marked as override).
+
+### Race wizard
+
+A multi-step form to add a new race:
+
+1. Name + date
+2. Add heats (pick official distance + custom heat name)
+3. Add results per heat (athlete name autocompletes from the registered users, time entered as `HH:MM:SS` or `MM:SS`, pace and PBs calculated automatically)
+
+Existing races can also be edited.
+
+### Group management
+
+Create training groups, rename them, add and remove members, delete groups. Filter dashboards and the Hall of Fame by group.
+
+### Athlete management
+
+Edit athlete names, delete inactive members, view per-athlete profiles.
+
+### Feed posting
+
+Post announcements to the team feed, optionally targeted to a single training group. Coach posts are highlighted.
+
+### Moderation in Health & Wellness
+
+Only coaches can edit or delete entries in the Health & Wellness directory, keeping the shared database clean.

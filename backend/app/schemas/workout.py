@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import date
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel
 
 
@@ -38,6 +38,12 @@ class WorkoutLogUpsert(BaseModel):
     notes: Optional[str] = None
 
 
+class ReactionItem(BaseModel):
+    emoji: str
+    count: int
+    reacted: bool
+
+
 class WorkoutLogOut(BaseModel):
     id: int
     date: date
@@ -47,6 +53,7 @@ class WorkoutLogOut(BaseModel):
     notes: Optional[str]
     kudos_count: int = 0
     has_kudos: bool = False
+    reactions: List[ReactionItem] = []
     model_config = {"from_attributes": True}
 
 

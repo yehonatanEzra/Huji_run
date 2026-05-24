@@ -33,6 +33,25 @@ def _migrate():
             conn.execute(text("CREATE INDEX ix_kudos_workout_log_id ON kudos(workout_log_id)"))
             conn.commit()
 
+        if "kudos" in tables:
+            kudos_cols = {r[1] for r in conn.execute(text("PRAGMA table_info(kudos)"))}
+            if "emoji" not in kudos_cols:
+                conn.execute(text("ALTER TABLE kudos RENAME TO kudos_old"))
+                conn.execute(text("""
+                    CREATE TABLE kudos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        giver_id INTEGER NOT NULL REFERENCES users(id),
+                        workout_log_id INTEGER NOT NULL REFERENCES workout_logs(id) ON DELETE CASCADE,
+                        emoji VARCHAR(20) NOT NULL DEFAULT 'clap',
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(giver_id, workout_log_id, emoji)
+                    )
+                """))
+                conn.execute(text("INSERT INTO kudos (id, giver_id, workout_log_id, emoji, created_at) SELECT id, giver_id, workout_log_id, 'clap', created_at FROM kudos_old"))
+                conn.execute(text("CREATE INDEX ix_kudos_workout_log_id ON kudos(workout_log_id)"))
+                conn.execute(text("DROP TABLE kudos_old"))
+                conn.commit()
+
 _migrate()
 
 app = FastAPI(title="Huji Run API", version="1.0.0")

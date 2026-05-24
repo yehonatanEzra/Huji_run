@@ -13,7 +13,13 @@ class GroupWorkout(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     training_group_id: Mapped[int] = mapped_column(Integer, ForeignKey("training_groups.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # workout_type: simple | easy | tempo | long | intervals | fartlek
+    workout_type: Mapped[str] = mapped_column(String(20), nullable=False, default="simple")
+    title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # for simple/easy/tempo
+    warmup: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # for long/intervals/fartlek
+    main_session: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cooldown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     draft_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

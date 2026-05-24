@@ -6,8 +6,8 @@ export const getWeek = (date, groupId) =>
 export const submitLog = (data) =>
   client.post('/calendar/log', data);
 
-export const upsertGroupWorkout = (groupId, date, { content, draft_content } = {}) =>
-  client.put(`/calendar/group/${groupId}/${date}`, { content, draft_content });
+export const upsertGroupWorkout = (groupId, date, body = {}) =>
+  client.put(`/calendar/group/${groupId}/${date}`, body);
 
 export const deleteGroupWorkout = (groupId, date) =>
   client.delete(`/calendar/group/${groupId}/${date}`);

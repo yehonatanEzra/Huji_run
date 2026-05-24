@@ -179,7 +179,7 @@ export default function TrackingDashboardPage() {
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-gray-50 border-b">
-                <th className="px-2 py-2 text-left text-gray-500 font-medium sticky left-0 bg-gray-50 min-w-[140px]">Athlete</th>
+                <th className="px-2 py-2 text-left text-gray-500 font-medium sticky left-0 z-20 bg-gray-50 min-w-[140px] shadow-[1px_0_0_0_#e5e7eb]">Athlete</th>
                 {weekDays.map((d) => (
                   <th key={format(d, 'yyyy-MM-dd')} className="px-2 py-2 text-center text-gray-500 font-medium min-w-[48px]">
                     {format(d, 'EEE')}
@@ -191,7 +191,7 @@ export default function TrackingDashboardPage() {
             <tbody>
               {data.athletes.map((athlete) => (
                 <tr key={athlete.id} className="border-t">
-                  <td className="px-2 py-2 sticky left-0 bg-white">
+                  <td className="px-2 py-2 sticky left-0 z-10 bg-white shadow-[1px_0_0_0_#e5e7eb]">
                     <button onClick={() => openProfile(athlete.id)} className="text-left">
                       <div className="font-medium truncate max-w-[140px] text-blue-600 hover:underline">{athlete.full_name}</div>
                       <div className="text-[10px] text-gray-400">{athlete.group_name || 'No group'}</div>
@@ -564,11 +564,33 @@ export default function TrackingDashboardPage() {
               <p className="text-xs font-semibold text-gray-500 mb-1">
                 Group Workout ({selected.athlete.group_name || 'No group'})
               </p>
-              {selected.day.group_workout?.content ? (
-                <p className="text-sm whitespace-pre-wrap">{selected.day.group_workout.content}</p>
-              ) : (
-                <p className="text-sm text-gray-400 italic">No group workout for this day</p>
-              )}
+              {(() => {
+                const gw = selected.day.group_workout;
+                if (!gw) return <p className="text-sm text-gray-400 italic">No group workout for this day</p>;
+                const isStructured = ['tempo', 'long', 'intervals', 'fartlek'].includes(gw.workout_type);
+                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+                return (
+                  <div className="space-y-1.5">
+                    {(gw.title || gw.workout_type) && (
+                      <div className="flex items-center gap-2">
+                        {gw.title && <p className="text-sm font-semibold">{gw.title}</p>}
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-medium">
+                          {TYPE_LABELS[gw.workout_type] || 'Simple'}
+                        </span>
+                      </div>
+                    )}
+                    {isStructured ? (
+                      <div className="text-sm space-y-1">
+                        {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
+                        {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">Main · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                        {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
+                      </div>
+                    ) : (
+                      gw.content && <p className="text-sm whitespace-pre-wrap">{gw.content}</p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Athlete report section */}

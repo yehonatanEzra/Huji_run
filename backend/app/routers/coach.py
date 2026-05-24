@@ -519,7 +519,14 @@ def get_athlete_week(
             "date": d.isoformat(),
             "log": _log_payload(log) if log else None,
             "target": {"note": target.note, "override_group": target.override_group} if target else None,
-            "group_workout": {"content": gw.content} if gw and gw.content else None,
+            "group_workout": {
+                "content": gw.content,
+                "workout_type": gw.workout_type,
+                "title": gw.title,
+                "warmup": gw.warmup,
+                "main_session": gw.main_session,
+                "cooldown": gw.cooldown,
+            } if gw and (gw.content or gw.warmup or gw.main_session or gw.cooldown) else None,
         })
 
     return {"week_start": ws.isoformat(), "days": days}

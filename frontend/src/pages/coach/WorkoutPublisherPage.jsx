@@ -6,6 +6,23 @@ import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import { Link } from 'react-router-dom';
 
+const WORKOUT_TYPES = [
+  { value: 'simple',    label: 'Other',     color: 'bg-gray-100 text-gray-700',     structured: false },
+  { value: 'easy',      label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700', structured: false },
+  { value: 'tempo',     label: 'Tempo',     color: 'bg-orange-100 text-orange-700', structured: true },
+  { value: 'long',      label: 'Long run',  color: 'bg-purple-100 text-purple-700', structured: true },
+  { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',       structured: true },
+  { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',     structured: true },
+];
+
+const typeMeta = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
+
+const workoutSnippet = (gw) => {
+  if (!gw) return '';
+  if (gw.title) return gw.title;
+  return gw.content || gw.main_session || gw.warmup || '';
+};
+
 export default function WorkoutPublisherPage() {
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -20,8 +37,15 @@ export default function WorkoutPublisherPage() {
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
-  const [published, setPublished] = useState('');
-  const [draft, setDraft] = useState('');
+  const [form, setForm] = useState({
+    workout_type: 'simple',
+    title: '',
+    content: '',
+    warmup: '',
+    main_session: '',
+    cooldown: '',
+    draft_content: '',
+  });
   const [saving, setSaving] = useState(false);
 
   const fetchGroups = async () => {
@@ -72,14 +96,31 @@ export default function WorkoutPublisherPage() {
 
   const openDay = (day) => {
     setSelectedDay(day);
-    setPublished(day.group_workout?.content || '');
-    setDraft(day.group_workout?.draft_content || '');
+    const gw = day.group_workout;
+    setForm({
+      workout_type: gw?.workout_type || 'simple',
+      title: gw?.title || '',
+      content: gw?.content || '',
+      warmup: gw?.warmup || '',
+      main_session: gw?.main_session || '',
+      cooldown: gw?.cooldown || '',
+      draft_content: gw?.draft_content || '',
+    });
   };
 
-  const handleSave = async (updates) => {
+  const handleSave = async (overrides = {}) => {
     setSaving(true);
     try {
-      await upsertGroupWorkout(selectedGroup.id, selectedDay.date, updates);
+      const payload = { ...form, ...overrides };
+      // Clear fields not applicable to the selected type so the DB doesn't carry stale data
+      if (['simple', 'easy'].includes(payload.workout_type)) {
+        payload.warmup = '';
+        payload.main_session = '';
+        payload.cooldown = '';
+      } else if (['tempo', 'long', 'intervals', 'fartlek'].includes(payload.workout_type)) {
+        payload.content = '';
+      }
+      await upsertGroupWorkout(selectedGroup.id, selectedDay.date, payload);
       setSelectedDay(null);
       fetchData();
     } catch (err) { console.error(err); }
@@ -144,10 +185,15 @@ export default function WorkoutPublisherPage() {
   const renderDayBadges = (day) => {
     const gw = day.group_workout;
     if (!gw) return null;
+    const hasPublished = gw.content || gw.warmup || gw.main_session || gw.cooldown;
     return (
-      <div className="flex gap-1">
-        {gw.content && <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">Published</span>}
-        {gw.draft_content && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Draft</span>}
+      <div className="flex gap-1 items-center flex-wrap">
+        {hasPublished && (
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${typeMeta(gw.workout_type).color}`}>
+            {typeMeta(gw.workout_type).label}
+          </span>
+        )}
+        {gw.draft_content && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Draft</span>}
       </div>
     );
   };
@@ -166,15 +212,19 @@ export default function WorkoutPublisherPage() {
               {week.map((day) => {
                 const inMonth = new Date(day.date + 'T00:00').getMonth() === currentDate.getMonth();
                 const gw = day.group_workout;
+                const hasPublished = gw && (gw.content || gw.warmup || gw.main_session || gw.cooldown);
                 return (
                   <button key={day.date} onClick={() => openDay(day)}
                     className={`flex flex-col items-center p-1.5 rounded-lg border text-xs transition hover:shadow-sm ${
                       !inMonth ? 'opacity-40' : ''
-                    } ${gw?.content ? 'border-green-300 bg-green-50' : gw?.draft_content ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}>
+                    } ${hasPublished ? 'border-green-300 bg-green-50' : gw?.draft_content ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}>
                     <span className="font-semibold">{format(new Date(day.date + 'T00:00'), 'd')}</span>
                     <span className="text-[10px] text-gray-400">{format(new Date(day.date + 'T00:00'), 'EEE')}</span>
+                    {hasPublished && gw.title && (
+                      <span className="text-[9px] text-gray-700 mt-0.5 truncate w-full text-center font-medium">{gw.title}</span>
+                    )}
                     <div className="flex gap-0.5 mt-1">
-                      {gw?.content && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
+                      {hasPublished && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
                       {gw?.draft_content && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
                     </div>
                   </button>
@@ -272,13 +322,13 @@ export default function WorkoutPublisherPage() {
                     <span className="text-sm font-semibold">{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
                     {renderDayBadges(day)}
                   </div>
-                  {day.group_workout?.content ? (
-                    <p className="text-sm text-gray-600 mt-1 truncate">{day.group_workout.content}</p>
-                  ) : day.group_workout?.draft_content ? (
-                    <p className="text-sm text-yellow-600 mt-1 truncate italic">{day.group_workout.draft_content}</p>
-                  ) : (
-                    <p className="text-sm text-gray-400 mt-1 italic">No workout set</p>
-                  )}
+                  {(() => {
+                    const gw = day.group_workout;
+                    const snippet = workoutSnippet(gw);
+                    if (snippet) return <p className="text-sm text-gray-700 mt-1 truncate font-medium">{snippet}</p>;
+                    if (gw?.draft_content) return <p className="text-sm text-yellow-600 mt-1 truncate italic">{gw.draft_content}</p>;
+                    return <p className="text-sm text-gray-400 mt-1 italic">No workout set</p>;
+                  })()}
                 </button>
               ))}
             </div>
@@ -288,45 +338,106 @@ export default function WorkoutPublisherPage() {
 
       {/* Workout edit modal */}
       <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''}>
-        {selectedDay && (
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-green-700">Published (visible to athletes)</p>
-                {published.trim() && <span className="w-2 h-2 rounded-full bg-green-400" />}
+        {selectedDay && (() => {
+          const meta = typeMeta(form.workout_type);
+          const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+          const hasPublishedContent = meta.structured
+            ? (form.warmup.trim() || form.main_session.trim() || form.cooldown.trim())
+            : form.content.trim();
+
+          return (
+            <div className="space-y-4">
+              {/* Workout type selector */}
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-2">Type</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {WORKOUT_TYPES.map(t => (
+                    <button
+                      key={t.value}
+                      onClick={() => setField('workout_type', t.value)}
+                      className={`text-xs px-2 py-1.5 rounded-lg font-medium border transition ${
+                        form.workout_type === t.value
+                          ? `${t.color} border-current`
+                          : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <textarea value={published} onChange={(e) => setPublished(e.target.value)}
-                placeholder="Write the published workout..." rows={2}
-                className="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-green-50/50" />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-yellow-700">Draft (only you can see)</p>
-                {draft.trim() && <span className="w-2 h-2 rounded-full bg-yellow-400" />}
+
+              {/* Title */}
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Title (shown on calendar)</p>
+                <input
+                  type="text"
+                  value={form.title}
+                  onChange={(e) => setField('title', e.target.value)}
+                  placeholder={meta.value === 'intervals' ? 'e.g., 6x800m @ threshold' : 'e.g., Park loop'}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
-              <textarea value={draft} onChange={(e) => setDraft(e.target.value)}
-                placeholder="Write a draft..." rows={2}
-                className="w-full border border-yellow-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-yellow-50/50" />
-              {draft.trim() && (
-                <button onClick={() => handleSave({ content: draft, draft_content: '' })} disabled={saving}
-                  className="mt-1.5 text-xs text-yellow-700 bg-yellow-100 rounded-lg px-3 py-1.5 hover:bg-yellow-200 disabled:opacity-50 font-medium">
-                  Publish draft (replace published)</button>
+
+              {/* Published content — simple/easy/tempo (single field) OR long/intervals/fartlek (3 fields) */}
+              {meta.structured ? (
+                <div className="space-y-2 border border-green-200 bg-green-50/30 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-green-700">Published — visible to athletes</p>
+                  <div>
+                    <p className="text-[11px] text-gray-500 mb-0.5">Warm-up</p>
+                    <textarea value={form.warmup} onChange={(e) => setField('warmup', e.target.value)}
+                      placeholder="e.g., 15 min easy + drills" rows={2}
+                      className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-500 mb-0.5">Main session</p>
+                    <textarea value={form.main_session} onChange={(e) => setField('main_session', e.target.value)}
+                      placeholder="e.g., 6x800m @ 5k pace, 2 min rest" rows={3}
+                      className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-gray-500 mb-0.5">Cool-down</p>
+                    <textarea value={form.cooldown} onChange={(e) => setField('cooldown', e.target.value)}
+                      placeholder="e.g., 10 min easy + stretching" rows={2}
+                      className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-semibold text-green-700 mb-1">Published — visible to athletes</p>
+                  <textarea value={form.content} onChange={(e) => setField('content', e.target.value)}
+                    placeholder="Write the workout..." rows={3}
+                    className="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-green-50/50" />
+                </div>
+              )}
+
+              {/* Draft */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-yellow-700">Draft (only you can see)</p>
+                  {form.draft_content.trim() && <span className="w-2 h-2 rounded-full bg-yellow-400" />}
+                </div>
+                <textarea value={form.draft_content} onChange={(e) => setField('draft_content', e.target.value)}
+                  placeholder="Write a draft..." rows={2}
+                  className="w-full border border-yellow-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-yellow-50/50" />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => handleSave()}
+                  disabled={saving || (!hasPublishedContent && !form.title.trim() && !form.draft_content.trim())}
+                  className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {saving ? 'Saving...' : 'Save'}</button>
+                <button onClick={() => setSelectedDay(null)}
+                  className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                  Cancel</button>
+              </div>
+              {(selectedDay.group_workout?.content || selectedDay.group_workout?.warmup || selectedDay.group_workout?.main_session || selectedDay.group_workout?.draft_content) && (
+                <button onClick={handleDelete} disabled={saving} className="w-full text-red-500 text-sm hover:underline">Delete all</button>
               )}
             </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => handleSave({ content: published, draft_content: draft })}
-                disabled={saving || (!published.trim() && !draft.trim())}
-                className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                {saving ? 'Saving...' : 'Save'}</button>
-              <button onClick={() => setSelectedDay(null)}
-                className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
-                Cancel</button>
-            </div>
-            {(selectedDay.group_workout?.content || selectedDay.group_workout?.draft_content) && (
-              <button onClick={handleDelete} disabled={saving} className="w-full text-red-500 text-sm hover:underline">Delete all</button>
-            )}
-          </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Group manager modal */}

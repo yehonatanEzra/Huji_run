@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from .config import settings
 from .database import engine, Base
 from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, RaceRegistration, HallOfFame, HealthProfessional, HealthReview, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
@@ -8,7 +9,9 @@ from .routers import health_wellness, feed, challenges
 
 Base.metadata.create_all(bind=engine)
 
-def _migrate():
+
+def _migrate_sqlite():
+    """Legacy SQLite migrations. Skipped on other dialects (Postgres etc.)."""
     with engine.connect() as conn:
         cols = {r[1] for r in conn.execute(text("PRAGMA table_info(workout_logs)"))}
         if "status" not in cols:
@@ -52,13 +55,15 @@ def _migrate():
                 conn.execute(text("DROP TABLE kudos_old"))
                 conn.commit()
 
-_migrate()
+
+if engine.dialect.name == "sqlite":
+    _migrate_sqlite()
 
 app = FastAPI(title="Huji Run API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

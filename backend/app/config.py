@@ -7,8 +7,18 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 10080  # 7 days
 
+    # Comma-separated list of allowed origins. Set in prod to your Vercel URL.
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+
+    # When true, photo uploads return 503 (use this on hosts without persistent storage).
+    DISABLE_PHOTO_UPLOADS: bool = False
+
     class Config:
         env_file = ".env"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
 
 settings = Settings()

@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach
@@ -63,7 +63,7 @@ def list_races(
     if search:
         q = q.filter(Race.name.ilike(f"%{search}%"))
     if year:
-        q = q.filter(func.strftime("%Y", Race.race_date) == str(year))
+        q = q.filter(extract("year", Race.race_date) == year)
     races = q.order_by(Race.race_date.desc()).all()
     out = [_attach_race_meta(db, r) for r in races]
     if status_filter in ("upcoming", "completed"):

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: hujirun-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false   # set this in the Render dashboard to your Neon Postgres URL
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://hujirun.vercel.app
+      - key: DISABLE_PHOTO_UPLOADS
+        value: "true"

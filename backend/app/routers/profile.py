@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
+from ..config import settings
 from ..models.race import Result, Heat, Race, CANONICAL_DISTANCES
 from ..schemas.profile import ProfileResponse, PBEntry, RaceHistoryEntry
 from ..services.time_utils import seconds_to_display, format_pace
@@ -122,6 +123,8 @@ async def upload_photo(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if settings.DISABLE_PHOTO_UPLOADS:
+        raise HTTPException(status_code=503, detail="Photo uploads are disabled in this environment")
     if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
         raise HTTPException(status_code=400, detail="Only JPEG, PNG or WebP allowed")
     ext = file.content_type.split("/")[1]

@@ -278,9 +278,43 @@ def delete_athlete(
     if not athlete or athlete.role != "athlete":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
     from ..models.hall_of_fame import HallOfFame
+    from ..models.kudos import Kudos
+    from ..models.feed import Announcement, AnnouncementReaction, AnnouncementComment
+    from ..models.race import RaceRegistration
+    from ..models.health_wellness import HealthProfessional, HealthReview
     from ..services.hall_of_fame import refresh_hall_of_fame
+
+    # Workout-related
+    workout_log_ids = [l.id for l in db.query(WorkoutLog).filter(WorkoutLog.athlete_id == athlete_id).all()]
+    if workout_log_ids:
+        db.query(Kudos).filter(Kudos.workout_log_id.in_(workout_log_ids)).delete(synchronize_session=False)
     db.query(WorkoutLog).filter(WorkoutLog.athlete_id == athlete_id).delete()
     db.query(IndividualTarget).filter(IndividualTarget.athlete_id == athlete_id).delete()
+
+    # Kudos this user gave to others
+    db.query(Kudos).filter(Kudos.giver_id == athlete_id).delete()
+
+    # Feed activity
+    db.query(AnnouncementReaction).filter(AnnouncementReaction.user_id == athlete_id).delete()
+    db.query(AnnouncementComment).filter(AnnouncementComment.user_id == athlete_id).delete()
+    # If the athlete authored any announcements, delete them (cascades reactions/comments via FK)
+    for ann in db.query(Announcement).filter(Announcement.author_id == athlete_id).all():
+        db.query(AnnouncementReaction).filter(AnnouncementReaction.announcement_id == ann.id).delete()
+        db.query(AnnouncementComment).filter(AnnouncementComment.announcement_id == ann.id).delete()
+        db.delete(ann)
+
+    # Race registrations (both as athlete and as the one who registered someone)
+    db.query(RaceRegistration).filter(RaceRegistration.user_id == athlete_id).delete()
+    db.query(RaceRegistration).filter(RaceRegistration.registered_by == athlete_id).delete()
+
+    # Health & Wellness reviews and professionals they created
+    db.query(HealthReview).filter(HealthReview.user_id == athlete_id).delete()
+    # Re-assign professionals they created to the deleting coach so listings stay intact
+    db.query(HealthProfessional).filter(HealthProfessional.created_by_id == athlete_id).update(
+        {HealthProfessional.created_by_id: _.id}, synchronize_session=False
+    )
+
+    # Race results — track Hall of Fame distances to refresh
     athlete_results = db.query(Result).filter(Result.user_id == athlete_id).all()
     hof_refresh = set()
     for r in athlete_results:
@@ -289,6 +323,7 @@ def delete_athlete(
             hof_refresh.add((heat.distance_m, r.gender))
         db.delete(r)
     db.query(HallOfFame).filter(HallOfFame.user_id == athlete_id).delete()
+
     db.delete(athlete)
     db.commit()
     for distance_m, gender in hof_refresh:

@@ -1,5 +1,6 @@
-from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -49,12 +50,29 @@ def me(current_user: Annotated[User, Depends(get_current_user)]):
 
 
 @router.post("/bootstrap-coach")
-def bootstrap_coach(body: BootstrapCoachRequest, db: Annotated[Session, Depends(get_db)]):
+def bootstrap_coach(
+    body: BootstrapCoachRequest,
+    db: Annotated[Session, Depends(get_db)],
+    x_bootstrap_secret: Annotated[Optional[str], Header(alias="X-Bootstrap-Secret")] = None,
+):
     """One-time endpoint to promote the very first user to coach.
-    Refuses once any coach already exists, so it's safe to leave deployed."""
+
+    Defense in depth:
+      1. Requires X-Bootstrap-Secret header matching the BOOTSTRAP_SECRET env var.
+         If the env var is unset, the endpoint is completely disabled (secure by default).
+      2. Refuses once any coach already exists, so even with the secret it can only
+         be used to seed the very first coach.
+    """
+    expected = os.environ.get("BOOTSTRAP_SECRET")
+    if not expected:
+        raise HTTPException(status_code=403, detail="Bootstrap disabled.")
+    if not x_bootstrap_secret or x_bootstrap_secret != expected:
+        raise HTTPException(status_code=403, detail="Invalid bootstrap secret.")
+
     existing_coach = db.query(User).filter(User.role == "coach").first()
     if existing_coach:
         raise HTTPException(status_code=403, detail="A coach already exists. Promote others through the app.")
+
     user = db.query(User).filter(User.username == body.username.strip()).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

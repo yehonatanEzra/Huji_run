@@ -246,7 +246,7 @@ export default function WorkoutPublisherPage() {
 
       {selectedGroup && (
         <>
-          <h3 className="text-base font-semibold mb-3">Workouts — {selectedGroup.name}</h3>
+          <h3 className="text-base font-semibold mb-3">Workouts: {selectedGroup.name}</h3>
 
           <div className="flex items-center justify-between mb-4">
             <button onClick={goBack} className="text-blue-600 text-sm font-medium">&larr; Prev</button>

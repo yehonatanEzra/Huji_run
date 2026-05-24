@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame
+from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, HallOfFame, HealthProfessional, HealthReview
 from .routers import auth, calendar, races, leaderboard, profile, coach
+from .routers import health_wellness
 
 # Create all tables on startup (dev convenience; use Alembic for prod migrations)
 Base.metadata.create_all(bind=engine)
@@ -25,6 +26,7 @@ app.include_router(races.router, prefix=API_PREFIX)
 app.include_router(leaderboard.router, prefix=API_PREFIX)
 app.include_router(profile.router, prefix=API_PREFIX)
 app.include_router(coach.router, prefix=API_PREFIX)
+app.include_router(health_wellness.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

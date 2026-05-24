@@ -5,6 +5,7 @@ const athleteItems = [
   { to: '/calendar', label: 'Training', icon: '🏋️' },
   { to: '/races', label: 'Races', icon: '🏆' },
   { to: '/hall-of-fame', label: 'Hall of Fame', icon: '🥇' },
+  { to: '/health-wellness', label: 'Health', icon: '🏥' },
   { to: '/profile', label: 'Profile', icon: '👤' },
 ];
 
@@ -12,6 +13,7 @@ const coachItems = [
   { to: '/coach/dashboard', label: 'Tracking', icon: '📊' },
   { to: '/races', label: 'Races', icon: '🏆' },
   { to: '/hall-of-fame', label: 'Hall of Fame', icon: '🥇' },
+  { to: '/health-wellness', label: 'Health', icon: '🏥' },
   { to: '/profile', label: 'Profile', icon: '👤' },
   { to: '/coach/workouts', label: 'Coach', icon: '📋' },
 ];

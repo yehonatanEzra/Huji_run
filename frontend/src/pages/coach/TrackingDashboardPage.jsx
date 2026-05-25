@@ -287,8 +287,27 @@ export default function TrackingDashboardPage() {
             </div>
 
             {(() => {
+              const workoutDisplay = (d) => {
+                // Returns { title, snippet } — title is the prominent label, snippet is the body text.
+                const gw = d.group_workout;
+                const personalOverride = d.target?.override_group;
+                if (personalOverride && d.target?.note) {
+                  return { title: 'Personal', snippet: d.target.note, color: 'text-blue-700' };
+                }
+                if (gw) {
+                  const title = gw.title || '';
+                  const snippet = gw.content || gw.main_session || gw.warmup || '';
+                  return { title, snippet, color: 'text-gray-700' };
+                }
+                if (d.target?.note) {
+                  return { title: '+ Personal', snippet: d.target.note, color: 'text-blue-700' };
+                }
+                return null;
+              };
+
               const renderDay = (d) => {
                 const dayDate = new Date(d.date + 'T00:00');
+                const w = workoutDisplay(d);
                 return (
                   <button
                     key={d.date}
@@ -304,13 +323,11 @@ export default function TrackingDashboardPage() {
                         {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
                       </span>
                     </div>
-                    {d.target?.override_group && d.target?.note ? (
-                      <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">{d.target.note}</p>
-                    ) : (
-                      <>
-                        {d.group_workout?.content && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{d.group_workout.content}</p>}
-                        {d.target?.note && <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">Personal: {d.target.note}</p>}
-                      </>
+                    {w && (w.title || w.snippet) && (
+                      <div className="mt-1">
+                        {w.title && <p className={`text-xs font-semibold ${w.color}`}>{w.title}</p>}
+                        {w.snippet && <p className="text-xs text-gray-600 whitespace-pre-wrap truncate">{w.snippet}</p>}
+                      </div>
                     )}
                     {d.log?.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.log.notes}</p>}
                   </button>
@@ -383,24 +400,36 @@ export default function TrackingDashboardPage() {
                                     status === 'partial' ? 'bg-yellow-100 hover:bg-yellow-200' :
                                     status === 'missed' ? 'bg-red-100 hover:bg-red-200' :
                                     'bg-gray-50 hover:bg-gray-100';
-                                  const icon = status === 'completed' ? 'V' : status === 'partial' ? '~' : status === 'missed' ? 'X' : '';
                                   const hasPersonal = d.target?.note;
                                   if (!inMonth) {
                                     return <div key={d.date} className="aspect-square" />;
                                   }
+                                  const personalOverride = d.target?.override_group;
+                                  const workoutTitle = personalOverride
+                                    ? (d.target?.note?.slice(0, 30) || 'Personal')
+                                    : (d.group_workout?.title || '');
+                                  const tooltipText = personalOverride
+                                    ? d.target?.note
+                                    : (d.group_workout?.title
+                                        ? `${d.group_workout.title}\n${d.group_workout.content || d.group_workout.main_session || d.group_workout.warmup || ''}`
+                                        : (d.group_workout?.content || d.group_workout?.main_session || ''));
                                   return (
                                     <button
                                       key={d.date}
                                       onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                                      className={`aspect-square rounded-md ${bg} relative flex flex-col items-center justify-center transition`}
-                                      title={d.group_workout?.content || d.target?.note || ''}
+                                      className={`min-h-[68px] rounded-md ${bg} relative flex flex-col items-center justify-start px-0.5 py-1 transition`}
+                                      title={tooltipText || ''}
                                     >
                                       <span className="text-[10px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
-                                      {icon && <span className="text-xs font-bold leading-none mt-0.5">{icon}</span>}
-                                      {hasPersonal && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                                      {d.log?.distance_km > 0 && (
-                                        <span className="text-[9px] text-blue-700 font-semibold leading-none mt-0.5">{d.log.distance_km.toFixed(1)}k</span>
+                                      {workoutTitle && (
+                                        <span className={`text-[9px] mt-0.5 leading-tight font-semibold truncate w-full text-center ${personalOverride ? 'text-blue-700' : 'text-gray-700'}`}>
+                                          {workoutTitle}
+                                        </span>
                                       )}
+                                      {d.log?.distance_km > 0 && (
+                                        <span className="text-[10px] text-blue-700 font-bold leading-none mt-auto">{d.log.distance_km.toFixed(1)}k</span>
+                                      )}
+                                      {hasPersonal && !personalOverride && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />}
                                     </button>
                                   );
                                 })}

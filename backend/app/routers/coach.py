@@ -387,6 +387,10 @@ def get_athlete_profile(
     race_history = []
     for result, heat, race in results:
         race_history.append({
+            "result_id": result.id,
+            "race_id": race.id,
+            "heat_id": heat.id,
+            "is_manual": bool(race.is_manual),
             "race_name": race.name,
             "race_date": race.race_date.isoformat(),
             "distance_m": heat.distance_m,
@@ -407,6 +411,10 @@ def get_athlete_profile(
                 "time_display": fmt_time(result.time_seconds),
                 "race_name": race.name,
                 "race_date": race.race_date.isoformat(),
+                "result_id": result.id,
+                "race_id": race.id,
+                "heat_id": heat.id,
+                "is_manual": bool(race.is_manual),
             }
     personal_bests = sorted(pbs.values(), key=lambda x: x["distance_m"])
 

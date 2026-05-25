@@ -9,6 +9,9 @@ export const getFeed = (beforeId) => {
 export const createAnnouncement = (data) =>
   client.post('/feed', data);
 
+export const updateAnnouncement = (id, data) =>
+  client.patch(`/feed/${id}`, data);
+
 export const deleteAnnouncement = (id) =>
   client.delete(`/feed/${id}`);
 

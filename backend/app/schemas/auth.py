@@ -21,6 +21,7 @@ class TokenResponse(BaseModel):
     role: str
     full_name: str
     user_id: int
+    training_group_id: Optional[int] = None
 
 
 class UserOut(BaseModel):

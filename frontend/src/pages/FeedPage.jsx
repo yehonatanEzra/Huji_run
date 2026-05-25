@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getFeed, createAnnouncement, deleteAnnouncement, toggleReaction, addComment, deleteComment } from '../api/feed';
+import { getFeed, createAnnouncement, updateAnnouncement, deleteAnnouncement, toggleReaction, addComment, deleteComment } from '../api/feed';
 import { listGroups } from '../api/coach';
 import Modal from '../components/ui/Modal';
 import Spinner from '../components/ui/Spinner';
@@ -40,11 +40,13 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ title: '', body: '', training_group_id: '' });
+  const [editingId, setEditingId] = useState(null); // when set, the composer edits this post
   const [groups, setGroups] = useState([]);
   const [saving, setSaving] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [commentTexts, setCommentTexts] = useState({});
   const [expandedComments, setExpandedComments] = useState({});
+  const [authorFilter, setAuthorFilter] = useState('all'); // 'all' or 'coach'
 
   const fetchFeed = async (beforeId) => {
     try {
@@ -65,24 +67,59 @@ export default function FeedPage() {
   useEffect(() => { fetchFeed(); }, []);
 
   useEffect(() => {
-    if (isCoach) {
-      listGroups().then(r => setGroups(r.data)).catch(() => {});
-    }
-  }, [isCoach]);
+    // Both coaches and athletes need the group name for the "Group" pill on each post
+    listGroups().then(r => setGroups(r.data)).catch(() => {});
+  }, []);
+
+  const openCreate = () => {
+    setEditingId(null);
+    setForm({
+      title: '', body: '',
+      // Athletes can only post to their own group; default it for them
+      training_group_id: isCoach ? '' : (user?.training_group_id ? String(user.training_group_id) : ''),
+    });
+    setShowCreate(true);
+  };
+
+  const openEdit = (post) => {
+    setEditingId(post.id);
+    setForm({
+      title: post.title,
+      body: post.body,
+      training_group_id: post.training_group_id ? String(post.training_group_id) : '',
+    });
+    setShowCreate(true);
+  };
 
   const handleCreate = async () => {
     if (!form.title.trim() || !form.body.trim()) return;
     setSaving(true);
     try {
       const payload = { title: form.title, body: form.body };
-      if (form.training_group_id) payload.training_group_id = parseInt(form.training_group_id);
-      await createAnnouncement(payload);
+      // Athletes always post to their own group
+      if (!isCoach) {
+        if (!user?.training_group_id) {
+          alert("You're not assigned to a group yet — ask your coach to add you.");
+          setSaving(false);
+          return;
+        }
+        payload.training_group_id = user.training_group_id;
+      } else if (form.training_group_id) {
+        payload.training_group_id = parseInt(form.training_group_id);
+      }
+      if (editingId) {
+        await updateAnnouncement(editingId, payload);
+      } else {
+        await createAnnouncement(payload);
+      }
       setShowCreate(false);
+      setEditingId(null);
       setForm({ title: '', body: '', training_group_id: '' });
       setLoading(true);
       fetchFeed();
     } catch (err) {
       console.error(err);
+      alert(err.response?.data?.detail || 'Could not save the post.');
     } finally {
       setSaving(false);
     }
@@ -160,13 +197,18 @@ export default function FeedPage() {
 
   if (loading) return <Spinner />;
 
+  const canPost = isCoach || !!user?.training_group_id;
+  const visiblePosts = authorFilter === 'coach'
+    ? posts.filter(p => p.author_role === 'coach')
+    : posts;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-bold">Team Feed</h2>
-        {isCoach && (
+        {canPost && (
           <button
-            onClick={() => setShowCreate(true)}
+            onClick={openCreate}
             className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700"
           >
             + New Post
@@ -174,11 +216,23 @@ export default function FeedPage() {
         )}
       </div>
 
-      {posts.length === 0 ? (
+      {/* Filter tabs */}
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4">
+        <button
+          onClick={() => setAuthorFilter('all')}
+          className={`flex-1 py-1.5 text-sm font-medium transition ${authorFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+        >All posts</button>
+        <button
+          onClick={() => setAuthorFilter('coach')}
+          className={`flex-1 py-1.5 text-sm font-medium transition ${authorFilter === 'coach' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+        >Coach only</button>
+      </div>
+
+      {visiblePosts.length === 0 ? (
         <p className="text-center text-gray-400 py-8">No announcements yet</p>
       ) : (
         <div className="space-y-3">
-          {posts.map(post => {
+          {visiblePosts.map(post => {
             const showComments = expandedComments[post.id];
             return (
               <div key={post.id} className="bg-white border border-gray-200 rounded-xl p-4">
@@ -197,12 +251,20 @@ export default function FeedPage() {
                       </p>
                     </div>
                   </div>
-                  {isCoach && (
-                    <button
-                      onClick={() => handleDelete(post.id)}
-                      className="text-gray-300 hover:text-red-500 text-lg leading-none"
-                    >×</button>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {(isCoach || (post.author_id === user?.id)) && (
+                      <button
+                        onClick={() => openEdit(post)}
+                        className="text-xs text-blue-600 hover:underline"
+                      >Edit</button>
+                    )}
+                    {(isCoach || (post.author_id === user?.id)) && (
+                      <button
+                        onClick={() => handleDelete(post.id)}
+                        className="text-gray-300 hover:text-red-500 text-lg leading-none"
+                      >×</button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap mb-3">{post.body}</p>
 
@@ -286,7 +348,8 @@ export default function FeedPage() {
         </div>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Announcement">
+      <Modal open={showCreate} onClose={() => { setShowCreate(false); setEditingId(null); }}
+        title={editingId ? 'Edit post' : 'New post'}>
         <div className="space-y-3">
           <input
             type="text"
@@ -302,22 +365,31 @@ export default function FeedPage() {
             rows={4}
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <select
-            value={form.training_group_id}
-            onChange={e => setForm({ ...form, training_group_id: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All athletes</option>
-            {groups.map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
+          {isCoach && !editingId ? (
+            <select
+              value={form.training_group_id}
+              onChange={e => setForm({ ...form, training_group_id: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All athletes (global)</option>
+              {groups.map(g => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          ) : !isCoach ? (
+            <p className="text-xs text-gray-500">
+              Posting to{' '}
+              <span className="font-semibold">
+                {groups.find(g => g.id === user?.training_group_id)?.name || 'your group'}
+              </span>
+            </p>
+          ) : null}
           <button
             onClick={handleCreate}
             disabled={saving || !form.title.trim() || !form.body.trim()}
             className="w-full bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? 'Posting...' : 'Post'}
+            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Post'}
           </button>
         </div>
       </Modal>

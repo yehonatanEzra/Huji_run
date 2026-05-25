@@ -123,15 +123,34 @@ export default function CalendarPage() {
             )}
           </div>
         </div>
-        {day.group_workout && (() => {
+        {(() => {
+          const t = day.individual_target;
           const gw = day.group_workout;
-          const snippet = gw.title || gw.content || gw.main_session || gw.warmup;
-          if (!snippet) return null;
-          return <p className="text-sm text-gray-700 font-medium truncate">{snippet}</p>;
+          const personalOverride = t?.override_group;
+          // Personal override → show personal title/body in place of group
+          if (personalOverride) {
+            const title = t.title || t.note;
+            const body = t.note || t.main_session || t.warmup;
+            return (
+              <>
+                {title && <p className="text-sm text-blue-700 font-medium truncate">{title}</p>}
+                {body && body !== title && <p className="text-xs text-blue-600 truncate">{body}</p>}
+              </>
+            );
+          }
+          // Otherwise: group workout + personal note alongside
+          const gwSnippet = gw?.title || gw?.content || gw?.main_session || gw?.warmup;
+          return (
+            <>
+              {gwSnippet && <p className="text-sm text-gray-700 font-medium truncate">{gwSnippet}</p>}
+              {t && (t.title || t.note) && (
+                <p className="text-xs text-blue-600 mt-1 truncate">
+                  Coach note: {t.title || t.note}
+                </p>
+              )}
+            </>
+          );
         })()}
-        {day.individual_target && (
-          <p className="text-xs text-blue-600 mt-1">Coach note: {day.individual_target.note}</p>
-        )}
       </button>
     );
   };
@@ -172,7 +191,11 @@ export default function CalendarPage() {
                     intervals: { abbr: 'Int',  color: 'bg-red-100 text-red-700' },
                     fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
                   };
-                  const typeBadge = day.group_workout?.workout_type ? TYPE_ABBR[day.group_workout.workout_type] : null;
+                  // Personal override wins; otherwise show group type
+                  const activeType = day.individual_target?.override_group
+                    ? day.individual_target?.workout_type
+                    : day.group_workout?.workout_type;
+                  const typeBadge = activeType ? TYPE_ABBR[activeType] : null;
                   return (
                   <button
                     key={day.date}
@@ -281,12 +304,41 @@ export default function CalendarPage() {
                 </div>
               );
             })()}
-            {selectedDay.individual_target && (
-              <div className="bg-blue-50 rounded-lg p-3">
-                <p className="text-xs font-medium text-blue-500 mb-1">Coach's Note for You</p>
-                <p className="text-sm">{selectedDay.individual_target.note}</p>
-              </div>
-            )}
+            {selectedDay.individual_target && (() => {
+              const t = selectedDay.individual_target;
+              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+              const TYPE_COLOR = {
+                simple: 'bg-gray-100 text-gray-700',
+                easy: 'bg-emerald-100 text-emerald-700',
+                tempo: 'bg-orange-100 text-orange-700',
+                long: 'bg-purple-100 text-purple-700',
+                intervals: 'bg-red-100 text-red-700',
+                fartlek: 'bg-pink-100 text-pink-700',
+              };
+              const isStructured = ['tempo', 'long', 'intervals', 'fartlek'].includes(t.workout_type);
+              return (
+                <div className="bg-blue-50 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-blue-500">Coach's workout for you</p>
+                    {t.workout_type && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[t.workout_type] || TYPE_COLOR.simple}`}>
+                        {TYPE_LABELS[t.workout_type] || 'Other'}
+                      </span>
+                    )}
+                  </div>
+                  {t.title && <p className="text-base font-semibold">{t.title}</p>}
+                  {isStructured ? (
+                    <div className="space-y-1.5 text-sm">
+                      {t.warmup && <p><span className="text-xs uppercase tracking-wider text-gray-400">Warm-up · </span><span className="whitespace-pre-wrap">{t.warmup}</span></p>}
+                      {t.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">Main · </span><span className="whitespace-pre-wrap">{t.main_session}</span></p>}
+                      {t.cooldown && <p><span className="text-xs uppercase tracking-wider text-gray-400">Cool-down · </span><span className="whitespace-pre-wrap">{t.cooldown}</span></p>}
+                    </div>
+                  ) : (
+                    t.note && <p className="text-sm whitespace-pre-wrap">{t.note}</p>
+                  )}
+                </div>
+              );
+            })()}
 
             {selectedDay.workout_log && selectedDay.workout_log.kudos_count > 0 && (
               <div className="flex items-center gap-1.5 bg-pink-50 rounded-lg px-3 py-2">
@@ -406,13 +458,14 @@ export default function CalendarPage() {
                       const cellHeight = Math.round(150 * expandedZoom);
                       if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
                       const personalOverride = d.individual_target?.override_group;
+                      const it = d.individual_target;
                       const workoutTitle = personalOverride
-                        ? (d.individual_target?.note || 'Personal')
+                        ? (it?.title || it?.note || 'Personal')
                         : (d.group_workout?.title || '');
                       const workoutBody = personalOverride
-                        ? null
+                        ? (it?.main_session || it?.warmup || (it?.title ? it?.note : '') || '')
                         : (d.group_workout?.content || d.group_workout?.main_session || '');
-                      const hasPersonal = d.individual_target?.note;
+                      const hasPersonal = d.individual_target?.note || d.individual_target?.title;
                       const TYPE_FULL = {
                         simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
                         easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
@@ -421,7 +474,9 @@ export default function CalendarPage() {
                         intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
                       };
-                      const typeChip = !personalOverride && d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null;
+                      const typeChip = personalOverride
+                        ? (it?.workout_type ? TYPE_FULL[it.workout_type] : null)
+                        : (d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null);
                       return (
                         <button
                           key={d.date}

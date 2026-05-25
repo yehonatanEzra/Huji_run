@@ -526,7 +526,15 @@ def get_athlete_week(
         days.append({
             "date": d.isoformat(),
             "log": _log_payload(log) if log else None,
-            "target": {"note": target.note, "override_group": target.override_group} if target else None,
+            "target": {
+                "note": target.note,
+                "override_group": target.override_group,
+                "workout_type": target.workout_type,
+                "title": target.title,
+                "warmup": target.warmup,
+                "main_session": target.main_session,
+                "cooldown": target.cooldown,
+            } if target else None,
             "group_workout": {
                 "content": gw.content,
                 "workout_type": gw.workout_type,

@@ -107,6 +107,35 @@ def _migrate_race_is_manual():
 _migrate_race_is_manual()
 
 
+def _migrate_individual_target_columns():
+    """Add structured-workout columns to individual_targets if missing. Works on SQLite + Postgres."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "individual_targets" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("individual_targets")}
+    to_add = []
+    if "workout_type" not in existing:
+        to_add.append(("workout_type", "VARCHAR(20) NOT NULL DEFAULT 'simple'"))
+    if "title" not in existing:
+        to_add.append(("title", "VARCHAR(200)"))
+    if "warmup" not in existing:
+        to_add.append(("warmup", "TEXT"))
+    if "main_session" not in existing:
+        to_add.append(("main_session", "TEXT"))
+    if "cooldown" not in existing:
+        to_add.append(("cooldown", "TEXT"))
+    if not to_add:
+        return
+    with engine.connect() as conn:
+        for col, ddl in to_add:
+            conn.execute(text(f"ALTER TABLE individual_targets ADD COLUMN {col} {ddl}"))
+        conn.commit()
+
+
+_migrate_individual_target_columns()
+
+
 def _refresh_all_hall_of_fame():
     """Recompute the Hall of Fame for every canonical distance+gender on startup,
     so old results (added before the per-distance refresh was wired in, or

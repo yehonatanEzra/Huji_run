@@ -570,11 +570,15 @@ def add_athlete_pb(
         refresh_hall_of_fame(db, heat.distance_m, result.gender)
         return {"ok": True, "linked_to_race": True}
 
-    race_name = body.competition_name or "Manual PB"
+    # Manual PBs: race exists only to anchor the Result+Heat for HoF.
+    # If the coach didn't provide a competition name, leave the race name empty
+    # so the profile UI shows just "distance · time · date" with no source label.
+    race_name = (body.competition_name or "").strip()
     race = Race(
         name=race_name,
         race_date=date.today(),
         created_by=coach.id,
+        is_manual=True,
     )
     db.add(race)
     db.flush()

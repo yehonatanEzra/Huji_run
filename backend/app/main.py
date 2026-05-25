@@ -88,6 +88,49 @@ def _migrate_group_workout_columns():
 
 _migrate_group_workout_columns()
 
+
+def _migrate_race_is_manual():
+    """Add the is_manual flag to races if missing. Works on SQLite + Postgres."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "races" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("races")}
+    if "is_manual" in existing:
+        return
+    default_clause = "FALSE" if engine.dialect.name != "sqlite" else "0"
+    with engine.connect() as conn:
+        conn.execute(text(f"ALTER TABLE races ADD COLUMN is_manual BOOLEAN NOT NULL DEFAULT {default_clause}"))
+        conn.commit()
+
+
+_migrate_race_is_manual()
+
+
+def _refresh_all_hall_of_fame():
+    """Recompute the Hall of Fame for every canonical distance+gender on startup,
+    so old results (added before the per-distance refresh was wired in, or
+    inserted directly via SQL) always show up correctly."""
+    from .database import SessionLocal
+    from .models.race import CANONICAL_DISTANCES
+    from .services.hall_of_fame import refresh_hall_of_fame
+    db = SessionLocal()
+    try:
+        for d in CANONICAL_DISTANCES:
+            for g in ("M", "F"):
+                refresh_hall_of_fame(db, d, g)
+        db.commit()
+    finally:
+        db.close()
+
+
+try:
+    _refresh_all_hall_of_fame()
+except Exception as e:
+    import logging
+    logging.warning(f"Initial HoF refresh failed: {e}")
+
+
 app = FastAPI(title="Huji Run API", version="1.0.0")
 
 app.add_middleware(

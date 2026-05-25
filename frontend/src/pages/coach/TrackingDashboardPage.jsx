@@ -22,6 +22,8 @@ export default function TrackingDashboardPage() {
   const [profileViewMode, setProfileViewMode] = useState('week');
   const [profileMonthDate, setProfileMonthDate] = useState(new Date());
   const [profileMonth, setProfileMonth] = useState(null);
+  const [monthExpanded, setMonthExpanded] = useState(false);
+  const [expandedZoom, setExpandedZoom] = useState(1);
   const [showPBForm, setShowPBForm] = useState(false);
   const [pbMode, setPbMode] = useState('manual');
   const [pbForm, setPbForm] = useState({ distance_m: '', time_min: '', time_sec: '', competition_name: '' });
@@ -287,8 +289,27 @@ export default function TrackingDashboardPage() {
             </div>
 
             {(() => {
+              const workoutDisplay = (d) => {
+                // Returns { title, snippet } — title is the prominent label, snippet is the body text.
+                const gw = d.group_workout;
+                const personalOverride = d.target?.override_group;
+                if (personalOverride && d.target?.note) {
+                  return { title: 'Personal', snippet: d.target.note, color: 'text-blue-700' };
+                }
+                if (gw) {
+                  const title = gw.title || '';
+                  const snippet = gw.content || gw.main_session || gw.warmup || '';
+                  return { title, snippet, color: 'text-gray-700' };
+                }
+                if (d.target?.note) {
+                  return { title: '+ Personal', snippet: d.target.note, color: 'text-blue-700' };
+                }
+                return null;
+              };
+
               const renderDay = (d) => {
                 const dayDate = new Date(d.date + 'T00:00');
+                const w = workoutDisplay(d);
                 return (
                   <button
                     key={d.date}
@@ -304,13 +325,11 @@ export default function TrackingDashboardPage() {
                         {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
                       </span>
                     </div>
-                    {d.target?.override_group && d.target?.note ? (
-                      <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">{d.target.note}</p>
-                    ) : (
-                      <>
-                        {d.group_workout?.content && <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{d.group_workout.content}</p>}
-                        {d.target?.note && <p className="text-xs text-blue-600 mt-1 whitespace-pre-wrap">Personal: {d.target.note}</p>}
-                      </>
+                    {w && (w.title || w.snippet) && (
+                      <div className="mt-1">
+                        {w.title && <p className={`text-xs font-semibold ${w.color}`}>{w.title}</p>}
+                        {w.snippet && <p className="text-xs text-gray-600 whitespace-pre-wrap truncate">{w.snippet}</p>}
+                      </div>
                     )}
                     {d.log?.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.log.notes}</p>}
                   </button>
@@ -368,6 +387,15 @@ export default function TrackingDashboardPage() {
                       </div>
                       {profileMonth ? (
                         <div className="max-h-[60vh] overflow-y-auto">
+                          <div className="flex items-center justify-end mb-1">
+                            <button
+                              onClick={() => setMonthExpanded(true)}
+                              className="text-xs text-blue-600 hover:underline font-medium"
+                              title="Open larger view"
+                            >
+                              ⛶ Expand
+                            </button>
+                          </div>
                           <div className="grid grid-cols-7 gap-0.5 mb-1 text-[10px] text-gray-400 text-center font-medium">
                             {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
                           </div>
@@ -388,13 +416,30 @@ export default function TrackingDashboardPage() {
                                   if (!inMonth) {
                                     return <div key={d.date} className="aspect-square" />;
                                   }
+                                  const tooltipText = d.target?.override_group
+                                    ? d.target?.note
+                                    : (d.group_workout?.title || d.group_workout?.content || d.group_workout?.main_session || '');
+                                  const TYPE_ABBR = {
+                                    simple:    { abbr: 'Oth',  color: 'bg-gray-200 text-gray-700' },
+                                    easy:      { abbr: 'Easy', color: 'bg-emerald-200 text-emerald-800' },
+                                    tempo:     { abbr: 'Tem',  color: 'bg-orange-200 text-orange-800' },
+                                    long:      { abbr: 'Long', color: 'bg-purple-200 text-purple-800' },
+                                    intervals: { abbr: 'Int',  color: 'bg-red-200 text-red-800' },
+                                    fartlek:   { abbr: 'Fart', color: 'bg-pink-200 text-pink-800' },
+                                  };
+                                  const typeBadge = d.group_workout?.workout_type ? TYPE_ABBR[d.group_workout.workout_type] : null;
                                   return (
                                     <button
                                       key={d.date}
                                       onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
                                       className={`aspect-square rounded-md ${bg} relative flex flex-col items-center justify-center transition`}
-                                      title={d.group_workout?.content || d.target?.note || ''}
+                                      title={tooltipText || ''}
                                     >
+                                      {typeBadge && (
+                                        <span className={`absolute top-0 left-0 text-[7px] px-0.5 rounded-br font-bold leading-none ${typeBadge.color}`}>
+                                          {typeBadge.abbr}
+                                        </span>
+                                      )}
                                       <span className="text-[10px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
                                       {icon && <span className="text-xs font-bold leading-none mt-0.5">{icon}</span>}
                                       {hasPersonal && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />}
@@ -695,6 +740,190 @@ export default function TrackingDashboardPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Expanded month view */}
+      <Modal open={monthExpanded} onClose={() => setMonthExpanded(false)}
+        title={profile ? `${profile.full_name} — ${format(profileMonthDate, 'MMMM yyyy')}` : 'Month view'}>
+        {profileMonth && profile && (
+          <div>
+            {/* Zoom controls */}
+            <div className="flex items-center justify-end gap-2 mb-2">
+              <span className="text-xs text-gray-500">Zoom</span>
+              <button
+                onClick={() => setExpandedZoom(z => Math.max(0.3, +(z - 0.05).toFixed(2)))}
+                disabled={expandedZoom <= 0.3}
+                className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+              >−</button>
+              <span className="text-xs font-mono w-10 text-center">{Math.round(expandedZoom * 100)}%</span>
+              <button
+                onClick={() => setExpandedZoom(z => Math.min(1.8, +(z + 0.05).toFixed(2)))}
+                disabled={expandedZoom >= 1.8}
+                className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+              >+</button>
+              <button
+                onClick={() => setExpandedZoom(1)}
+                className="text-xs text-blue-600 hover:underline ml-1"
+              >Reset</button>
+            </div>
+
+          <div className="overflow-x-auto -mx-2">
+            <div className="px-2" style={{ minWidth: `${Math.round(960 * expandedZoom)}px` }}>
+              <div className="grid gap-1 mb-1 text-xs text-gray-500 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => <div key={i}>{d}</div>)}
+                <div className="text-right pr-1">Week</div>
+              </div>
+              <div className="space-y-1">
+                {profileMonth.weeks.map((week, wi) => {
+                  // Compute week stats: only count days in this month, ignore overflow days
+                  let wkKm = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
+                  for (const d of week) {
+                    if (!isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) continue;
+                    if (!d.log) continue;
+                    if (d.log.distance_km) wkKm += d.log.distance_km;
+                    const st = d.log.status || (d.log.completed ? 'completed' : 'missed');
+                    if (st === 'completed') wkDone++;
+                    else if (st === 'partial') wkPart++;
+                    else wkMiss++;
+                  }
+                  return (
+                  <div key={wi} className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
+                    {week.map(d => {
+                      const dayDate = new Date(d.date + 'T00:00');
+                      const inMonth = isSameMonth(dayDate, profileMonthDate);
+                      const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
+                      const bg = !inMonth ? 'bg-transparent border-transparent' :
+                        status === 'completed' ? 'bg-green-50 border-green-300 hover:bg-green-100' :
+                        status === 'partial' ? 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100' :
+                        status === 'missed' ? 'bg-red-50 border-red-300 hover:bg-red-100' :
+                        'bg-white border-gray-200 hover:bg-gray-50';
+                      const cellHeight = Math.round(150 * expandedZoom);
+                      if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
+                      const personalOverride = d.target?.override_group;
+                      const workoutTitle = personalOverride
+                        ? (d.target?.note || 'Personal')
+                        : (d.group_workout?.title || '');
+                      const workoutBody = personalOverride
+                        ? null
+                        : (d.group_workout?.content || d.group_workout?.main_session || '');
+                      const hasPersonal = d.target?.note;
+                      const TYPE_FULL = {
+                        simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
+                        easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
+                        tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
+                        long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
+                        intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
+                        fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
+                      };
+                      const typeChip = !personalOverride && d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null;
+                      return (
+                        <button
+                          key={d.date}
+                          onClick={() => { setMonthExpanded(false); openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d); }}
+                          className={`rounded-lg border ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                          style={{ minHeight: `${cellHeight}px` }}
+                        >
+                          {/* Date row + type chip */}
+                          <div className="flex items-start justify-between px-2 pt-1.5">
+                            <span className="text-[11px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
+                            {typeChip && (
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${typeChip.color}`}>
+                                {typeChip.label}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Top half: planned workout */}
+                          <div className="flex-1 px-2 py-1 min-h-0">
+                            {workoutTitle ? (
+                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-700' : 'text-gray-800'}`}>
+                                {workoutTitle}
+                              </p>
+                            ) : null}
+                            {workoutBody && (
+                              <p className="text-[10px] text-gray-500 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">
+                                {workoutBody}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Divider */}
+                          <div className="border-t border-dashed border-gray-300/70 mx-1" />
+
+                          {/* Bottom half: athlete report */}
+                          <div className="flex-1 px-2 py-1 min-h-0">
+                            {d.log ? (
+                              <>
+                                {d.log.notes && (
+                                  <p className="text-[10px] text-gray-700 leading-tight line-clamp-2 whitespace-pre-wrap">
+                                    {d.log.notes}
+                                  </p>
+                                )}
+                                {d.log.distance_km > 0 && (
+                                  <p className="text-xs text-blue-700 font-bold mt-0.5">{d.log.distance_km.toFixed(1)}k</p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-[10px] text-gray-300 italic">No report</p>
+                            )}
+                          </div>
+
+                          {hasPersonal && !personalOverride && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+                      );
+                    })}
+                    {/* Week stats column */}
+                    <div className="flex flex-col items-end justify-center text-right px-1 text-xs">
+                      <div className="font-bold text-blue-700">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      <div className="flex gap-1.5 mt-1 text-[11px] font-mono">
+                        <span className="text-green-700">V{wkDone}</span>
+                        <span className="text-yellow-700">~{wkPart}</span>
+                        <span className="text-red-700">X{wkMiss}</span>
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+
+              {/* Month totals */}
+              {(() => {
+                let mKm = 0, mDone = 0, mPart = 0, mMiss = 0;
+                for (const week of profileMonth.weeks) {
+                  for (const d of week) {
+                    if (!isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) continue;
+                    if (!d.log) continue;
+                    if (d.log.distance_km) mKm += d.log.distance_km;
+                    const st = d.log.status || (d.log.completed ? 'completed' : 'missed');
+                    if (st === 'completed') mDone++;
+                    else if (st === 'partial') mPart++;
+                    else mMiss++;
+                  }
+                }
+                return (
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+                    <span className="text-sm font-semibold text-gray-700">{format(profileMonthDate, 'MMMM')} totals</span>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="font-bold text-blue-700">{mKm.toFixed(1)} km</span>
+                      <div className="flex gap-2 text-xs font-mono">
+                        <span className="text-green-700">V{mDone}</span>
+                        <span className="text-yellow-700">~{mPart}</span>
+                        <span className="text-red-700">X{mMiss}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center justify-between mt-3">
+                <button onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
+                <span className="text-sm font-medium">{format(profileMonthDate, 'MMMM yyyy')}</span>
+                <button onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+              </div>
+            </div>
+          </div>
           </div>
         )}
       </Modal>

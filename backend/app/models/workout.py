@@ -36,8 +36,14 @@ class IndividualTarget(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    note: Mapped[str] = mapped_column(Text, nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False)  # kept for backward compat; used for simple/easy
     override_group: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # workout_type: simple | easy | tempo | long | intervals | fartlek
+    workout_type: Mapped[str] = mapped_column(String(20), nullable=False, default="simple")
+    title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    warmup: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    main_session: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cooldown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

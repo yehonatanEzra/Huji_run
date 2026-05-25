@@ -212,19 +212,43 @@ def upsert_individual_target(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
+    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek"}
+
+    def _clean(s):
+        if s is None:
+            return None
+        s = s.strip()
+        return s if s else None
+
     it = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete_id,
         IndividualTarget.date == day,
     ).first()
     if it:
-        it.note = body.note
+        it.note = body.note or ""
         it.override_group = body.override_group
+        if body.workout_type is not None and body.workout_type in ALLOWED_TYPES:
+            it.workout_type = body.workout_type
+        if body.title is not None:
+            it.title = _clean(body.title)
+        if body.warmup is not None:
+            it.warmup = _clean(body.warmup)
+        if body.main_session is not None:
+            it.main_session = _clean(body.main_session)
+        if body.cooldown is not None:
+            it.cooldown = _clean(body.cooldown)
     else:
+        wt = body.workout_type if (body.workout_type in ALLOWED_TYPES) else "simple"
         it = IndividualTarget(
             athlete_id=athlete_id,
             date=day,
-            note=body.note,
+            note=body.note or "",
             override_group=body.override_group,
+            workout_type=wt,
+            title=_clean(body.title),
+            warmup=_clean(body.warmup),
+            main_session=_clean(body.main_session),
+            cooldown=_clean(body.cooldown),
             created_by=coach.id,
         )
         db.add(it)

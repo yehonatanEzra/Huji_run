@@ -2,6 +2,16 @@ import { useState, useEffect } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
 import { listRaces, getRace, updateResult, deleteResult, updateRace } from '../../api/races';
+
+const WORKOUT_TYPES = [
+  { value: 'simple',    label: 'Other',     color: 'bg-gray-100 text-gray-700',       structured: false },
+  { value: 'easy',      label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700', structured: false },
+  { value: 'tempo',     label: 'Tempo',     color: 'bg-orange-100 text-orange-700',   structured: true },
+  { value: 'long',      label: 'Long run',  color: 'bg-purple-100 text-purple-700',   structured: true },
+  { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',         structured: true },
+  { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
+];
+const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
 import Modal from '../../components/ui/Modal';
@@ -12,7 +22,10 @@ export default function TrackingDashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
-  const [personalNote, setPersonalNote] = useState('');
+  const [personalForm, setPersonalForm] = useState({
+    workout_type: 'simple', title: '', note: '',
+    warmup: '', main_session: '', cooldown: '',
+  });
   const [overrideGroup, setOverrideGroup] = useState(false);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
@@ -94,15 +107,38 @@ export default function TrackingDashboardPage() {
 
   const openCell = (athlete, dayData) => {
     setSelected({ athlete, day: dayData });
-    setPersonalNote(dayData.target?.note || '');
-    setOverrideGroup(dayData.target?.override_group || false);
+    const t = dayData.target;
+    setPersonalForm({
+      workout_type: t?.workout_type || 'simple',
+      title: t?.title || '',
+      note: t?.note || '',
+      warmup: t?.warmup || '',
+      main_session: t?.main_session || '',
+      cooldown: t?.cooldown || '',
+    });
+    setOverrideGroup(t?.override_group || false);
   };
 
   const handleSavePersonal = async () => {
     setSaving(true);
     try {
-      if (personalNote.trim()) {
-        await upsertTarget(selected.athlete.id, selected.day.date, personalNote, overrideGroup);
+      const f = personalForm;
+      const structured = ['tempo', 'long', 'intervals', 'fartlek'].includes(f.workout_type);
+      const hasContent = structured
+        ? (f.warmup.trim() || f.main_session.trim() || f.cooldown.trim() || f.title.trim())
+        : (f.note.trim() || f.title.trim());
+
+      if (hasContent) {
+        const payload = {
+          note: f.note,
+          override_group: overrideGroup,
+          workout_type: f.workout_type,
+          title: f.title,
+          warmup: structured ? f.warmup : '',
+          main_session: structured ? f.main_session : '',
+          cooldown: structured ? f.cooldown : '',
+        };
+        await upsertTarget(selected.athlete.id, selected.day.date, payload);
       } else {
         await deleteTarget(selected.athlete.id, selected.day.date);
       }
@@ -341,17 +377,22 @@ export default function TrackingDashboardPage() {
               const workoutDisplay = (d) => {
                 // Returns { title, snippet } — title is the prominent label, snippet is the body text.
                 const gw = d.group_workout;
-                const personalOverride = d.target?.override_group;
-                if (personalOverride && d.target?.note) {
-                  return { title: 'Personal', snippet: d.target.note, color: 'text-blue-700' };
+                const t = d.target;
+                const personalOverride = t?.override_group;
+                if (personalOverride) {
+                  const title = t.title || '';
+                  const snippet = t.note || t.main_session || t.warmup || '';
+                  if (title || snippet) {
+                    return { title: title || 'Personal', snippet, color: 'text-blue-700' };
+                  }
                 }
                 if (gw) {
                   const title = gw.title || '';
                   const snippet = gw.content || gw.main_session || gw.warmup || '';
                   return { title, snippet, color: 'text-gray-700' };
                 }
-                if (d.target?.note) {
-                  return { title: '+ Personal', snippet: d.target.note, color: 'text-blue-700' };
+                if (d.target?.note || d.target?.title) {
+                  return { title: d.target.title ? `+ ${d.target.title}` : '+ Personal', snippet: d.target.note, color: 'text-blue-700' };
                 }
                 return null;
               };
@@ -776,24 +817,58 @@ export default function TrackingDashboardPage() {
             {/* Personal workout section */}
             <div className="border-t pt-3">
               <p className="text-xs font-semibold text-blue-700 mb-2">Personal Workout</p>
-              <textarea
-                value={personalNote}
-                onChange={(e) => setPersonalNote(e.target.value)}
-                placeholder="Write a personal workout for this athlete..."
-                rows={2}
-                className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50/50"
-              />
-              {personalNote.trim() && (
-                <label className="flex items-center gap-2 mt-2">
-                  <input
-                    type="checkbox"
-                    checked={overrideGroup}
-                    onChange={(e) => setOverrideGroup(e.target.checked)}
-                    className="w-4 h-4 rounded"
-                  />
-                  <span className="text-xs text-gray-600">Show this instead of group workout</span>
-                </label>
-              )}
+              {(() => {
+                const meta = typeMetaFor(personalForm.workout_type);
+                const setF = (k, v) => setPersonalForm(f => ({ ...f, [k]: v }));
+                const hasAny = meta.structured
+                  ? (personalForm.warmup.trim() || personalForm.main_session.trim() || personalForm.cooldown.trim() || personalForm.title.trim())
+                  : (personalForm.note.trim() || personalForm.title.trim());
+                return (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {WORKOUT_TYPES.map(t => (
+                        <button key={t.value} onClick={() => setF('workout_type', t.value)}
+                          className={`text-xs px-2 py-1 rounded-lg font-medium border transition ${
+                            personalForm.workout_type === t.value
+                              ? `${t.color} border-current`
+                              : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                          }`}>
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <input type="text" value={personalForm.title}
+                      onChange={(e) => setF('title', e.target.value)}
+                      placeholder="Title (shown on calendar)"
+                      className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+
+                    {meta.structured ? (
+                      <>
+                        <textarea value={personalForm.warmup} onChange={(e) => setF('warmup', e.target.value)}
+                          placeholder="Warm-up" rows={1}
+                          className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <textarea value={personalForm.main_session} onChange={(e) => setF('main_session', e.target.value)}
+                          placeholder="Main session" rows={2}
+                          className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <textarea value={personalForm.cooldown} onChange={(e) => setF('cooldown', e.target.value)}
+                          placeholder="Cool-down" rows={1}
+                          className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </>
+                    ) : (
+                      <textarea value={personalForm.note} onChange={(e) => setF('note', e.target.value)}
+                        placeholder="Write a personal workout..." rows={2}
+                        className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    )}
+
+                    {hasAny && (
+                      <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={overrideGroup} onChange={(e) => setOverrideGroup(e.target.checked)} className="w-4 h-4 rounded" />
+                        <span className="text-xs text-gray-600">Show this instead of group workout</span>
+                      </label>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="flex gap-2 mt-3">
                 <button onClick={handleSavePersonal} disabled={saving}
                   className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
@@ -867,11 +942,12 @@ export default function TrackingDashboardPage() {
                       const cellHeight = Math.round(150 * expandedZoom);
                       if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
                       const personalOverride = d.target?.override_group;
+                      const t = d.target;
                       const workoutTitle = personalOverride
-                        ? (d.target?.note || 'Personal')
+                        ? (t?.title || t?.note || 'Personal')
                         : (d.group_workout?.title || '');
                       const workoutBody = personalOverride
-                        ? null
+                        ? (t?.main_session || t?.warmup || (t?.title ? t?.note : '') || '')
                         : (d.group_workout?.content || d.group_workout?.main_session || '');
                       const hasPersonal = d.target?.note;
                       const TYPE_FULL = {
@@ -882,7 +958,9 @@ export default function TrackingDashboardPage() {
                         intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
                       };
-                      const typeChip = !personalOverride && d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null;
+                      const typeChip = personalOverride
+                        ? (t?.workout_type ? TYPE_FULL[t.workout_type] : null)
+                        : (d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null);
                       return (
                         <button
                           key={d.date}

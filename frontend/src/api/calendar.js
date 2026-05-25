@@ -12,8 +12,13 @@ export const upsertGroupWorkout = (groupId, date, body = {}) =>
 export const deleteGroupWorkout = (groupId, date) =>
   client.delete(`/calendar/group/${groupId}/${date}`);
 
-export const upsertTarget = (athleteId, date, note, overrideGroup = false) =>
-  client.put(`/calendar/targets/${athleteId}/${date}`, { note, override_group: overrideGroup });
+export const upsertTarget = (athleteId, date, body) => {
+  // Backward-compat: callers can pass (note, override) as positional args
+  if (typeof body === 'string') {
+    body = { note: body, override_group: arguments[3] || false };
+  }
+  return client.put(`/calendar/targets/${athleteId}/${date}`, body);
+};
 
 export const deleteTarget = (athleteId, date) =>
   client.delete(`/calendar/targets/${athleteId}/${date}`);

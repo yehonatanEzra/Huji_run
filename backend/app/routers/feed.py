@@ -57,6 +57,7 @@ def _build_announcement_out(ann: Announcement, user_id: int, db: Session) -> Ann
         id=ann.id,
         title=ann.title,
         body=ann.body,
+        author_id=ann.author_id,
         author_name=ann.author.full_name,
         author_role=ann.author.role,
         author_photo_url=author_photo,
@@ -90,32 +91,58 @@ def get_feed(
 @router.post("", response_model=AnnouncementOut, status_code=201)
 def create_announcement(
     body: AnnouncementCreate,
-    coach: User = Depends(require_coach),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Athletes can only post to their own group; they can't post globally.
+    if current_user.role != "coach":
+        if not body.training_group_id:
+            raise HTTPException(status_code=403, detail="Only coaches can post to all members")
+        if body.training_group_id != current_user.training_group_id:
+            raise HTTPException(status_code=403, detail="You can only post in your own group")
     ann = Announcement(
         title=body.title,
         body=body.body,
-        author_id=coach.id,
+        author_id=current_user.id,
         training_group_id=body.training_group_id,
     )
     db.add(ann)
     db.commit()
     db.refresh(ann)
-    return _build_announcement_out(ann, coach.id, db)
+    return _build_announcement_out(ann, current_user.id, db)
 
 
-@router.delete("/{announcement_id}", status_code=204)
-def delete_announcement(
+@router.patch("/{announcement_id}", response_model=AnnouncementOut)
+def update_announcement(
     announcement_id: int,
-    coach: User = Depends(require_coach),
+    body: AnnouncementCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     ann = db.get(Announcement, announcement_id)
     if not ann:
         raise HTTPException(status_code=404, detail="Not found")
-    if ann.author_id != coach.id:
-        raise HTTPException(status_code=403, detail="Only the author can delete")
+    if ann.author_id != current_user.id and current_user.role != "coach":
+        raise HTTPException(status_code=403, detail="Only the author or a coach can edit")
+    ann.title = body.title
+    ann.body = body.body
+    # training_group_id stays the same — moving a post between audiences isn't supported
+    db.commit()
+    db.refresh(ann)
+    return _build_announcement_out(ann, current_user.id, db)
+
+
+@router.delete("/{announcement_id}", status_code=204)
+def delete_announcement(
+    announcement_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ann = db.get(Announcement, announcement_id)
+    if not ann:
+        raise HTTPException(status_code=404, detail="Not found")
+    if ann.author_id != current_user.id and current_user.role != "coach":
+        raise HTTPException(status_code=403, detail="Only the author or a coach can delete")
     db.delete(ann)
     db.commit()
 

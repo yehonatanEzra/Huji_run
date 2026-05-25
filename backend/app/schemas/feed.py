@@ -30,6 +30,7 @@ class AnnouncementOut(BaseModel):
     id: int
     title: str
     body: str
+    author_id: int
     author_name: str
     author_role: str = "athlete"
     author_photo_url: Optional[str] = None

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
-import { listRaces, getRace } from '../../api/races';
+import { listRaces, getRace, updateResult, deleteResult, updateRace } from '../../api/races';
 import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
 import Modal from '../../components/ui/Modal';
@@ -24,6 +24,55 @@ export default function TrackingDashboardPage() {
   const [profileMonth, setProfileMonth] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(1);
+
+  // Editing a PB / manual race history result
+  const [editingResult, setEditingResult] = useState(null);
+  const [editResultMin, setEditResultMin] = useState('');
+  const [editResultSec, setEditResultSec] = useState('');
+  const [editResultName, setEditResultName] = useState('');
+  const [editResultSaving, setEditResultSaving] = useState(false);
+
+  const openEditResult = (item) => {
+    setEditingResult(item);
+    const total = item.time_seconds || 0;
+    setEditResultMin(Math.floor(total / 60).toString());
+    setEditResultSec((total % 60).toString().padStart(2, '0'));
+    setEditResultName(item.race_name || '');
+  };
+
+  const handleSaveEditResult = async () => {
+    if (!editingResult || !profile) return;
+    const min = parseInt(editResultMin) || 0;
+    const sec = parseInt(editResultSec) || 0;
+    const totalSec = min * 60 + sec;
+    if (totalSec <= 0) return;
+    setEditResultSaving(true);
+    try {
+      const timeRaw = `${min}:${sec.toString().padStart(2, '0')}`;
+      await updateResult(editingResult.race_id, editingResult.heat_id, editingResult.result_id, {
+        athlete_name: profile.full_name,
+        time_raw: timeRaw,
+        gender: profile.gender,
+      });
+      if (editingResult.is_manual && editResultName.trim() !== (editingResult.race_name || '')) {
+        await updateRace(editingResult.race_id, { name: editResultName.trim() });
+      }
+      const { data } = await getAthleteProfile(profile.id);
+      setProfile(data);
+      setEditingResult(null);
+    } catch (err) { console.error(err); }
+    finally { setEditResultSaving(false); }
+  };
+
+  const handleDeleteResult = async (item) => {
+    if (!profile) return;
+    if (!window.confirm(`Delete this ${item.distance_display || item.distance_m + 'm'} entry?`)) return;
+    try {
+      await deleteResult(item.race_id, item.heat_id, item.result_id);
+      const { data } = await getAthleteProfile(profile.id);
+      setProfile(data);
+    } catch (err) { console.error(err); }
+  };
   const [showPBForm, setShowPBForm] = useState(false);
   const [pbMode, setPbMode] = useState('manual');
   const [pbForm, setPbForm] = useState({ distance_m: '', time_min: '', time_sec: '', competition_name: '' });
@@ -543,9 +592,17 @@ export default function TrackingDashboardPage() {
                   {profile.personal_bests.map((pb) => (
                     <div key={pb.distance_m} className="flex items-center justify-between bg-yellow-50 rounded-lg px-3 py-2 text-sm">
                       <span className="font-semibold text-yellow-800">{pb.distance_display}</span>
-                      <div className="text-right">
-                        <span className="font-bold text-yellow-900">{pb.time_display}</span>
-                        <span className="text-xs text-gray-500 ml-2">{pb.race_name}</span>
+                      <div className="flex items-center gap-2">
+                        <div className="text-right">
+                          <span className="font-bold text-yellow-900">{pb.time_display}</span>
+                          {pb.race_name && <span className="text-xs text-gray-500 ml-2">{pb.race_name}</span>}
+                        </div>
+                        {pb.result_id && (
+                          <div className="flex gap-1">
+                            <button onClick={() => openEditResult(pb)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                            <button onClick={() => handleDeleteResult(pb)} className="text-xs text-red-500 hover:underline">×</button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -561,11 +618,19 @@ export default function TrackingDashboardPage() {
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {profile.race_history.map((r, i) => (
                     <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
-                      <div>
-                        <p className="font-medium text-gray-800">{r.race_name}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-gray-800 truncate">{r.race_name || (r.is_manual ? '—' : 'Race')}</p>
                         <p className="text-xs text-gray-500">{format(new Date(r.race_date + 'T00:00'), 'MMM d, yyyy')} · {r.distance_display}</p>
                       </div>
-                      <span className="font-semibold text-gray-700">{r.time_display}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-700">{r.time_display}</span>
+                        {r.is_manual && r.result_id && (
+                          <div className="flex gap-1">
+                            <button onClick={() => openEditResult(r)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                            <button onClick={() => handleDeleteResult(r)} className="text-xs text-red-500 hover:underline">×</button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -924,6 +989,45 @@ export default function TrackingDashboardPage() {
               </div>
             </div>
           </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit PB / manual result modal */}
+      <Modal open={!!editingResult} onClose={() => setEditingResult(null)}
+        title={editingResult ? `Edit ${editingResult.distance_display || editingResult.distance_m + 'm'}` : 'Edit result'}>
+        {editingResult && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-gray-600 mb-1">Time</p>
+              <div className="flex gap-2 items-center">
+                <input type="number" min="0" value={editResultMin}
+                  onChange={(e) => setEditResultMin(e.target.value)}
+                  placeholder="mm" className="w-20 border rounded-lg px-3 py-2 text-sm" />
+                <span className="text-gray-400">:</span>
+                <input type="number" min="0" max="59" value={editResultSec}
+                  onChange={(e) => setEditResultSec(e.target.value)}
+                  placeholder="ss" className="w-20 border rounded-lg px-3 py-2 text-sm" />
+                <span className="text-xs text-gray-500">min:sec</span>
+              </div>
+            </div>
+            {editingResult.is_manual && (
+              <div>
+                <p className="text-xs font-semibold text-gray-600 mb-1">Competition name (optional)</p>
+                <input type="text" value={editResultName}
+                  onChange={(e) => setEditResultName(e.target.value)}
+                  placeholder="e.g. Tel Aviv Half"
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+            )}
+            <div className="flex gap-2 pt-1">
+              <button onClick={handleSaveEditResult} disabled={editResultSaving}
+                className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {editResultSaving ? 'Saving…' : 'Save'}</button>
+              <button onClick={() => setEditingResult(null)}
+                className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                Cancel</button>
+            </div>
           </div>
         )}
       </Modal>

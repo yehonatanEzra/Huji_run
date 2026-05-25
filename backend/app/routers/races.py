@@ -477,7 +477,14 @@ def delete_result(
     if not result or result.heat_id != heat_id:
         raise HTTPException(status_code=404, detail="Result not found")
     gender = result.gender
+    distance_m = heat.distance_m
+    race = db.get(Race, race_id)
     db.delete(result)
     db.flush()
-    refresh_hall_of_fame(db, heat.distance_m, gender)
+    # If this was the last result on a manual-PB race, clean up the orphan race+heat
+    if race and race.is_manual:
+        remaining = db.query(Result).join(Heat, Result.heat_id == Heat.id).filter(Heat.race_id == race_id).count()
+        if remaining == 0:
+            db.delete(race)  # cascades to heats
+    refresh_hall_of_fame(db, distance_m, gender)
     db.commit()

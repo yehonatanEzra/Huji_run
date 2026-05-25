@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import date, datetime
-from sqlalchemy import Integer, String, Text, Date, DateTime, ForeignKey, Enum, func, UniqueConstraint, CheckConstraint
+from sqlalchemy import Integer, String, Text, Date, DateTime, Boolean, ForeignKey, Enum, func, UniqueConstraint, CheckConstraint
+from sqlalchemy.sql.expression import false
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
@@ -16,6 +17,9 @@ class Race(Base):
     race_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # Hidden races back manual-PB entries — kept so PBs/HoF link to a Result+Heat,
+    # but excluded from the public Races list.
+    is_manual: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
 
     heats = relationship("Heat", back_populates="race", cascade="all, delete-orphan")
     hall_of_fame_entries = relationship("HallOfFame", back_populates="race")

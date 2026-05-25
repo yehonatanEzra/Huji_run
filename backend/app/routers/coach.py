@@ -575,6 +575,7 @@ def add_athlete_pb(
         name=race_name,
         race_date=date.today(),
         created_by=coach.id,
+        is_manual=True,
     )
     db.add(race)
     db.flush()

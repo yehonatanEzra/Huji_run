@@ -88,6 +88,24 @@ def _migrate_group_workout_columns():
 
 _migrate_group_workout_columns()
 
+
+def _migrate_race_is_manual():
+    """Add the is_manual flag to races if missing. Works on SQLite + Postgres."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "races" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("races")}
+    if "is_manual" in existing:
+        return
+    default_clause = "FALSE" if engine.dialect.name != "sqlite" else "0"
+    with engine.connect() as conn:
+        conn.execute(text(f"ALTER TABLE races ADD COLUMN is_manual BOOLEAN NOT NULL DEFAULT {default_clause}"))
+        conn.commit()
+
+
+_migrate_race_is_manual()
+
 app = FastAPI(title="Huji Run API", version="1.0.0")
 
 app.add_middleware(

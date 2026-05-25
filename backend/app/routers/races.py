@@ -45,7 +45,7 @@ def list_races(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = db.query(Race)
+    q = db.query(Race).filter(Race.is_manual == False)  # noqa: E712
     if mine:
         result_race_ids = (
             db.query(Heat.race_id)

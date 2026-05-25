@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths } from 'date-fns';
+import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getWeek, submitLog } from '../../api/calendar';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
@@ -10,6 +10,8 @@ export default function CalendarPage() {
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
+  const [monthExpanded, setMonthExpanded] = useState(false);
+  const [expandedZoom, setExpandedZoom] = useState(1);
   const [logForm, setLogForm] = useState({ status: 'missed', notes: '' });
   const [saving, setSaving] = useState(false);
 
@@ -94,6 +96,19 @@ export default function CalendarPage() {
             {format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}
           </span>
           <div className="flex items-center gap-1.5">
+            {day.group_workout?.workout_type && (() => {
+              const TYPE = {
+                simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
+                easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
+                tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
+                long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
+                intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
+                fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
+              };
+              const t = TYPE[day.group_workout.workout_type];
+              if (!t) return null;
+              return <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.color}`}>{t.label}</span>;
+            })()}
             {hasLog?.kudos_count > 0 && (
               <span className="text-xs text-pink-600">👏 {hasLog.kudos_count}</span>
             )}
@@ -127,7 +142,17 @@ export default function CalendarPage() {
       weeks.push(days.slice(i, i + 7));
     }
     return (
-      <div className="space-y-4">
+      <div>
+        <div className="flex items-center justify-end mb-2">
+          <button
+            onClick={() => setMonthExpanded(true)}
+            className="text-xs text-blue-600 hover:underline font-medium"
+            title="Open larger view"
+          >
+            ⛶ Expand
+          </button>
+        </div>
+        <div className="space-y-4">
         {weeks.map((week, wi) => (
           <div key={wi}>
             <p className="text-xs text-gray-400 mb-1 font-medium">
@@ -139,14 +164,28 @@ export default function CalendarPage() {
                 const hasLog = day.workout_log;
                 const hasWorkout = day.group_workout || day.individual_target;
                 const inMonth = new Date(day.date + 'T00:00').getMonth() === currentDate.getMonth();
-                return (
+                  const TYPE_ABBR = {
+                    simple:    { abbr: 'Oth',  color: 'bg-gray-100 text-gray-700' },
+                    easy:      { abbr: 'Easy', color: 'bg-emerald-100 text-emerald-700' },
+                    tempo:     { abbr: 'Tem',  color: 'bg-orange-100 text-orange-700' },
+                    long:      { abbr: 'Long', color: 'bg-purple-100 text-purple-700' },
+                    intervals: { abbr: 'Int',  color: 'bg-red-100 text-red-700' },
+                    fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
+                  };
+                  const typeBadge = day.group_workout?.workout_type ? TYPE_ABBR[day.group_workout.workout_type] : null;
+                  return (
                   <button
                     key={day.date}
                     onClick={() => openDay(day)}
-                    className={`flex flex-col items-center p-1.5 rounded-lg border text-xs transition hover:shadow-sm ${
+                    className={`flex flex-col items-center p-1.5 rounded-lg border text-xs transition hover:shadow-sm relative ${
                       !inMonth ? 'opacity-40' : ''
                     } ${isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white'}`}
                   >
+                    {typeBadge && (
+                      <span className={`absolute top-0.5 right-0.5 text-[8px] px-1 py-px rounded font-semibold leading-none ${typeBadge.color}`}>
+                        {typeBadge.abbr}
+                      </span>
+                    )}
                     <span className="font-semibold">{format(new Date(day.date + 'T00:00'), 'd')}</span>
                     <span className="text-[10px] text-gray-400">{format(new Date(day.date + 'T00:00'), 'EEE')}</span>
                     <div className="flex gap-0.5 mt-1">
@@ -164,6 +203,7 @@ export default function CalendarPage() {
             </div>
           </div>
         ))}
+        </div>
       </div>
     );
   };
@@ -307,6 +347,182 @@ export default function CalendarPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Expanded month view */}
+      <Modal open={monthExpanded} onClose={() => setMonthExpanded(false)} title={format(currentDate, 'MMMM yyyy')}>
+        <div>
+          {/* Zoom controls */}
+          <div className="flex items-center justify-end gap-2 mb-2">
+            <span className="text-xs text-gray-500">Zoom</span>
+            <button
+              onClick={() => setExpandedZoom(z => Math.max(0.3, +(z - 0.05).toFixed(2)))}
+              disabled={expandedZoom <= 0.3}
+              className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+            >−</button>
+            <span className="text-xs font-mono w-10 text-center">{Math.round(expandedZoom * 100)}%</span>
+            <button
+              onClick={() => setExpandedZoom(z => Math.min(1.8, +(z + 0.05).toFixed(2)))}
+              disabled={expandedZoom >= 1.8}
+              className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+            >+</button>
+            <button onClick={() => setExpandedZoom(1)} className="text-xs text-blue-600 hover:underline ml-1">Reset</button>
+          </div>
+
+          <div className="overflow-x-auto -mx-2">
+            <div className="px-2" style={{ minWidth: `${Math.round(960 * expandedZoom)}px` }}>
+              <div className="grid gap-1 mb-1 text-xs text-gray-500 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => <div key={i}>{d}</div>)}
+                <div className="text-right pr-1">Week</div>
+              </div>
+              <div className="space-y-1">
+                {(() => {
+                  const weeks = [];
+                  for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+                  return weeks;
+                })().map((week, wi) => {
+                  let wkKm = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
+                  for (const d of week) {
+                    if (!isSameMonth(new Date(d.date + 'T00:00'), currentDate)) continue;
+                    const log = d.workout_log;
+                    if (!log) continue;
+                    if (log.distance_km) wkKm += log.distance_km;
+                    const st = log.status || (log.completed ? 'completed' : 'missed');
+                    if (st === 'completed') wkDone++;
+                    else if (st === 'partial') wkPart++;
+                    else wkMiss++;
+                  }
+                  return (
+                  <div key={wi} className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
+                    {week.map(d => {
+                      const dayDate = new Date(d.date + 'T00:00');
+                      const inMonth = isSameMonth(dayDate, currentDate);
+                      const status = d.workout_log ? (d.workout_log.status || (d.workout_log.completed ? 'completed' : 'missed')) : null;
+                      const bg = !inMonth ? 'bg-transparent border-transparent' :
+                        status === 'completed' ? 'bg-green-50 border-green-300 hover:bg-green-100' :
+                        status === 'partial' ? 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100' :
+                        status === 'missed' ? 'bg-red-50 border-red-300 hover:bg-red-100' :
+                        'bg-white border-gray-200 hover:bg-gray-50';
+                      const cellHeight = Math.round(150 * expandedZoom);
+                      if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
+                      const personalOverride = d.individual_target?.override_group;
+                      const workoutTitle = personalOverride
+                        ? (d.individual_target?.note || 'Personal')
+                        : (d.group_workout?.title || '');
+                      const workoutBody = personalOverride
+                        ? null
+                        : (d.group_workout?.content || d.group_workout?.main_session || '');
+                      const hasPersonal = d.individual_target?.note;
+                      const TYPE_FULL = {
+                        simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
+                        easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
+                        tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
+                        long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
+                        intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
+                        fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
+                      };
+                      const typeChip = !personalOverride && d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null;
+                      return (
+                        <button
+                          key={d.date}
+                          onClick={() => { setMonthExpanded(false); openDay(d); }}
+                          className={`rounded-lg border ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                          style={{ minHeight: `${cellHeight}px` }}
+                        >
+                          <div className="flex items-start justify-between px-2 pt-1.5">
+                            <span className="text-[11px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
+                            {typeChip && (
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${typeChip.color}`}>
+                                {typeChip.label}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Top half: planned workout */}
+                          <div className="flex-1 px-2 py-1 min-h-0">
+                            {workoutTitle && (
+                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-700' : 'text-gray-800'}`}>
+                                {workoutTitle}
+                              </p>
+                            )}
+                            {workoutBody && (
+                              <p className="text-[10px] text-gray-500 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>
+                            )}
+                          </div>
+
+                          {/* Divider */}
+                          <div className="border-t border-dashed border-gray-300/70 mx-1" />
+
+                          {/* Bottom half: my report */}
+                          <div className="flex-1 px-2 py-1 min-h-0">
+                            {d.workout_log ? (
+                              <>
+                                {d.workout_log.notes && (
+                                  <p className="text-[10px] text-gray-700 leading-tight line-clamp-2 whitespace-pre-wrap">{d.workout_log.notes}</p>
+                                )}
+                                {d.workout_log.distance_km > 0 && (
+                                  <p className="text-xs text-blue-700 font-bold mt-0.5">{d.workout_log.distance_km.toFixed(1)}k</p>
+                                )}
+                              </>
+                            ) : (
+                              <p className="text-[10px] text-gray-300 italic">No report</p>
+                            )}
+                          </div>
+
+                          {hasPersonal && !personalOverride && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                        </button>
+                      );
+                    })}
+                    {/* Week stats column */}
+                    <div className="flex flex-col items-end justify-center text-right px-1 text-xs">
+                      <div className="font-bold text-blue-700">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      <div className="flex gap-1.5 mt-1 text-[11px] font-mono">
+                        <span className="text-green-700">V{wkDone}</span>
+                        <span className="text-yellow-700">~{wkPart}</span>
+                        <span className="text-red-700">X{wkMiss}</span>
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+
+              {/* Month totals */}
+              {(() => {
+                let mKm = 0, mDone = 0, mPart = 0, mMiss = 0;
+                for (const d of days) {
+                  if (!isSameMonth(new Date(d.date + 'T00:00'), currentDate)) continue;
+                  const log = d.workout_log;
+                  if (!log) continue;
+                  if (log.distance_km) mKm += log.distance_km;
+                  const st = log.status || (log.completed ? 'completed' : 'missed');
+                  if (st === 'completed') mDone++;
+                  else if (st === 'partial') mPart++;
+                  else mMiss++;
+                }
+                return (
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+                    <span className="text-sm font-semibold text-gray-700">{format(currentDate, 'MMMM')} totals</span>
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="font-bold text-blue-700">{mKm.toFixed(1)} km</span>
+                      <div className="flex gap-2 text-xs font-mono">
+                        <span className="text-green-700">V{mDone}</span>
+                        <span className="text-yellow-700">~{mPart}</span>
+                        <span className="text-red-700">X{mMiss}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="flex items-center justify-between mt-3">
+                <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
+                <span className="text-sm font-medium">{format(currentDate, 'MMMM yyyy')}</span>
+                <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </Modal>
     </div>
   );

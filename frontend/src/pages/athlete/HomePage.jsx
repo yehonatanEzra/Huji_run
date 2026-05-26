@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getHomeSummary } from '../../api/home';
 import { useAuth } from '../../contexts/AuthContext';
 import TrainingTicket from '../../components/TrainingTicket';
+import AnimatedWelcome from '../../components/AnimatedWelcome';
 import Spinner from '../../components/ui/Spinner';
 
 export default function HomePage() {
@@ -43,9 +44,11 @@ export default function HomePage() {
 
   return (
     <div className="pb-8">
-      <div className="mb-4 px-1">
-        <p className="text-sm text-gray-500">Welcome back,</p>
-        <h2 className="text-xl font-bold text-gray-900">{user?.full_name || 'Runner'}</h2>
+      <div className="mb-6 px-1">
+        <p className="text-sm font-semibold uppercase tracking-widest text-blue-700">Welcome back,</p>
+        <div className="mt-1">
+          <AnimatedWelcome name={user?.full_name || 'Runner'} />
+        </div>
       </div>
 
       <TrainingTicket

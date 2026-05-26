@@ -52,15 +52,13 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
   })();
 
   const bodyBg = isRace ? 'bg-indigo-50' : 'bg-white';
-  const stubBg = isRace ? 'bg-indigo-100/60' : 'bg-gray-50';
+  const stubBg = isRace ? 'bg-indigo-100/60' : 'bg-blue-50';
   const titleGradient = isRace
     ? 'bg-gradient-to-br from-indigo-700 to-purple-600'
-    : 'bg-gradient-to-br from-gray-900 to-indigo-600';
+    : 'bg-gradient-to-br from-gray-900 to-blue-600';
   // Notch (perforation hole) color must match the *outer* page background so it
-  // looks like the card was actually punched through. Page bg is gray-50.
-  const notchBg = 'bg-gray-50';
-  // Inside the stub the notches need to match the stub bg, not the body bg
-  const innerNotchBg = isRace ? 'bg-indigo-100' : 'bg-gray-50';
+  // looks like the card was actually punched through. Page bg is blue-50.
+  const notchBg = 'bg-blue-50';
 
   const ctaLabel = workout ? "Open today's workout" : 'Open training calendar';
 

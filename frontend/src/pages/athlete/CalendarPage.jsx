@@ -3,6 +3,7 @@ import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWe
 import { getWeek, submitLog } from '../../api/calendar';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -421,6 +422,14 @@ export default function CalendarPage() {
                 {saving ? 'Saving...' : 'Save Report'}
               </button>
             </div>
+
+            {selectedDay.workout_log?.id ? (
+              <WorkoutCommentThread workoutLogId={selectedDay.workout_log.id} />
+            ) : (
+              <div className="border-t pt-3">
+                <p className="text-xs text-gray-400 italic">💬 Save a report to enable comments with your coach.</p>
+              </div>
+            )}
           </div>
         )}
       </Modal>

@@ -208,10 +208,12 @@ def dashboard_week(
     group_map = {g.id: g.name for g in db.query(TrainingGroup).all()}
 
     from ..models.kudos import Kudos
+    from ..models.workout import WorkoutLogComment
     from ..routers.kudos import ALLOWED_EMOJI as KUDOS_EMOJI
     log_ids = [l.id for l in logs]
     per_log_counts: dict[int, dict[str, int]] = {}
     per_log_mine: dict[int, set[str]] = {}
+    per_log_comment_count: dict[int, int] = {}
     if log_ids:
         for log_id, emoji, c in (
             db.query(Kudos.workout_log_id, Kudos.emoji, sa_func.count(Kudos.id))
@@ -226,6 +228,13 @@ def dashboard_week(
             .all()
         ):
             per_log_mine.setdefault(log_id, set()).add(emoji)
+        for log_id, c in (
+            db.query(WorkoutLogComment.workout_log_id, sa_func.count(WorkoutLogComment.id))
+            .filter(WorkoutLogComment.workout_log_id.in_(log_ids))
+            .group_by(WorkoutLogComment.workout_log_id)
+            .all()
+        ):
+            per_log_comment_count[log_id] = c
 
     rows = []
     for athlete in athletes:
@@ -250,6 +259,7 @@ def dashboard_week(
                 ]
                 log_out.kudos_count = sum(counts.values())
                 log_out.has_kudos = bool(mine)
+                log_out.comment_count = per_log_comment_count.get(log.id, 0)
             days.append({
                 "date": d,
                 "log": log_out,
@@ -510,10 +520,12 @@ def get_athlete_week(
             gw_map[gw.date] = gw
 
     from ..models.kudos import Kudos
+    from ..models.workout import WorkoutLogComment
     from ..routers.kudos import ALLOWED_EMOJI as KUDOS_EMOJI
     log_ids = [l.id for l in logs]
     per_log_counts: dict[int, dict[str, int]] = {}
     per_log_mine: dict[int, set[str]] = {}
+    per_log_comment_count: dict[int, int] = {}
     if log_ids:
         for log_id, emoji, c in (
             db.query(Kudos.workout_log_id, Kudos.emoji, sa_func.count(Kudos.id))
@@ -528,6 +540,13 @@ def get_athlete_week(
             .all()
         ):
             per_log_mine.setdefault(log_id, set()).add(emoji)
+        for log_id, c in (
+            db.query(WorkoutLogComment.workout_log_id, sa_func.count(WorkoutLogComment.id))
+            .filter(WorkoutLogComment.workout_log_id.in_(log_ids))
+            .group_by(WorkoutLogComment.workout_log_id)
+            .all()
+        ):
+            per_log_comment_count[log_id] = c
 
     def _log_payload(log):
         counts = per_log_counts.get(log.id, {})
@@ -544,6 +563,7 @@ def get_athlete_week(
             "notes": log.notes,
             "kudos_count": sum(counts.values()),
             "reactions": reactions,
+            "comment_count": per_log_comment_count.get(log.id, 0),
         }
 
     days = []

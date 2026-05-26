@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const athleteItems = [
+  { to: '/home', label: 'Home', icon: '🎟️' },
   { to: '/calendar', label: 'Training', icon: '🏋️' },
   { to: '/feed', label: 'Feed', icon: '📢' },
   { to: '/races', label: 'Races', icon: '🏆' },

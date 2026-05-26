@@ -48,6 +48,8 @@ export default function WorkoutPublisherPage() {
     cooldown: '',
     draft_content: '',
   });
+  const [broadcastToAll, setBroadcastToAll] = useState(true);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState([]);
   const [saving, setSaving] = useState(false);
   const [monthExpanded, setMonthExpanded] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(1);
@@ -110,6 +112,13 @@ export default function WorkoutPublisherPage() {
       cooldown: gw?.cooldown || '',
       draft_content: gw?.draft_content || '',
     });
+    const existingRecipients = gw?.recipient_ids || [];
+    setBroadcastToAll(existingRecipients.length === 0);
+    setSelectedRecipientIds(existingRecipients);
+    // Ensure we have the group's members loaded for the recipient checkboxes
+    if (!groupDetail || groupDetail.id !== selectedGroup.id) {
+      fetchGroupDetail();
+    }
   };
 
   const handleSave = async (overrides = {}) => {
@@ -124,6 +133,8 @@ export default function WorkoutPublisherPage() {
       } else if (['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(payload.workout_type)) {
         payload.content = '';
       }
+      // Recipient targeting: empty list = broadcast to all, non-empty = restrict
+      payload.recipient_ids = broadcastToAll ? [] : selectedRecipientIds;
       await upsertGroupWorkout(selectedGroup.id, selectedDay.date, payload);
       setSelectedDay(null);
       fetchData();
@@ -435,6 +446,58 @@ export default function WorkoutPublisherPage() {
                     className="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-green-50/50" />
                 </div>
               )}
+
+              {/* Recipients */}
+              <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-gray-700">Who gets this workout?</p>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={broadcastToAll}
+                      onChange={(e) => {
+                        setBroadcastToAll(e.target.checked);
+                        if (e.target.checked) setSelectedRecipientIds([]);
+                      }}
+                      className="w-4 h-4 rounded"
+                    />
+                    <span className="text-xs text-gray-700 font-medium">All athletes</span>
+                  </label>
+                </div>
+                {!broadcastToAll && (
+                  groupDetail && groupDetail.members.length > 0 ? (
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                      {groupDetail.members.map(m => {
+                        const checked = selectedRecipientIds.includes(m.id);
+                        return (
+                          <label key={m.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                setSelectedRecipientIds(prev =>
+                                  e.target.checked
+                                    ? [...prev, m.id]
+                                    : prev.filter(id => id !== m.id)
+                                );
+                              }}
+                              className="w-4 h-4 rounded"
+                            />
+                            <span className="text-sm">{m.full_name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : groupDetail ? (
+                    <p className="text-xs text-gray-400 italic">No athletes in this group</p>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">Loading members…</p>
+                  )
+                )}
+                {!broadcastToAll && selectedRecipientIds.length === 0 && (
+                  <p className="text-[11px] text-orange-600">⚠ No athletes selected — this workout won't be visible to anyone.</p>
+                )}
+              </div>
 
               {/* Draft */}
               <div>

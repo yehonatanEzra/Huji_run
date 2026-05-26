@@ -5,13 +5,16 @@ from pydantic import BaseModel
 
 
 class GroupWorkoutUpsert(BaseModel):
-    workout_type: Optional[str] = None  # simple|easy|tempo|long|intervals|fartlek
+    workout_type: Optional[str] = None  # simple|easy|tempo|long|intervals|fartlek|race|rest
     title: Optional[str] = None
     content: Optional[str] = None
     warmup: Optional[str] = None
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
     draft_content: Optional[str] = None
+    # None = leave unchanged. Empty list [] = broadcast to all (no targeting).
+    # Non-empty list = only these athletes see this workout.
+    recipient_ids: Optional[List[int]] = None
 
 
 class GroupWorkoutOut(BaseModel):
@@ -24,6 +27,7 @@ class GroupWorkoutOut(BaseModel):
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
     draft_content: Optional[str] = None
+    recipient_ids: List[int] = []
     model_config = {"from_attributes": True}
 
 

@@ -6,10 +6,12 @@ import { listRaces, getRace, updateResult, deleteResult, updateRace } from '../.
 const WORKOUT_TYPES = [
   { value: 'simple',    label: 'Other',     color: 'bg-gray-100 text-gray-700',       structured: false },
   { value: 'easy',      label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700', structured: false },
+  { value: 'rest',      label: 'Rest day',  color: 'bg-slate-100 text-slate-700',     structured: false },
   { value: 'tempo',     label: 'Tempo',     color: 'bg-orange-100 text-orange-700',   structured: true },
   { value: 'long',      label: 'Long run',  color: 'bg-purple-100 text-purple-700',   structured: true },
   { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',         structured: true },
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
+  { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 import { upsertTarget, deleteTarget } from '../../api/calendar';
@@ -123,7 +125,7 @@ export default function TrackingDashboardPage() {
     setSaving(true);
     try {
       const f = personalForm;
-      const structured = ['tempo', 'long', 'intervals', 'fartlek'].includes(f.workout_type);
+      const structured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(f.workout_type);
       const hasContent = structured
         ? (f.warmup.trim() || f.main_session.trim() || f.cooldown.trim() || f.title.trim())
         : (f.note.trim() || f.title.trim());
@@ -287,6 +289,9 @@ export default function TrackingDashboardPage() {
                   {athlete.days.map((d) => {
                     const log = d.log;
                     const hasTarget = !!d.target;
+                    const cellIsRace = d.target?.override_group
+                      ? d.target?.workout_type === 'race'
+                      : d.group_workout?.workout_type === 'race';
                     let bg = 'bg-gray-100';
                     let text = '-';
                     if (log) {
@@ -302,7 +307,7 @@ export default function TrackingDashboardPage() {
                       <td key={d.date} className="px-2 py-2 text-center">
                         <button
                           onClick={() => openCell(athlete, d)}
-                          className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${bg} font-bold text-[10px] hover:ring-2 hover:ring-blue-400 transition relative`}
+                          className={`inline-flex items-center justify-center w-9 h-9 rounded-full ${bg} font-bold text-[10px] hover:ring-2 hover:ring-blue-400 transition relative ${cellIsRace ? 'ring-2 ring-indigo-500' : ''}`}
                           title={log?.notes || ''}
                         >
                           {text}
@@ -400,15 +405,18 @@ export default function TrackingDashboardPage() {
               const renderDay = (d) => {
                 const dayDate = new Date(d.date + 'T00:00');
                 const w = workoutDisplay(d);
+                const cellIsRace = d.target?.override_group
+                  ? d.target?.workout_type === 'race'
+                  : d.group_workout?.workout_type === 'race';
                 return (
                   <button
                     key={d.date}
                     onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                    className={`w-full text-left rounded-lg px-3 py-2 text-sm hover:ring-2 hover:ring-blue-300 transition ${d.log ? (
+                    className={`w-full text-left rounded-lg px-3 py-2 text-sm hover:ring-2 hover:ring-blue-300 transition ${cellIsRace ? 'border-2 border-indigo-500' : ''} ${d.log ? (
                       d.log.completed ? 'bg-green-50' : d.log.status === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
                     ) : 'bg-gray-50'}`}>
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-700 text-xs">{format(dayDate, 'EEE, MMM d')}</span>
+                      <span className="font-medium text-gray-700 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}</span>
                       <span className={`text-xs font-bold ${d.log ? (
                         d.log.completed ? 'text-green-700' : d.log.status === 'partial' ? 'text-yellow-700' : 'text-red-700'
                       ) : 'text-gray-400'}`}>
@@ -512,20 +520,29 @@ export default function TrackingDashboardPage() {
                                   const TYPE_ABBR = {
                                     simple:    { abbr: 'Oth',  color: 'bg-gray-200 text-gray-700' },
                                     easy:      { abbr: 'Easy', color: 'bg-emerald-200 text-emerald-800' },
+                                    rest:      { abbr: 'Rest', color: 'bg-slate-200 text-slate-800' },
                                     tempo:     { abbr: 'Tem',  color: 'bg-orange-200 text-orange-800' },
                                     long:      { abbr: 'Long', color: 'bg-purple-200 text-purple-800' },
                                     intervals: { abbr: 'Int',  color: 'bg-red-200 text-red-800' },
                                     fartlek:   { abbr: 'Fart', color: 'bg-pink-200 text-pink-800' },
+                                    race:      { abbr: 'Race', color: 'bg-indigo-200 text-indigo-800' },
                                   };
-                                  const typeBadge = d.group_workout?.workout_type ? TYPE_ABBR[d.group_workout.workout_type] : null;
+                                  const activeType = d.target?.override_group
+                                    ? d.target?.workout_type
+                                    : d.group_workout?.workout_type;
+                                  const typeBadge = activeType ? TYPE_ABBR[activeType] : null;
+                                  const cellIsRace = activeType === 'race';
                                   return (
                                     <button
                                       key={d.date}
                                       onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                                      className={`aspect-square rounded-md ${bg} relative flex flex-col items-center justify-center transition`}
+                                      className={`aspect-square rounded-md ${bg} relative flex flex-col items-center justify-center transition ${cellIsRace ? 'ring-2 ring-indigo-500' : ''}`}
                                       title={tooltipText || ''}
                                     >
-                                      {typeBadge && (
+                                      {cellIsRace && (
+                                        <span className="absolute top-0 left-0 text-[10px] leading-none">🏁</span>
+                                      )}
+                                      {typeBadge && !cellIsRace && (
                                         <span className={`absolute top-0 left-0 text-[7px] px-0.5 rounded-br font-bold leading-none ${typeBadge.color}`}>
                                           {typeBadge.abbr}
                                         </span>
@@ -718,13 +735,17 @@ export default function TrackingDashboardPage() {
               {(() => {
                 const gw = selected.day.group_workout;
                 if (!gw) return <p className="text-sm text-gray-400 italic">No group workout for this day</p>;
-                const isStructured = ['tempo', 'long', 'intervals', 'fartlek'].includes(gw.workout_type);
-                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+                const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
+                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
+                const MAIN_LABEL = { race: 'Race' };
+                const middleLabel = MAIN_LABEL[gw.workout_type] || 'Main';
+                const gwIsRace = gw.workout_type === 'race';
                 return (
-                  <div className="space-y-1.5">
+                  <div className={`space-y-1.5 ${gwIsRace ? '-m-3 p-3 rounded-lg bg-indigo-50 border-2 border-indigo-500' : ''}`}>
                     {(gw.title || gw.workout_type) && (
                       <div className="flex items-center gap-2">
-                        {gw.title && <p className="text-sm font-semibold">{gw.title}</p>}
+                        {gw.title && <p className="text-sm font-semibold">{gwIsRace && '🏁 '}{gw.title}</p>}
+                        {!gw.title && gwIsRace && <p className="text-sm font-semibold">🏁 Race day</p>}
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-medium">
                           {TYPE_LABELS[gw.workout_type] || 'Simple'}
                         </span>
@@ -733,7 +754,7 @@ export default function TrackingDashboardPage() {
                     {isStructured ? (
                       <div className="text-sm space-y-1">
                         {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
-                        {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">Main · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                        {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">{middleLabel} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
                         {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
                       </div>
                     ) : (
@@ -848,7 +869,7 @@ export default function TrackingDashboardPage() {
                           placeholder="Warm-up" rows={1}
                           className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <textarea value={personalForm.main_session} onChange={(e) => setF('main_session', e.target.value)}
-                          placeholder="Main session" rows={2}
+                          placeholder={meta.mainLabel || 'Main session'} rows={2}
                           className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                         <textarea value={personalForm.cooldown} onChange={(e) => setF('cooldown', e.target.value)}
                           placeholder="Cool-down" rows={1}
@@ -953,19 +974,24 @@ export default function TrackingDashboardPage() {
                       const TYPE_FULL = {
                         simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
                         easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
+                        rest:      { label: 'Rest day',  color: 'bg-slate-100 text-slate-700' },
                         tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
                         long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
                         intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
+                        race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
                       };
                       const typeChip = personalOverride
                         ? (t?.workout_type ? TYPE_FULL[t.workout_type] : null)
                         : (d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null);
+                      const cellIsRace = personalOverride
+                        ? t?.workout_type === 'race'
+                        : d.group_workout?.workout_type === 'race';
                       return (
                         <button
                           key={d.date}
                           onClick={() => { setMonthExpanded(false); openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d); }}
-                          className={`rounded-lg border ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                          className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                           style={{ minHeight: `${cellHeight}px` }}
                         >
                           {/* Date row + type chip */}
@@ -982,8 +1008,10 @@ export default function TrackingDashboardPage() {
                           <div className="flex-1 px-2 py-1 min-h-0">
                             {workoutTitle ? (
                               <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-700' : 'text-gray-800'}`}>
-                                {workoutTitle}
+                                {cellIsRace && '🏁 '}{workoutTitle}
                               </p>
+                            ) : cellIsRace ? (
+                              <p className="text-xs font-semibold leading-tight text-indigo-700">🏁 Race</p>
                             ) : null}
                             {workoutBody && (
                               <p className="text-[10px] text-gray-500 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">

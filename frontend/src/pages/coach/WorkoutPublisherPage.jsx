@@ -7,12 +7,14 @@ import Spinner from '../../components/ui/Spinner';
 import { Link } from 'react-router-dom';
 
 const WORKOUT_TYPES = [
-  { value: 'simple',    label: 'Other',     abbr: 'Oth',  color: 'bg-gray-100 text-gray-700',     structured: false },
+  { value: 'simple',    label: 'Other',     abbr: 'Oth',  color: 'bg-gray-100 text-gray-700',       structured: false },
   { value: 'easy',      label: 'Easy run',  abbr: 'Easy', color: 'bg-emerald-100 text-emerald-700', structured: false },
-  { value: 'tempo',     label: 'Tempo',     abbr: 'Tem',  color: 'bg-orange-100 text-orange-700', structured: true },
-  { value: 'long',      label: 'Long run',  abbr: 'Long', color: 'bg-purple-100 text-purple-700', structured: true },
-  { value: 'intervals', label: 'Intervals', abbr: 'Int',  color: 'bg-red-100 text-red-700',       structured: true },
-  { value: 'fartlek',   label: 'Fartlek',   abbr: 'Fart', color: 'bg-pink-100 text-pink-700',     structured: true },
+  { value: 'rest',      label: 'Rest day',  abbr: 'Rest', color: 'bg-slate-100 text-slate-700',     structured: false },
+  { value: 'tempo',     label: 'Tempo',     abbr: 'Tem',  color: 'bg-orange-100 text-orange-700',   structured: true },
+  { value: 'long',      label: 'Long run',  abbr: 'Long', color: 'bg-purple-100 text-purple-700',   structured: true },
+  { value: 'intervals', label: 'Intervals', abbr: 'Int',  color: 'bg-red-100 text-red-700',         structured: true },
+  { value: 'fartlek',   label: 'Fartlek',   abbr: 'Fart', color: 'bg-pink-100 text-pink-700',       structured: true },
+  { value: 'race',      label: 'Race',      abbr: 'Race', color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
 ];
 
 const typeMeta = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
@@ -115,11 +117,11 @@ export default function WorkoutPublisherPage() {
     try {
       const payload = { ...form, ...overrides };
       // Clear fields not applicable to the selected type so the DB doesn't carry stale data
-      if (['simple', 'easy'].includes(payload.workout_type)) {
+      if (['simple', 'easy', 'rest'].includes(payload.workout_type)) {
         payload.warmup = '';
         payload.main_session = '';
         payload.cooldown = '';
-      } else if (['tempo', 'long', 'intervals', 'fartlek'].includes(payload.workout_type)) {
+      } else if (['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(payload.workout_type)) {
         payload.content = '';
       }
       await upsertGroupWorkout(selectedGroup.id, selectedDay.date, payload);
@@ -220,12 +222,19 @@ export default function WorkoutPublisherPage() {
                 const gw = day.group_workout;
                 const hasPublished = gw && (gw.content || gw.warmup || gw.main_session || gw.cooldown);
                 const tMeta = hasPublished ? typeMeta(gw.workout_type) : null;
+                const cellIsRace = gw?.workout_type === 'race';
                 return (
                   <button key={day.date} onClick={() => openDay(day)}
-                    className={`flex flex-col items-center p-1.5 rounded-lg border text-xs transition hover:shadow-sm relative ${
+                    className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
                       !inMonth ? 'opacity-40' : ''
-                    } ${hasPublished ? 'border-green-300 bg-green-50' : gw?.draft_content ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}>
-                    {tMeta && (
+                    } ${cellIsRace ? 'border-2 border-indigo-500 bg-indigo-50' :
+                       hasPublished ? 'border border-green-300 bg-green-50' :
+                       gw?.draft_content ? 'border border-yellow-300 bg-yellow-50' :
+                       'border border-gray-200 bg-white'}`}>
+                    {cellIsRace && (
+                      <span className="absolute top-0 left-0 text-[10px] leading-none">🏁</span>
+                    )}
+                    {tMeta && !cellIsRace && (
                       <span className={`absolute top-0 left-0 text-[7px] px-0.5 rounded-br font-bold leading-none ${tMeta.color}`}>
                         {tMeta.abbr}
                       </span>
@@ -328,11 +337,13 @@ export default function WorkoutPublisherPage() {
 
           {loading ? <Spinner /> : view === 'weekly' ? (
             <div className="space-y-2">
-              {days.map((day) => (
+              {days.map((day) => {
+                const isRace = day.group_workout?.workout_type === 'race';
+                return (
                 <button key={day.date} onClick={() => openDay(day)}
-                  className="w-full text-left p-3 rounded-xl border border-gray-200 bg-white hover:shadow-sm transition">
+                  className={`w-full text-left p-3 rounded-xl hover:shadow-sm transition ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' : 'border border-gray-200 bg-white'}`}>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
+                    <span className="text-sm font-semibold">{isRace && '🏁 '}{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
                     {renderDayBadges(day)}
                   </div>
                   {(() => {
@@ -343,7 +354,8 @@ export default function WorkoutPublisherPage() {
                     return <p className="text-sm text-gray-400 mt-1 italic">No workout set</p>;
                   })()}
                 </button>
-              ))}
+                );
+              })}
             </div>
           ) : renderMonthGrid()}
         </>
@@ -403,9 +415,9 @@ export default function WorkoutPublisherPage() {
                       className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
                   </div>
                   <div>
-                    <p className="text-[11px] text-gray-500 mb-0.5">Main session</p>
+                    <p className="text-[11px] text-gray-500 mb-0.5">{meta.mainLabel || 'Main session'}</p>
                     <textarea value={form.main_session} onChange={(e) => setField('main_session', e.target.value)}
-                      placeholder="e.g., 6x800m @ 5k pace, 2 min rest" rows={3}
+                      placeholder={meta.value === 'race' ? 'e.g., 10K' : 'e.g., 6x800m @ 5k pace, 2 min rest'} rows={3}
                       className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
                   </div>
                   <div>
@@ -552,11 +564,12 @@ export default function WorkoutPublisherPage() {
                         const body = hasPublished
                           ? (gw.content || gw.main_session || gw.warmup || '')
                           : (gw?.draft_content || '');
+                        const cellIsRace = gw?.workout_type === 'race';
                         return (
                           <button
                             key={d.date}
                             onClick={() => { setMonthExpanded(false); openDay(d); }}
-                            className={`rounded-lg border ${hasPublished ? 'border-green-300 bg-green-50' : gw?.draft_content ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'} relative flex flex-col text-left transition overflow-hidden`}
+                            className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${hasPublished ? (cellIsRace ? 'bg-indigo-50' : 'border-green-300 bg-green-50') : gw?.draft_content ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'} relative flex flex-col text-left transition overflow-hidden`}
                             style={{ minHeight: `${cellHeight}px` }}
                           >
                             <div className="flex items-start justify-between px-2 pt-1.5">
@@ -569,7 +582,10 @@ export default function WorkoutPublisherPage() {
                             </div>
                             <div className="flex-1 px-2 py-1 min-h-0">
                               {gw?.title && (
-                                <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-2">{gw.title}</p>
+                                <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-2">{cellIsRace && '🏁 '}{gw.title}</p>
+                              )}
+                              {!gw?.title && cellIsRace && (
+                                <p className="text-xs font-semibold text-indigo-700 leading-tight">🏁 Race</p>
                               )}
                               {body && (
                                 <p className={`text-[10px] leading-tight line-clamp-3 mt-0.5 whitespace-pre-wrap ${hasPublished ? 'text-gray-600' : 'text-yellow-700 italic'}`}>{body}</p>

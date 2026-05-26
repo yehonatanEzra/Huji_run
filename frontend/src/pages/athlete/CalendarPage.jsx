@@ -83,16 +83,21 @@ export default function CalendarPage() {
   const renderDayCard = (day) => {
     const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
     const hasLog = day.workout_log;
+    const isRace = day.individual_target?.override_group
+      ? day.individual_target?.workout_type === 'race'
+      : day.group_workout?.workout_type === 'race';
     return (
       <button
         key={day.date}
         onClick={() => openDay(day)}
-        className={`w-full text-left p-3 rounded-xl border transition ${
-          isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white'
-        } hover:shadow-sm`}
+        className={`w-full text-left p-3 rounded-xl transition hover:shadow-sm ${
+          isRace ? 'border-2 border-indigo-500 bg-indigo-50' :
+          isToday ? 'border border-blue-400 bg-blue-50' : 'border border-gray-200 bg-white'
+        }`}
       >
         <div className="flex items-center justify-between mb-1">
           <span className="text-sm font-semibold">
+            {isRace && <span className="mr-1">🏁</span>}
             {format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}
           </span>
           <div className="flex items-center gap-1.5">
@@ -100,10 +105,12 @@ export default function CalendarPage() {
               const TYPE = {
                 simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
                 easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
+                rest:      { label: 'Rest day',  color: 'bg-slate-100 text-slate-700' },
                 tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
                 long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
                 intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
                 fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
+                race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
               };
               const t = TYPE[day.group_workout.workout_type];
               if (!t) return null;
@@ -186,25 +193,32 @@ export default function CalendarPage() {
                   const TYPE_ABBR = {
                     simple:    { abbr: 'Oth',  color: 'bg-gray-100 text-gray-700' },
                     easy:      { abbr: 'Easy', color: 'bg-emerald-100 text-emerald-700' },
+                    rest:      { abbr: 'Rest', color: 'bg-slate-100 text-slate-700' },
                     tempo:     { abbr: 'Tem',  color: 'bg-orange-100 text-orange-700' },
                     long:      { abbr: 'Long', color: 'bg-purple-100 text-purple-700' },
                     intervals: { abbr: 'Int',  color: 'bg-red-100 text-red-700' },
                     fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
+                    race:      { abbr: 'Race', color: 'bg-indigo-100 text-indigo-700' },
                   };
                   // Personal override wins; otherwise show group type
                   const activeType = day.individual_target?.override_group
                     ? day.individual_target?.workout_type
                     : day.group_workout?.workout_type;
                   const typeBadge = activeType ? TYPE_ABBR[activeType] : null;
+                  const isRace = activeType === 'race';
                   return (
                   <button
                     key={day.date}
                     onClick={() => openDay(day)}
-                    className={`flex flex-col items-center p-1.5 rounded-lg border text-xs transition hover:shadow-sm relative ${
+                    className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
                       !inMonth ? 'opacity-40' : ''
-                    } ${isToday ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-white'}`}
+                    } ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' :
+                       isToday ? 'border border-blue-400 bg-blue-50' : 'border border-gray-200 bg-white'}`}
                   >
-                    {typeBadge && (
+                    {isRace && (
+                      <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
+                    )}
+                    {typeBadge && !isRace && (
                       <span className={`absolute top-0.5 right-0.5 text-[8px] px-1 py-px rounded font-semibold leading-none ${typeBadge.color}`}>
                         {typeBadge.abbr}
                       </span>
@@ -273,29 +287,34 @@ export default function CalendarPage() {
           <div className="space-y-4">
             {selectedDay.group_workout && (() => {
               const gw = selectedDay.group_workout;
-              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
               const TYPE_COLOR = {
                 simple: 'bg-gray-100 text-gray-700',
                 easy: 'bg-emerald-100 text-emerald-700',
+                rest: 'bg-slate-100 text-slate-700',
                 tempo: 'bg-orange-100 text-orange-700',
                 long: 'bg-purple-100 text-purple-700',
                 intervals: 'bg-red-100 text-red-700',
                 fartlek: 'bg-pink-100 text-pink-700',
+                race: 'bg-indigo-100 text-indigo-700',
               };
-              const isStructured = ['tempo', 'long', 'intervals', 'fartlek'].includes(gw.workout_type);
+              const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
+              const middleLabel = gw.workout_type === 'race' ? 'Race' : 'Main';
+              const isRaceDay = gw.workout_type === 'race';
               return (
-                <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                <div className={`rounded-lg p-3 space-y-2 ${isRaceDay ? 'bg-indigo-50 border-2 border-indigo-500' : 'bg-gray-50'}`}>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium text-gray-500">Group Workout</p>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[gw.workout_type] || TYPE_COLOR.simple}`}>
                       {TYPE_LABELS[gw.workout_type] || 'Simple'}
                     </span>
                   </div>
-                  {gw.title && <p className="text-base font-semibold">{gw.title}</p>}
+                  {gw.title && <p className="text-base font-semibold">{isRaceDay && '🏁 '}{gw.title}</p>}
+                  {!gw.title && isRaceDay && <p className="text-base font-semibold">🏁 Race day</p>}
                   {isStructured ? (
                     <div className="space-y-1.5 text-sm">
                       {gw.warmup && <p><span className="text-xs uppercase tracking-wider text-gray-400">Warm-up · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
-                      {gw.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">Main · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                      {gw.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">{middleLabel} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
                       {gw.cooldown && <p><span className="text-xs uppercase tracking-wider text-gray-400">Cool-down · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
                     </div>
                   ) : (
@@ -306,18 +325,22 @@ export default function CalendarPage() {
             })()}
             {selectedDay.individual_target && (() => {
               const t = selectedDay.individual_target;
-              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek' };
+              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
               const TYPE_COLOR = {
                 simple: 'bg-gray-100 text-gray-700',
                 easy: 'bg-emerald-100 text-emerald-700',
+                rest: 'bg-slate-100 text-slate-700',
                 tempo: 'bg-orange-100 text-orange-700',
                 long: 'bg-purple-100 text-purple-700',
                 intervals: 'bg-red-100 text-red-700',
                 fartlek: 'bg-pink-100 text-pink-700',
+                race: 'bg-indigo-100 text-indigo-700',
               };
-              const isStructured = ['tempo', 'long', 'intervals', 'fartlek'].includes(t.workout_type);
+              const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(t.workout_type);
+              const middleLabel = t.workout_type === 'race' ? 'Race' : 'Main';
+              const isRaceT = t.workout_type === 'race';
               return (
-                <div className="bg-blue-50 rounded-lg p-3 space-y-2">
+                <div className={`rounded-lg p-3 space-y-2 ${isRaceT ? 'bg-indigo-50 border-2 border-indigo-500' : 'bg-blue-50'}`}>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium text-blue-500">Coach's workout for you</p>
                     {t.workout_type && (
@@ -326,11 +349,12 @@ export default function CalendarPage() {
                       </span>
                     )}
                   </div>
-                  {t.title && <p className="text-base font-semibold">{t.title}</p>}
+                  {t.title && <p className="text-base font-semibold">{isRaceT && '🏁 '}{t.title}</p>}
+                  {!t.title && isRaceT && <p className="text-base font-semibold">🏁 Race day</p>}
                   {isStructured ? (
                     <div className="space-y-1.5 text-sm">
                       {t.warmup && <p><span className="text-xs uppercase tracking-wider text-gray-400">Warm-up · </span><span className="whitespace-pre-wrap">{t.warmup}</span></p>}
-                      {t.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">Main · </span><span className="whitespace-pre-wrap">{t.main_session}</span></p>}
+                      {t.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">{middleLabel} · </span><span className="whitespace-pre-wrap">{t.main_session}</span></p>}
                       {t.cooldown && <p><span className="text-xs uppercase tracking-wider text-gray-400">Cool-down · </span><span className="whitespace-pre-wrap">{t.cooldown}</span></p>}
                     </div>
                   ) : (
@@ -469,19 +493,24 @@ export default function CalendarPage() {
                       const TYPE_FULL = {
                         simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
                         easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
+                        rest:      { label: 'Rest day',  color: 'bg-slate-100 text-slate-700' },
                         tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
                         long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
                         intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
+                        race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
                       };
                       const typeChip = personalOverride
                         ? (it?.workout_type ? TYPE_FULL[it.workout_type] : null)
                         : (d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null);
+                      const cellIsRace = personalOverride
+                        ? it?.workout_type === 'race'
+                        : d.group_workout?.workout_type === 'race';
                       return (
                         <button
                           key={d.date}
                           onClick={() => { setMonthExpanded(false); openDay(d); }}
-                          className={`rounded-lg border ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                          className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                           style={{ minHeight: `${cellHeight}px` }}
                         >
                           <div className="flex items-start justify-between px-2 pt-1.5">
@@ -497,8 +526,11 @@ export default function CalendarPage() {
                           <div className="flex-1 px-2 py-1 min-h-0">
                             {workoutTitle && (
                               <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-700' : 'text-gray-800'}`}>
-                                {workoutTitle}
+                                {cellIsRace && '🏁 '}{workoutTitle}
                               </p>
+                            )}
+                            {!workoutTitle && cellIsRace && (
+                              <p className="text-xs font-semibold leading-tight text-indigo-700">🏁 Race</p>
                             )}
                             {workoutBody && (
                               <p className="text-[10px] text-gray-500 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>

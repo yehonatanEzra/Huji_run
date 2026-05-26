@@ -76,3 +76,15 @@ class WorkoutLog(Base):
     logged_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     athlete = relationship("User", back_populates="workout_logs")
+
+
+class WorkoutLogComment(Base):
+    """Private comment thread on an athlete's workout log. Visible only to the
+    athlete who owns the log and any coach."""
+    __tablename__ = "workout_log_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    workout_log_id: Mapped[int] = mapped_column(Integer, ForeignKey("workout_logs.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

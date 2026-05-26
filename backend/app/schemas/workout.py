@@ -78,6 +78,7 @@ class WorkoutLogOut(BaseModel):
     kudos_count: int = 0
     has_kudos: bool = False
     reactions: List[ReactionItem] = []
+    comment_count: int = 0
     model_config = {"from_attributes": True}
 
 

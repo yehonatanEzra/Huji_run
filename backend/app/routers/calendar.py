@@ -6,7 +6,7 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from sqlalchemy import func as sa_func
-from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog
+from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog, WorkoutLogComment
 from ..models.kudos import Kudos
 from ..schemas.workout import (
     GroupWorkoutUpsert, GroupWorkoutOut,
@@ -83,6 +83,12 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
             .group_by(Kudos.workout_log_id)
             .all()
         )
+        comment_counts = dict(
+            db.query(WorkoutLogComment.workout_log_id, sa_func.count(WorkoutLogComment.id))
+            .filter(WorkoutLogComment.workout_log_id.in_(log_ids))
+            .group_by(WorkoutLogComment.workout_log_id)
+            .all()
+        )
         viewer = viewer_id or (athlete.id if not is_coach else None)
         my_kudos = set()
         if viewer:
@@ -95,6 +101,7 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
             if day_data.workout_log:
                 day_data.workout_log.kudos_count = counts.get(day_data.workout_log.id, 0)
                 day_data.workout_log.has_kudos = day_data.workout_log.id in my_kudos
+                day_data.workout_log.comment_count = comment_counts.get(day_data.workout_log.id, 0)
 
     return WeekResponse(week_start=week_start, days=days)
 

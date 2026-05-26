@@ -18,6 +18,7 @@ import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 
 export default function TrackingDashboardPage() {
   const [weekDate, setWeekDate] = useState(new Date());
@@ -834,6 +835,11 @@ export default function TrackingDashboardPage() {
                 <p className="text-sm text-gray-400 italic">No report submitted</p>
               )}
             </div>
+
+            {/* Comments on the athlete's report */}
+            {selected.day.log?.id && (
+              <WorkoutCommentThread workoutLogId={selected.day.log.id} />
+            )}
 
             {/* Personal workout section */}
             <div className="border-t pt-3">

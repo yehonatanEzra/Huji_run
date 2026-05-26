@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getWeek, submitLog } from '../../api/calendar';
 import Modal from '../../components/ui/Modal';
@@ -15,6 +16,8 @@ export default function CalendarPage() {
   const [expandedZoom, setExpandedZoom] = useState(1);
   const [logForm, setLogForm] = useState({ status: 'missed', notes: '' });
   const [saving, setSaving] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [autoOpenedToday, setAutoOpenedToday] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -45,6 +48,23 @@ export default function CalendarPage() {
   };
 
   useEffect(() => { fetchData(); }, [currentDate, view]);
+
+  // Auto-open today's day modal when arriving with ?open=today (from the home page CTA).
+  useEffect(() => {
+    if (autoOpenedToday) return;
+    if (searchParams.get('open') !== 'today') return;
+    if (!days.length) return;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const todayDay = days.find(d => d.date === today);
+    if (todayDay) {
+      openDay(todayDay);
+      setAutoOpenedToday(true);
+      // Strip the query param so back-nav doesn't re-trigger
+      const next = new URLSearchParams(searchParams);
+      next.delete('open');
+      setSearchParams(next, { replace: true });
+    }
+  }, [days, searchParams, autoOpenedToday]);
 
   const openDay = (day) => {
     setSelectedDay(day);

@@ -3,7 +3,7 @@ import BottomNav from './BottomNav';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ROOT_PATHS = new Set([
-  '/calendar', '/races', '/hall-of-fame', '/health-wellness',
+  '/home', '/calendar', '/races', '/hall-of-fame', '/health-wellness',
   '/profile', '/feed', '/coach/dashboard',
 ]);
 

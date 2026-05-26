@@ -541,6 +541,13 @@ export default function WorkoutPublisherPage() {
               <button onClick={() => setExpandedZoom(1)} className="text-xs text-blue-600 hover:underline ml-1">Reset</button>
             </div>
 
+            {/* Month navigation at the top */}
+            <div className="flex items-center justify-between mb-3">
+              <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
+              <span className="text-sm font-semibold">{format(currentDate, 'MMMM yyyy')}</span>
+              <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+            </div>
+
             <div className="overflow-x-auto -mx-2">
               <div className="px-2" style={{ minWidth: `${Math.round(840 * expandedZoom)}px` }}>
                 <div className="grid grid-cols-7 gap-1 mb-1 text-xs text-gray-500 text-center font-medium">
@@ -599,11 +606,6 @@ export default function WorkoutPublisherPage() {
                       })}
                     </div>
                   ))}
-                </div>
-                <div className="flex items-center justify-between mt-3">
-                  <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
-                  <span className="text-sm font-medium">{format(currentDate, 'MMMM yyyy')}</span>
-                  <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
                 </div>
               </div>
             </div>

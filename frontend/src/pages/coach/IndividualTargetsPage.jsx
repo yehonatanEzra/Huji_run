@@ -8,10 +8,12 @@ import Spinner from '../../components/ui/Spinner';
 const WORKOUT_TYPES = [
   { value: 'simple',    label: 'Other',     color: 'bg-gray-100 text-gray-700',       structured: false },
   { value: 'easy',      label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700', structured: false },
+  { value: 'rest',      label: 'Rest day',  color: 'bg-slate-100 text-slate-700',     structured: false },
   { value: 'tempo',     label: 'Tempo',     color: 'bg-orange-100 text-orange-700',   structured: true },
   { value: 'long',      label: 'Long run',  color: 'bg-purple-100 text-purple-700',   structured: true },
   { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',         structured: true },
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
+  { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 
@@ -126,14 +128,15 @@ export default function IndividualTargetsPage() {
             const t = day.target;
             const meta = t ? typeMetaFor(t.workout_type) : null;
             const snippet = t ? (t.title || t.note || t.main_session || t.warmup) : null;
+            const isRace = t?.workout_type === 'race';
             return (
               <button
                 key={day.date}
                 onClick={() => openEdit(day)}
-                className="w-full text-left p-3 rounded-xl border border-gray-200 bg-white hover:shadow-sm transition"
+                className={`w-full text-left p-3 rounded-xl hover:shadow-sm transition ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' : 'border border-gray-200 bg-white'}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold">{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
+                  <span className="text-sm font-semibold">{isRace && '🏁 '}{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
                   {meta && (
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${meta.color}`}>{meta.label}</span>
                   )}
@@ -172,7 +175,7 @@ export default function IndividualTargetsPage() {
                 placeholder="Warm-up" rows={1}
                 className="w-full border rounded-lg px-3 py-2 text-sm" />
               <textarea value={form.main_session} onChange={(e) => setField('main_session', e.target.value)}
-                placeholder="Main session" rows={2}
+                placeholder={meta.mainLabel || 'Main session'} rows={2}
                 className="w-full border rounded-lg px-3 py-2 text-sm" />
               <textarea value={form.cooldown} onChange={(e) => setField('cooldown', e.target.value)}
                 placeholder="Cool-down" rows={1}

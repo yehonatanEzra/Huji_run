@@ -140,7 +140,7 @@ def upsert_group_workout(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
-    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek"}
+    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
 
     def _clean(s):
         if s is None:
@@ -212,7 +212,7 @@ def upsert_individual_target(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
-    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek"}
+    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
 
     def _clean(s):
         if s is None:

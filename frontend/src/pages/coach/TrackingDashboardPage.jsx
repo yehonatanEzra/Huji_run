@@ -930,6 +930,13 @@ export default function TrackingDashboardPage() {
               >Reset</button>
             </div>
 
+            {/* Month navigation at the top */}
+            <div className="flex items-center justify-between mb-3">
+              <button onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
+              <span className="text-sm font-semibold">{format(profileMonthDate, 'MMMM yyyy')}</span>
+              <button onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+            </div>
+
           <div className="overflow-x-auto -mx-2">
             <div className="px-2" style={{ minWidth: `${Math.round(960 * expandedZoom)}px` }}>
               <div className="grid gap-1 mb-1 text-xs text-gray-500 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
@@ -1087,12 +1094,6 @@ export default function TrackingDashboardPage() {
                   </div>
                 );
               })()}
-
-              <div className="flex items-center justify-between mt-3">
-                <button onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
-                <span className="text-sm font-medium">{format(profileMonthDate, 'MMMM yyyy')}</span>
-                <button onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
-              </div>
             </div>
           </div>
           </div>

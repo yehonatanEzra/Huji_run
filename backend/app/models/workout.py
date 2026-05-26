@@ -6,6 +6,16 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 
 
+class GroupWorkoutRecipient(Base):
+    """Per-athlete delivery for a group workout. Empty list = broadcast to all group members."""
+    __tablename__ = "group_workout_recipients"
+    __table_args__ = (UniqueConstraint("group_workout_id", "athlete_id", name="uq_gwr_workout_athlete"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    group_workout_id: Mapped[int] = mapped_column(Integer, ForeignKey("group_workouts.id", ondelete="CASCADE"), nullable=False, index=True)
+    athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+
 class GroupWorkout(Base):
     __tablename__ = "group_workouts"
     __table_args__ = (UniqueConstraint("training_group_id", "date", name="uq_group_workout_group_date"),)

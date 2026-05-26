@@ -6,7 +6,7 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from sqlalchemy import func as sa_func
-from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
+from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog
 from ..models.kudos import Kudos
 from ..schemas.workout import (
     GroupWorkoutUpsert, GroupWorkoutOut,
@@ -34,6 +34,14 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
                 GroupWorkout.training_group_id == gid,
                 GroupWorkout.date == day,
             ).first()
+            # Targeting check: if the workout has any recipients and the athlete isn't on the list, hide it
+            if gw:
+                recipient_rows = db.query(GroupWorkoutRecipient.athlete_id).filter(
+                    GroupWorkoutRecipient.group_workout_id == gw.id
+                ).all()
+                recipient_ids_for_gw = {r[0] for r in recipient_rows}
+                if recipient_ids_for_gw and athlete.id not in recipient_ids_for_gw and not is_coach:
+                    gw = None
             if gw and not is_coach:
                 has_published = bool(gw.content or gw.warmup or gw.main_session or gw.cooldown or gw.title)
                 if not has_published:
@@ -52,9 +60,17 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
             gw = None
         if log:
             logs.append(log)
+        gw_out = None
+        if gw:
+            gw_out = GroupWorkoutOut.model_validate(gw)
+            gw_recipient_ids = [
+                r[0] for r in db.query(GroupWorkoutRecipient.athlete_id)
+                .filter(GroupWorkoutRecipient.group_workout_id == gw.id).all()
+            ]
+            gw_out = gw_out.model_copy(update={"recipient_ids": gw_recipient_ids})
         days.append(DayData(
             date=day,
-            group_workout=GroupWorkoutOut.model_validate(gw) if gw else None,
+            group_workout=gw_out,
             individual_target=IndividualTargetOut.model_validate(it) if it else None,
             workout_log=WorkoutLogOut.model_validate(log) if log else None,
         ))
@@ -183,9 +199,21 @@ def upsert_group_workout(
             created_by=coach.id,
         )
         db.add(gw)
+        db.flush()  # need gw.id to insert recipients
+
+    # Handle recipient targeting: None = don't touch; [] = broadcast (clear table); list = restrict to these
+    if body.recipient_ids is not None:
+        db.query(GroupWorkoutRecipient).filter(GroupWorkoutRecipient.group_workout_id == gw.id).delete()
+        for athlete_id in set(body.recipient_ids):
+            db.add(GroupWorkoutRecipient(group_workout_id=gw.id, athlete_id=athlete_id))
+
     db.commit()
     db.refresh(gw)
-    return gw
+    recipient_ids = [
+        r.athlete_id for r in
+        db.query(GroupWorkoutRecipient).filter(GroupWorkoutRecipient.group_workout_id == gw.id).all()
+    ]
+    return GroupWorkoutOut.model_validate(gw).model_copy(update={"recipient_ids": recipient_ids})
 
 
 @router.delete("/group/{group_id}/{day}", status_code=204)

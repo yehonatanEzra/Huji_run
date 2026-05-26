@@ -195,6 +195,16 @@ def dashboard_week(
     group_workouts = db.query(GroupWorkout).filter(GroupWorkout.date.in_(week_dates)).all()
     gw_map: dict[tuple, GroupWorkout] = {(gw.training_group_id, gw.date): gw for gw in group_workouts}
 
+    # Preload recipient targeting once for all this-week workouts
+    from ..models.workout import GroupWorkoutRecipient
+    gw_ids = [gw.id for gw in group_workouts]
+    gw_recipients: dict[int, set[int]] = {}
+    if gw_ids:
+        for gid, aid in db.query(GroupWorkoutRecipient.group_workout_id, GroupWorkoutRecipient.athlete_id).filter(
+            GroupWorkoutRecipient.group_workout_id.in_(gw_ids)
+        ).all():
+            gw_recipients.setdefault(gid, set()).add(aid)
+
     group_map = {g.id: g.name for g in db.query(TrainingGroup).all()}
 
     from ..models.kudos import Kudos
@@ -224,6 +234,11 @@ def dashboard_week(
             log = log_map.get((athlete.id, d))
             target = target_map.get((athlete.id, d))
             gw = gw_map.get((athlete.training_group_id, d)) if athlete.training_group_id else None
+            # Targeting: if gw has explicit recipients and this athlete isn't in the set, hide it
+            if gw:
+                rec_set = gw_recipients.get(gw.id)
+                if rec_set and athlete.id not in rec_set:
+                    gw = None
             log_out = None
             if log:
                 log_out = WorkoutLogOut.model_validate(log)
@@ -479,7 +494,20 @@ def get_athlete_week(
             GroupWorkout.training_group_id == athlete.training_group_id,
             GroupWorkout.date.in_(week_dates),
         ).all()
-        gw_map = {gw.date: gw for gw in gws}
+        # Apply per-athlete targeting
+        from ..models.workout import GroupWorkoutRecipient
+        gw_ids = [g.id for g in gws]
+        recip: dict[int, set[int]] = {}
+        if gw_ids:
+            for gid, aid in db.query(GroupWorkoutRecipient.group_workout_id, GroupWorkoutRecipient.athlete_id).filter(
+                GroupWorkoutRecipient.group_workout_id.in_(gw_ids)
+            ).all():
+                recip.setdefault(gid, set()).add(aid)
+        for gw in gws:
+            rec_set = recip.get(gw.id)
+            if rec_set and athlete_id not in rec_set:
+                continue
+            gw_map[gw.date] = gw
 
     from ..models.kudos import Kudos
     from ..routers.kudos import ALLOWED_EMOJI as KUDOS_EMOJI

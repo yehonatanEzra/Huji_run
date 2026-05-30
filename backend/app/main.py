@@ -90,6 +90,77 @@ def _migrate_group_workout_columns():
 _migrate_group_workout_columns()
 
 
+def _migrate_drop_group_workout_unique():
+    """Drop the legacy UNIQUE(training_group_id, date) constraint on
+    group_workouts so multiple workouts may exist per (group, date)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "group_workouts" not in inspector.get_table_names():
+        return
+    if engine.dialect.name == "sqlite":
+        # SQLite enforces table-level UNIQUE via auto-named indexes that can't
+        # be DROP-INDEXed. The only way to remove the constraint is to rebuild
+        # the table.
+        with engine.connect() as conn:
+            rows = list(conn.execute(text("PRAGMA index_list('group_workouts')")))
+            needs_rebuild = False
+            for r in rows:
+                idx_name, is_unique = r[1], r[2]
+                if not is_unique:
+                    continue
+                cols = [c[2] for c in conn.execute(text(f"PRAGMA index_info('{idx_name}')"))]
+                if set(cols) == {"training_group_id", "date"}:
+                    needs_rebuild = True
+                    break
+            if not needs_rebuild:
+                return
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+            try:
+                conn.execute(text("""
+                    CREATE TABLE group_workouts_new (
+                        id INTEGER PRIMARY KEY,
+                        training_group_id INTEGER NOT NULL REFERENCES training_groups(id),
+                        date DATE NOT NULL,
+                        workout_type VARCHAR(20) NOT NULL DEFAULT 'simple',
+                        title VARCHAR(200),
+                        content TEXT,
+                        warmup TEXT,
+                        main_session TEXT,
+                        cooldown TEXT,
+                        draft_content TEXT,
+                        created_by INTEGER NOT NULL REFERENCES users(id),
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("""
+                    INSERT INTO group_workouts_new
+                        (id, training_group_id, date, workout_type, title, content,
+                         warmup, main_session, cooldown, draft_content, created_by, updated_at)
+                    SELECT id, training_group_id, date, workout_type, title, content,
+                           warmup, main_session, cooldown, draft_content, created_by, updated_at
+                    FROM group_workouts
+                """))
+                conn.execute(text("DROP TABLE group_workouts"))
+                conn.execute(text("ALTER TABLE group_workouts_new RENAME TO group_workouts"))
+                conn.execute(text("CREATE INDEX ix_group_workouts_training_group_id ON group_workouts(training_group_id)"))
+                conn.execute(text("CREATE INDEX ix_group_workouts_date ON group_workouts(date)"))
+                conn.commit()
+            finally:
+                conn.execute(text("PRAGMA foreign_keys=ON"))
+    else:
+        with engine.connect() as conn:
+            try:
+                conn.execute(text(
+                    "ALTER TABLE group_workouts DROP CONSTRAINT IF EXISTS uq_group_workout_group_date"
+                ))
+                conn.commit()
+            except Exception:
+                pass
+
+
+_migrate_drop_group_workout_unique()
+
+
 def _migrate_race_is_manual():
     """Add the is_manual flag to races if missing. Works on SQLite + Postgres."""
     from sqlalchemy import inspect

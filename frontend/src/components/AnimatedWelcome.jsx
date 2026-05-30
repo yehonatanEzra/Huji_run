@@ -19,7 +19,7 @@ export default function AnimatedWelcome({ name }) {
             className="welcome-letter inline-block"
             style={{ animationDelay: `${0.1 + i * 0.105}s` }}
           >
-            {/* טיפול במרווחים כדי שלא יעלמו או יתבלבלו ב-RTL */}
+            {/* Replace spaces with non-breaking spaces to prevent collapsing in the animation */}
             {ch === ' ' ? '\u00A0' : ch}
           </span>
         ))}

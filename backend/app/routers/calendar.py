@@ -22,6 +22,39 @@ def _week_start(d: date) -> date:
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
+def _pick_workout_for_athlete(
+    db: Session, group_id: int, day: date, athlete_id: int, *, is_coach_view: bool
+):
+    """Among all group workouts on (group_id, day), pick the one that applies
+    to this athlete. Rules:
+      - A workout with NO recipients is broadcast → applies to everyone.
+      - A workout with explicit recipients applies only to those athletes.
+      - When multiple workouts apply, the newest (highest id) wins.
+    For coach views (`is_coach_view=True`) the recipient filter is bypassed —
+    coaches just get the newest workout for the day."""
+    workouts = (
+        db.query(GroupWorkout)
+        .filter(GroupWorkout.training_group_id == group_id, GroupWorkout.date == day)
+        .order_by(GroupWorkout.id.desc())
+        .all()
+    )
+    if not workouts:
+        return None
+    if is_coach_view:
+        return workouts[0]
+    wids = [w.id for w in workouts]
+    recips: dict[int, set[int]] = {wid: set() for wid in wids}
+    for wid, aid in db.query(
+        GroupWorkoutRecipient.group_workout_id, GroupWorkoutRecipient.athlete_id
+    ).filter(GroupWorkoutRecipient.group_workout_id.in_(wids)).all():
+        recips[wid].add(aid)
+    for w in workouts:  # already sorted newest-first
+        rec = recips[w.id]
+        if not rec or athlete_id in rec:
+            return w
+    return None
+
+
 def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = False, group_id: Optional[int] = None, viewer_id: Optional[int] = None) -> WeekResponse:
     gid = group_id or athlete.training_group_id
     days = []
@@ -30,18 +63,7 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
         day = week_start + timedelta(days=i)
         gw = None
         if gid:
-            gw = db.query(GroupWorkout).filter(
-                GroupWorkout.training_group_id == gid,
-                GroupWorkout.date == day,
-            ).first()
-            # Targeting check: if the workout has any recipients and the athlete isn't on the list, hide it
-            if gw:
-                recipient_rows = db.query(GroupWorkoutRecipient.athlete_id).filter(
-                    GroupWorkoutRecipient.group_workout_id == gw.id
-                ).all()
-                recipient_ids_for_gw = {r[0] for r in recipient_rows}
-                if recipient_ids_for_gw and athlete.id not in recipient_ids_for_gw and not is_coach:
-                    gw = None
+            gw = _pick_workout_for_athlete(db, gid, day, athlete.id, is_coach_view=is_coach)
             if gw and not is_coach:
                 has_published = bool(gw.content or gw.warmup or gw.main_session or gw.cooldown or gw.title)
                 if not has_published:
@@ -155,85 +177,132 @@ def submit_log(
 
 # ── Coach endpoints ───────────────────────────────────────────────────────────
 
-@router.put("/group/{group_id}/{day}", response_model=GroupWorkoutOut)
-def upsert_group_workout(
+ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
+
+
+def _clean(s):
+    if s is None:
+        return None
+    s = s.strip()
+    return s if s else None
+
+
+def _serialize_gw(db: Session, gw: GroupWorkout) -> GroupWorkoutOut:
+    rids = [
+        r.athlete_id for r in db.query(GroupWorkoutRecipient)
+        .filter(GroupWorkoutRecipient.group_workout_id == gw.id).all()
+    ]
+    return GroupWorkoutOut.model_validate(gw).model_copy(update={"recipient_ids": rids})
+
+
+def _apply_workout_fields(gw: GroupWorkout, body: GroupWorkoutUpsert):
+    if body.workout_type is not None and body.workout_type in ALLOWED_TYPES:
+        gw.workout_type = body.workout_type
+    if body.title is not None:
+        gw.title = _clean(body.title)
+    if body.content is not None:
+        gw.content = _clean(body.content)
+    if body.warmup is not None:
+        gw.warmup = _clean(body.warmup)
+    if body.main_session is not None:
+        gw.main_session = _clean(body.main_session)
+    if body.cooldown is not None:
+        gw.cooldown = _clean(body.cooldown)
+    if body.draft_content is not None:
+        gw.draft_content = _clean(body.draft_content)
+
+
+def _replace_recipients(db: Session, gw_id: int, recipient_ids):
+    """None = leave untouched. [] = broadcast (clear table). list = replace."""
+    if recipient_ids is None:
+        return
+    db.query(GroupWorkoutRecipient).filter(GroupWorkoutRecipient.group_workout_id == gw_id).delete()
+    for aid in set(recipient_ids):
+        db.add(GroupWorkoutRecipient(group_workout_id=gw_id, athlete_id=aid))
+
+
+@router.get("/coach/group/{group_id}")
+def coach_group_week(
+    group_id: int,
+    day: date = Query(default_factory=date.today),
+    _: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    """Return all workouts the coach has authored for `group_id` across the
+    Sun→Sat week containing `day`. Shape:
+        {"week_start": date, "days": [{"date": str, "group_workouts": [...]}]}"""
+    ws = _week_start(day)
+    days_out = []
+    for i in range(7):
+        d = ws + timedelta(days=i)
+        rows = (
+            db.query(GroupWorkout)
+            .filter(GroupWorkout.training_group_id == group_id, GroupWorkout.date == d)
+            .order_by(GroupWorkout.id.asc())
+            .all()
+        )
+        days_out.append({
+            "date": d.isoformat(),
+            "group_workouts": [_serialize_gw(db, gw).model_dump() for gw in rows],
+        })
+    return {"week_start": ws.isoformat(), "days": days_out}
+
+
+@router.post("/group/{group_id}/{day}", response_model=GroupWorkoutOut, status_code=201)
+def create_group_workout(
     group_id: int,
     day: date,
     body: GroupWorkoutUpsert,
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
-    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
-
-    def _clean(s):
-        if s is None:
-            return None
-        s = s.strip()
-        return s if s else None
-
-    gw = db.query(GroupWorkout).filter(
-        GroupWorkout.training_group_id == group_id,
-        GroupWorkout.date == day,
-    ).first()
-
-    if gw:
-        if body.workout_type is not None and body.workout_type in ALLOWED_TYPES:
-            gw.workout_type = body.workout_type
-        if body.title is not None:
-            gw.title = _clean(body.title)
-        if body.content is not None:
-            gw.content = _clean(body.content)
-        if body.warmup is not None:
-            gw.warmup = _clean(body.warmup)
-        if body.main_session is not None:
-            gw.main_session = _clean(body.main_session)
-        if body.cooldown is not None:
-            gw.cooldown = _clean(body.cooldown)
-        if body.draft_content is not None:
-            gw.draft_content = _clean(body.draft_content)
-    else:
-        wt = body.workout_type if body.workout_type in ALLOWED_TYPES else "simple"
-        gw = GroupWorkout(
-            training_group_id=group_id,
-            date=day,
-            workout_type=wt,
-            title=_clean(body.title),
-            content=_clean(body.content),
-            warmup=_clean(body.warmup),
-            main_session=_clean(body.main_session),
-            cooldown=_clean(body.cooldown),
-            draft_content=_clean(body.draft_content),
-            created_by=coach.id,
-        )
-        db.add(gw)
-        db.flush()  # need gw.id to insert recipients
-
-    # Handle recipient targeting: None = don't touch; [] = broadcast (clear table); list = restrict to these
-    if body.recipient_ids is not None:
-        db.query(GroupWorkoutRecipient).filter(GroupWorkoutRecipient.group_workout_id == gw.id).delete()
-        for athlete_id in set(body.recipient_ids):
-            db.add(GroupWorkoutRecipient(group_workout_id=gw.id, athlete_id=athlete_id))
-
+    """Create a new group workout. Multiple may exist per (group, date)."""
+    wt = body.workout_type if body.workout_type in ALLOWED_TYPES else "simple"
+    gw = GroupWorkout(
+        training_group_id=group_id,
+        date=day,
+        workout_type=wt,
+        title=_clean(body.title),
+        content=_clean(body.content),
+        warmup=_clean(body.warmup),
+        main_session=_clean(body.main_session),
+        cooldown=_clean(body.cooldown),
+        draft_content=_clean(body.draft_content),
+        created_by=coach.id,
+    )
+    db.add(gw)
+    db.flush()
+    _replace_recipients(db, gw.id, body.recipient_ids)
     db.commit()
     db.refresh(gw)
-    recipient_ids = [
-        r.athlete_id for r in
-        db.query(GroupWorkoutRecipient).filter(GroupWorkoutRecipient.group_workout_id == gw.id).all()
-    ]
-    return GroupWorkoutOut.model_validate(gw).model_copy(update={"recipient_ids": recipient_ids})
+    return _serialize_gw(db, gw)
 
 
-@router.delete("/group/{group_id}/{day}", status_code=204)
-def delete_group_workout(
-    group_id: int,
-    day: date,
+@router.put("/group-workouts/{workout_id}", response_model=GroupWorkoutOut)
+def edit_group_workout(
+    workout_id: int,
+    body: GroupWorkoutUpsert,
     _: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
-    gw = db.query(GroupWorkout).filter(
-        GroupWorkout.training_group_id == group_id,
-        GroupWorkout.date == day,
-    ).first()
+    """Edit one specific group workout by ID."""
+    gw = db.get(GroupWorkout, workout_id)
+    if not gw:
+        raise HTTPException(status_code=404, detail="Group workout not found")
+    _apply_workout_fields(gw, body)
+    _replace_recipients(db, gw.id, body.recipient_ids)
+    db.commit()
+    db.refresh(gw)
+    return _serialize_gw(db, gw)
+
+
+@router.delete("/group-workouts/{workout_id}", status_code=204)
+def delete_group_workout_by_id(
+    workout_id: int,
+    _: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    gw = db.get(GroupWorkout, workout_id)
     if gw:
         db.delete(gw)
         db.commit()

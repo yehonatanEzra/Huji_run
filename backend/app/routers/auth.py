@@ -21,12 +21,15 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def register(body: RegisterRequest, db: Annotated[Session, Depends(get_db)]):
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
+    # Only athlete/coach can be self-selected on signup. Admin must be promoted
+    # manually (see _bootstrap_admin_and_coach_ids in main.py).
+    chosen_role = body.role if body.role in ("athlete", "coach") else "athlete"
     user = User(
         full_name=body.full_name.strip(),
         username=body.username.strip(),
         password_hash=pwd_context.hash(body.password),
         gender=body.gender,
-        role="athlete",
+        role=chosen_role,
     )
     db.add(user)
     db.commit()

@@ -5,13 +5,46 @@ from pydantic import BaseModel
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import require_coach
+from ..dependencies import require_coach, require_admin
 from ..models.user import User
 from ..models.training_group import TrainingGroup
 from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
 from ..models.race import Race, Heat, Result
 from ..schemas.auth import UserOut
 from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut, IndividualTargetOut, GroupWorkoutOut
+
+
+def _athlete_in_scope(coach: User, athlete: Optional[User]) -> bool:
+    """True if `athlete` is one this coach is allowed to act on. Admins see all."""
+    if not athlete or athlete.role != "athlete":
+        return False
+    if coach.role == "admin":
+        return True
+    return athlete.coach_id == coach.id
+
+
+def _group_in_scope(coach: User, group: Optional[TrainingGroup]) -> bool:
+    """True if `group` is owned by this coach. Admins see all."""
+    if not group:
+        return False
+    if coach.role == "admin":
+        return True
+    return group.coach_id == coach.id
+
+
+def _athletes_query(coach: User, db: Session):
+    """Base query for the athletes visible to this coach (or all for admin)."""
+    q = db.query(User).filter(User.role == "athlete")
+    if coach.role != "admin":
+        q = q.filter(User.coach_id == coach.id)
+    return q
+
+
+def _groups_query(coach: User, db: Session):
+    q = db.query(TrainingGroup)
+    if coach.role != "admin":
+        q = q.filter(TrainingGroup.coach_id == coach.id)
+    return q
 
 
 class UpdateAthleteName(BaseModel):
@@ -52,9 +85,9 @@ def _week_start(d: date) -> date:
 @router.get("/groups", response_model=list[TrainingGroupOut])
 def list_groups(
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
-    groups = db.query(TrainingGroup).order_by(TrainingGroup.name).all()
+    groups = _groups_query(coach, db).order_by(TrainingGroup.name).all()
     return [
         TrainingGroupOut(id=g.id, name=g.name, member_count=len(g.members))
         for g in groups
@@ -67,7 +100,7 @@ def create_group(
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
 ):
-    g = TrainingGroup(name=body.name.strip(), created_by=coach.id)
+    g = TrainingGroup(name=body.name.strip(), created_by=coach.id, coach_id=coach.id)
     db.add(g)
     db.commit()
     db.refresh(g)
@@ -78,10 +111,10 @@ def create_group(
 def get_group(
     group_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
     g = db.get(TrainingGroup, group_id)
-    if not g:
+    if not _group_in_scope(coach, g):
         raise HTTPException(status_code=404, detail="Group not found")
     return TrainingGroupDetail(id=g.id, name=g.name, members=g.members)
 
@@ -91,10 +124,10 @@ def rename_group(
     group_id: int,
     body: TrainingGroupCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
     g = db.get(TrainingGroup, group_id)
-    if not g:
+    if not _group_in_scope(coach, g):
         raise HTTPException(status_code=404, detail="Group not found")
     g.name = body.name.strip()
     db.commit()
@@ -106,10 +139,10 @@ def rename_group(
 def delete_group(
     group_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
     g = db.get(TrainingGroup, group_id)
-    if not g:
+    if not _group_in_scope(coach, g):
         raise HTTPException(status_code=404, detail="Group not found")
     for member in g.members:
         member.training_group_id = None
@@ -122,13 +155,13 @@ def add_member_to_group(
     group_id: int,
     body: AssignAthleteBody,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
     g = db.get(TrainingGroup, group_id)
-    if not g:
+    if not _group_in_scope(coach, g):
         raise HTTPException(status_code=404, detail="Group not found")
     athlete = db.get(User, body.athlete_id)
-    if not athlete or athlete.role != "athlete":
+    if not _athlete_in_scope(coach, athlete):
         raise HTTPException(status_code=404, detail="Athlete not found")
     athlete.training_group_id = group_id
     db.commit()
@@ -140,8 +173,11 @@ def remove_member_from_group(
     group_id: int,
     athlete_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
+    g = db.get(TrainingGroup, group_id)
+    if not _group_in_scope(coach, g):
+        raise HTTPException(status_code=404, detail="Group not found")
     athlete = db.get(User, athlete_id)
     if not athlete or athlete.training_group_id != group_id:
         raise HTTPException(status_code=404, detail="Athlete not in this group")
@@ -154,20 +190,20 @@ def remove_member_from_group(
 @router.get("/athletes", response_model=list[UserOut])
 def list_athletes(
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[User, Depends(require_coach)],
+    coach: Annotated[User, Depends(require_coach)],
 ):
-    return db.query(User).filter(User.role == "athlete").order_by(User.full_name).all()
+    return _athletes_query(coach, db).order_by(User.full_name).all()
 
 
 @router.get("/athletes/search")
 def search_athletes(
     q: str = Query(..., min_length=1),
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
     results = (
-        db.query(User)
-        .filter(User.role == "athlete", User.full_name.ilike(f"{q}%"))
+        _athletes_query(coach, db)
+        .filter(User.full_name.ilike(f"{q}%"))
         .order_by(User.full_name)
         .limit(10)
         .all()
@@ -184,7 +220,7 @@ def dashboard_week(
     ws = _week_start(day)
     week_dates = [ws + timedelta(days=i) for i in range(7)]
 
-    athletes = db.query(User).filter(User.role == "athlete").order_by(User.full_name).all()
+    athletes = _athletes_query(coach_user, db).order_by(User.full_name).all()
 
     logs = db.query(WorkoutLog).filter(WorkoutLog.date.in_(week_dates)).all()
     log_map: dict[tuple, WorkoutLog] = {(l.athlete_id, l.date): l for l in logs}
@@ -294,8 +330,9 @@ def update_athlete(
     athlete_id: int,
     body: UpdateAthleteName,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    _: User = Depends(require_admin),
 ):
+    """Admin-only: rename any athlete."""
     athlete = db.get(User, athlete_id)
     if not athlete or athlete.role != "athlete":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
@@ -309,8 +346,9 @@ def update_athlete(
 def delete_athlete(
     athlete_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    admin: User = Depends(require_admin),
 ):
+    """Admin-only: hard-delete an athlete + cascade their data."""
     athlete = db.get(User, athlete_id)
     if not athlete or athlete.role != "athlete":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
@@ -348,7 +386,7 @@ def delete_athlete(
     db.query(HealthReview).filter(HealthReview.user_id == athlete_id).delete()
     # Re-assign professionals they created to the deleting coach so listings stay intact
     db.query(HealthProfessional).filter(HealthProfessional.created_by_id == athlete_id).update(
-        {HealthProfessional.created_by_id: _.id}, synchronize_session=False
+        {HealthProfessional.created_by_id: admin.id}, synchronize_session=False
     )
 
     # Race results — track Hall of Fame distances to refresh
@@ -371,10 +409,10 @@ def delete_athlete(
 def get_athlete_profile(
     athlete_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
 ):
     athlete = db.get(User, athlete_id)
-    if not athlete or athlete.role != "athlete":
+    if not _athlete_in_scope(coach, athlete):
         raise HTTPException(status_code=404, detail="Athlete not found")
 
     group_name = None
@@ -492,7 +530,7 @@ def get_athlete_week(
     coach_user: User = Depends(require_coach),
 ):
     athlete = db.get(User, athlete_id)
-    if not athlete or athlete.role != "athlete":
+    if not _athlete_in_scope(coach_user, athlete):
         raise HTTPException(status_code=404, detail="Athlete not found")
 
     ws = _week_start(day)
@@ -635,7 +673,7 @@ def add_athlete_pb(
     from ..services.hall_of_fame import refresh_hall_of_fame
 
     athlete = db.get(User, athlete_id)
-    if not athlete or athlete.role != "athlete":
+    if not _athlete_in_scope(coach, athlete):
         raise HTTPException(status_code=404, detail="Athlete not found")
 
     if body.race_id and body.heat_id:

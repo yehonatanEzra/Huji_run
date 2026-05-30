@@ -6,7 +6,7 @@ from .database import engine, Base
 from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, RaceRegistration, HallOfFame, HealthProfessional, HealthReview, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
 from .models.workout import WorkoutLogComment  # noqa: F401  (ensure table is registered with Base)
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching
 
 Base.metadata.create_all(bind=engine)
 
@@ -353,6 +353,7 @@ app.include_router(feed.router, prefix=API_PREFIX)
 app.include_router(challenges.router, prefix=API_PREFIX)
 app.include_router(workout_comments.router, prefix=API_PREFIX)
 app.include_router(home.router, prefix=API_PREFIX)
+app.include_router(coaching.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

@@ -49,6 +49,7 @@ class ProfessionalOut(BaseModel):
     avg_rating: Optional[float]
     review_count: int
     created_at: datetime
+    created_by_id: int
 
     class Config:
         from_attributes = True

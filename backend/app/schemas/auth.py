@@ -8,6 +8,7 @@ class RegisterRequest(BaseModel):
     username: str
     password: str
     gender: Literal["M", "F"]
+    role: Optional[Literal["athlete", "coach"]] = "athlete"
 
 
 class LoginRequest(BaseModel):

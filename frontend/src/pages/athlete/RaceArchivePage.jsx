@@ -32,7 +32,7 @@ export default function RaceArchivePage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Races</h2>
-        {(user?.role === 'coach' || user?.role === 'admin') && (
+        {user?.role === 'admin' && (
           <button
             onClick={() => navigate('/coach/race-wizard')}
             className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700"

@@ -8,6 +8,27 @@ from ..models.user import User
 from sqlalchemy import func as sa_func
 from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog, WorkoutLogComment
 from ..models.kudos import Kudos
+from ..models.training_group import TrainingGroup
+
+
+def _coach_owns_group(coach: User, db: Session, group_id: int) -> bool:
+    """True if `coach` may act on `group_id`. Admin sees all."""
+    g = db.get(TrainingGroup, group_id)
+    if not g:
+        return False
+    if coach.role == "admin":
+        return True
+    return g.coach_id == coach.id
+
+
+def _coach_owns_athlete(coach: User, db: Session, athlete_id: int) -> bool:
+    """True if `coach` may act on this athlete. Admin sees all."""
+    a = db.get(User, athlete_id)
+    if not a or a.role != "athlete":
+        return False
+    if coach.role == "admin":
+        return True
+    return a.coach_id == coach.id
 from ..schemas.workout import (
     GroupWorkoutUpsert, GroupWorkoutOut,
     IndividualTargetUpsert, IndividualTargetOut,
@@ -225,12 +246,14 @@ def _replace_recipients(db: Session, gw_id: int, recipient_ids):
 def coach_group_week(
     group_id: int,
     day: date = Query(default_factory=date.today),
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
     """Return all workouts the coach has authored for `group_id` across the
     Sun→Sat week containing `day`. Shape:
         {"week_start": date, "days": [{"date": str, "group_workouts": [...]}]}"""
+    if not _coach_owns_group(coach, db, group_id):
+        raise HTTPException(status_code=404, detail="Group not found")
     ws = _week_start(day)
     days_out = []
     for i in range(7):
@@ -257,6 +280,8 @@ def create_group_workout(
     db: Session = Depends(get_db),
 ):
     """Create a new group workout. Multiple may exist per (group, date)."""
+    if not _coach_owns_group(coach, db, group_id):
+        raise HTTPException(status_code=404, detail="Group not found")
     wt = body.workout_type if body.workout_type in ALLOWED_TYPES else "simple"
     gw = GroupWorkout(
         training_group_id=group_id,
@@ -282,12 +307,12 @@ def create_group_workout(
 def edit_group_workout(
     workout_id: int,
     body: GroupWorkoutUpsert,
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
     """Edit one specific group workout by ID."""
     gw = db.get(GroupWorkout, workout_id)
-    if not gw:
+    if not gw or not _coach_owns_group(coach, db, gw.training_group_id):
         raise HTTPException(status_code=404, detail="Group workout not found")
     _apply_workout_fields(gw, body)
     _replace_recipients(db, gw.id, body.recipient_ids)
@@ -299,13 +324,16 @@ def edit_group_workout(
 @router.delete("/group-workouts/{workout_id}", status_code=204)
 def delete_group_workout_by_id(
     workout_id: int,
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
     gw = db.get(GroupWorkout, workout_id)
-    if gw:
-        db.delete(gw)
-        db.commit()
+    if not gw:
+        return
+    if not _coach_owns_group(coach, db, gw.training_group_id):
+        raise HTTPException(status_code=404, detail="Group workout not found")
+    db.delete(gw)
+    db.commit()
 
 
 @router.put("/targets/{athlete_id}/{day}", response_model=IndividualTargetOut)
@@ -316,6 +344,8 @@ def upsert_individual_target(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
+    if not _coach_owns_athlete(coach, db, athlete_id):
+        raise HTTPException(status_code=404, detail="Athlete not found")
     ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
 
     def _clean(s):
@@ -365,9 +395,11 @@ def upsert_individual_target(
 def delete_individual_target(
     athlete_id: int,
     day: date,
-    _: User = Depends(require_coach),
+    coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
+    if not _coach_owns_athlete(coach, db, athlete_id):
+        raise HTTPException(status_code=404, detail="Athlete not found")
     it = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete_id,
         IndividualTarget.date == day,

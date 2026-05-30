@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, extract
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import get_current_user, require_coach
+from ..dependencies import get_current_user, require_coach, require_admin
 from ..models.user import User
 from ..models.race import Race, Heat, Result, RaceRegistration, CANONICAL_DISTANCES
 from ..schemas.race import (
@@ -283,7 +283,7 @@ def get_race_leaderboard(
 def create_race(
     body: RaceCreate,
     db: Session = Depends(get_db),
-    coach: User = Depends(require_coach),
+    coach: User = Depends(require_admin),
 ):
     race = Race(name=body.name.strip(), race_date=body.race_date, created_by=coach.id)
     db.add(race)
@@ -297,7 +297,7 @@ def add_heat(
     race_id: int,
     body: HeatCreate,
     db: Session = Depends(get_db),
-    coach: User = Depends(require_coach),
+    coach: User = Depends(require_admin),
 ):
     race = db.get(Race, race_id)
     if not race:
@@ -315,7 +315,7 @@ def add_result(
     heat_id: int,
     body: ResultCreate,
     db: Session = Depends(get_db),
-    coach: User = Depends(require_coach),
+    coach: User = Depends(require_admin),
 ):
     heat = db.get(Heat, heat_id)
     if not heat or heat.race_id != race_id:
@@ -374,7 +374,7 @@ def update_race(
     race_id: int,
     body: RaceCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    _: User = Depends(require_admin),
 ):
     race = db.get(Race, race_id)
     if not race:
@@ -387,7 +387,7 @@ def update_race(
 
 
 @router.delete("/{race_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(require_coach)):
+def delete_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
@@ -400,7 +400,7 @@ def delete_heat(
     race_id: int,
     heat_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    _: User = Depends(require_admin),
 ):
     heat = db.get(Heat, heat_id)
     if not heat or heat.race_id != race_id:
@@ -416,7 +416,7 @@ def update_result(
     result_id: int,
     body: ResultCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    _: User = Depends(require_admin),
 ):
     heat = db.get(Heat, heat_id)
     if not heat or heat.race_id != race_id:
@@ -468,7 +468,7 @@ def delete_result(
     heat_id: int,
     result_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_coach),
+    _: User = Depends(require_admin),
 ):
     heat = db.get(Heat, heat_id)
     if not heat or heat.race_id != race_id:

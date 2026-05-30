@@ -12,7 +12,15 @@ export default function HomePage() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Athletes without a coach belong on /find-coach, not the home ticket.
   useEffect(() => {
+    if (user?.role === 'athlete' && !user?.coach_id) {
+      navigate('/find-coach', { replace: true });
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
+    if (user?.role === 'athlete' && !user?.coach_id) return;
     let alive = true;
     setLoading(true);
     getHomeSummary()
@@ -20,7 +28,7 @@ export default function HomePage() {
       .catch(() => {})
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
-  }, []);
+  }, [user]);
 
   if (loading) {
     return (

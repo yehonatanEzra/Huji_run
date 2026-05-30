@@ -75,11 +75,12 @@ def update_professional(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    if current_user.role not in ("coach", "admin"):
-        raise HTTPException(status_code=403, detail="Only coaches can edit professionals")
     p = db.get(HealthProfessional, professional_id)
     if not p:
         raise HTTPException(status_code=404, detail="Professional not found")
+    # Admin can edit any. Coach can only edit their own entries.
+    if current_user.role != "admin" and p.created_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the creator or an admin can edit this professional")
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(p, field, value)
     db.commit()
@@ -93,11 +94,11 @@ def delete_professional(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    if current_user.role not in ("coach", "admin"):
-        raise HTTPException(status_code=403, detail="Only coaches can delete professionals")
     p = db.get(HealthProfessional, professional_id)
     if not p:
         raise HTTPException(status_code=404, detail="Professional not found")
+    if current_user.role != "admin" and p.created_by_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the creator or an admin can delete this professional")
     db.delete(p)
     db.commit()
 

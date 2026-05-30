@@ -22,6 +22,7 @@ class TokenResponse(BaseModel):
     full_name: str
     user_id: int
     training_group_id: Optional[int] = None
+    coach_id: Optional[int] = None
 
 
 class UserOut(BaseModel):
@@ -31,5 +32,6 @@ class UserOut(BaseModel):
     gender: str
     role: str
     training_group_id: Optional[int] = None
+    coach_id: Optional[int] = None
 
     model_config = {"from_attributes": True}

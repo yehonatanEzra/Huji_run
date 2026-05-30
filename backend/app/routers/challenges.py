@@ -112,7 +112,7 @@ def list_challenges(
     today = date.today()
     q = db.query(Challenge)
 
-    if current_user.role != "coach":
+    if current_user.role not in ("coach", "admin"):
         q = q.filter(
             (Challenge.training_group_id == None) |
             (Challenge.training_group_id == current_user.training_group_id)

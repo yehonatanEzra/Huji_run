@@ -126,7 +126,7 @@ def create_registration(
         raise HTTPException(status_code=404, detail="Race not found")
 
     target_user_id = payload.user_id or current_user.id
-    if target_user_id != current_user.id and current_user.role != "coach":
+    if target_user_id != current_user.id and current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Only coaches can register others")
 
     target = db.get(User, target_user_id)
@@ -173,7 +173,7 @@ def update_registration(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if user_id != current_user.id and current_user.role != "coach":
+    if user_id != current_user.id and current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Only coaches can update others' registrations")
 
     reg = db.query(RaceRegistration).filter(
@@ -209,7 +209,7 @@ def delete_registration(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if user_id != current_user.id and current_user.role != "coach":
+    if user_id != current_user.id and current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Only coaches can remove others")
     reg = db.query(RaceRegistration).filter(
         RaceRegistration.race_id == race_id,

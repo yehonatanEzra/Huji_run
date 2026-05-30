@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { isCoachLike } from '../utils/roles';
 import { getFeed, createAnnouncement, updateAnnouncement, deleteAnnouncement, toggleReaction, addComment, deleteComment } from '../api/feed';
 import { listGroups } from '../api/coach';
 import Modal from '../components/ui/Modal';
@@ -35,7 +36,7 @@ function Avatar({ photoUrl, name, size = 'sm' }) {
 
 export default function FeedPage() {
   const { user } = useAuth();
-  const isCoach = user?.role === 'coach';
+  const isCoach = isCoachLike(user);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -199,7 +200,7 @@ export default function FeedPage() {
 
   const canPost = isCoach || !!user?.training_group_id;
   const visiblePosts = authorFilter === 'coach'
-    ? posts.filter(p => p.author_role === 'coach')
+    ? posts.filter(p => p.author_role === 'coach' || p.author_role === 'admin')
     : posts;
 
   return (
@@ -242,7 +243,7 @@ export default function FeedPage() {
                     <div>
                       <h3 className="font-semibold text-sm">{post.title}</h3>
                       <p className="text-xs text-gray-400">
-                        <span className={post.author_role === 'coach' ? 'text-amber-600 font-semibold' : ''}>{post.author_name}</span> · {timeAgo(post.created_at)}
+                        <span className={(post.author_role === 'coach' || post.author_role === 'admin') ? 'text-amber-600 font-semibold' : ''}>{post.author_name}</span> · {timeAgo(post.created_at)}
                         {post.training_group_id && (
                           <span className="ml-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px]">
                             {groups.find(g => g.id === post.training_group_id)?.name || 'Group'}
@@ -303,7 +304,7 @@ export default function FeedPage() {
                         <Avatar photoUrl={c.photo_url} name={c.user_name} size="sm" />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs">
-                            <span className={`font-semibold ${c.user_role === 'coach' ? 'text-amber-600' : ''}`}>{c.user_name}</span>
+                            <span className={`font-semibold ${(c.user_role === 'coach' || c.user_role === 'admin') ? 'text-amber-600' : ''}`}>{c.user_name}</span>
                             <span className="text-gray-400 ml-1">{timeAgo(c.created_at)}</span>
                           </p>
                           <p className="text-sm text-gray-700">{c.body}</p>

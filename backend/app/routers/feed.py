@@ -77,7 +77,7 @@ def get_feed(
     db: Session = Depends(get_db),
 ):
     q = db.query(Announcement)
-    if current_user.role != "coach":
+    if current_user.role not in ("coach", "admin"):
         q = q.filter(
             (Announcement.training_group_id == None) |
             (Announcement.training_group_id == current_user.training_group_id)
@@ -95,7 +95,7 @@ def create_announcement(
     db: Session = Depends(get_db),
 ):
     # Athletes can only post to their own group; they can't post globally.
-    if current_user.role != "coach":
+    if current_user.role not in ("coach", "admin"):
         if not body.training_group_id:
             raise HTTPException(status_code=403, detail="Only coaches can post to all members")
         if body.training_group_id != current_user.training_group_id:
@@ -122,7 +122,7 @@ def update_announcement(
     ann = db.get(Announcement, announcement_id)
     if not ann:
         raise HTTPException(status_code=404, detail="Not found")
-    if ann.author_id != current_user.id and current_user.role != "coach":
+    if ann.author_id != current_user.id and current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Only the author or a coach can edit")
     ann.title = body.title
     ann.body = body.body
@@ -141,7 +141,7 @@ def delete_announcement(
     ann = db.get(Announcement, announcement_id)
     if not ann:
         raise HTTPException(status_code=404, detail="Not found")
-    if ann.author_id != current_user.id and current_user.role != "coach":
+    if ann.author_id != current_user.id and current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Only the author or a coach can delete")
     db.delete(ann)
     db.commit()
@@ -227,7 +227,7 @@ def delete_comment(
     ).first()
     if not comment:
         raise HTTPException(status_code=404, detail="Not found")
-    if comment.user_id != current_user.id and current_user.role != "coach":
+    if comment.user_id != current_user.id and current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Not allowed")
     db.delete(comment)
     db.commit()

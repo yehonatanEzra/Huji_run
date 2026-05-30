@@ -28,7 +28,7 @@ class CommentOut(BaseModel):
 
 def _can_access(log: WorkoutLog, user: User) -> bool:
     """The log's athlete and any coach may read/post."""
-    return user.role == "coach" or log.athlete_id == user.id
+    return user.role in ("coach", "admin") or log.athlete_id == user.id
 
 
 @router.get("/{log_id}/comments", response_model=List[CommentOut])
@@ -106,7 +106,7 @@ def delete_comment(
     if not c or c.workout_log_id != log_id:
         raise HTTPException(status_code=404, detail="Comment not found")
     # Only the author or a coach may delete
-    if current_user.role != "coach" and c.author_id != current_user.id:
+    if current_user.role not in ("coach", "admin") and c.author_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed")
     db.delete(c)
     db.commit()

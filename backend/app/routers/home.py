@@ -53,7 +53,7 @@ def home_summary(
     # Today's DayData — reuse the calendar week-builder, then pluck today's slot
     week = _build_week(
         current_user, ws, db,
-        is_coach=current_user.role == "coach",
+        is_coach=current_user.role in ("coach", "admin"),
         viewer_id=current_user.id,
     )
     today_data = next((d for d in week.days if d.date == today), None)

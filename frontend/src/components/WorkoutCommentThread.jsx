@@ -72,7 +72,7 @@ export default function WorkoutCommentThread({ workoutLogId, onCountChange }) {
         <div className="space-y-2 mb-3">
           {comments.map((c) => {
             const mine = user && c.author_id === user.id;
-            const isCoach = c.author_role === 'coach';
+            const isCoach = c.author_role === 'coach' || c.author_role === 'admin';
             return (
               <div
                 key={c.id}
@@ -90,7 +90,7 @@ export default function WorkoutCommentThread({ workoutLogId, onCountChange }) {
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap text-gray-800">{c.body}</p>
-                {(mine || user?.role === 'coach') && (
+                {(mine || user?.role === 'coach' || user?.role === 'admin') && (
                   <button
                     onClick={() => handleDelete(c.id)}
                     className="mt-1 text-[10px] text-gray-400 hover:text-red-600"

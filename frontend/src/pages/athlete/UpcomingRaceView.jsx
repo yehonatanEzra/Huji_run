@@ -19,7 +19,7 @@ function heatTitle(h) {
 
 export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) {
   const { user } = useAuth();
-  const isCoach = user?.role === 'coach';
+  const isCoach = user?.role === 'coach' || user?.role === 'admin';
 
   const [regs, setRegs] = useState([]);
   const [loading, setLoading] = useState(true);

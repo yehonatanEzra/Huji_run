@@ -75,7 +75,7 @@ def update_professional(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    if current_user.role != "coach":
+    if current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Only coaches can edit professionals")
     p = db.get(HealthProfessional, professional_id)
     if not p:
@@ -93,7 +93,7 @@ def delete_professional(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    if current_user.role != "coach":
+    if current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=403, detail="Only coaches can delete professionals")
     p = db.get(HealthProfessional, professional_id)
     if not p:

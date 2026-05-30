@@ -21,7 +21,7 @@ import AboutPage from './pages/AboutPage';
 
 export default function App() {
   const { user } = useAuth();
-  const landingFor = (u) => u?.role === 'coach' ? '/coach/dashboard' : '/home';
+  const landingFor = (u) => (u?.role === 'coach' || u?.role === 'admin') ? '/coach/dashboard' : '/home';
 
   return (
     <Routes>

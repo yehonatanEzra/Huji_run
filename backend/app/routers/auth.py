@@ -32,7 +32,7 @@ def register(body: RegisterRequest, db: Annotated[Session, Depends(get_db)]):
     db.commit()
     db.refresh(user)
     token = create_access_token({"sub": user.id, "role": user.role})
-    return TokenResponse(access_token=token, role=user.role, full_name=user.full_name, user_id=user.id, training_group_id=user.training_group_id)
+    return TokenResponse(access_token=token, role=user.role, full_name=user.full_name, user_id=user.id, training_group_id=user.training_group_id, coach_id=user.coach_id)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -41,7 +41,7 @@ def login(body: LoginRequest, db: Annotated[Session, Depends(get_db)]):
     if not user or not pwd_context.verify(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token({"sub": user.id, "role": user.role})
-    return TokenResponse(access_token=token, role=user.role, full_name=user.full_name, user_id=user.id, training_group_id=user.training_group_id)
+    return TokenResponse(access_token=token, role=user.role, full_name=user.full_name, user_id=user.id, training_group_id=user.training_group_id, coach_id=user.coach_id)
 
 
 @router.get("/me", response_model=UserOut)

@@ -7,3 +7,4 @@ from .health_wellness import HealthProfessional, HealthReview
 from .kudos import Kudos
 from .feed import Announcement, AnnouncementReaction, AnnouncementComment
 from .challenge import Challenge
+from .coach_request import CoachRequest

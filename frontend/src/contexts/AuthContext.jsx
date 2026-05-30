@@ -22,6 +22,7 @@ export function AuthProvider({ children }) {
         username: data.username,
         gender: data.gender,
         training_group_id: data.training_group_id,
+        coach_id: data.coach_id ?? null,
       };
       localStorage.setItem('user', JSON.stringify(merged));
       setUser(merged);
@@ -35,6 +36,7 @@ export function AuthProvider({ children }) {
       role: tokenData.role,
       full_name: tokenData.full_name,
       training_group_id: tokenData.training_group_id ?? null,
+      coach_id: tokenData.coach_id ?? null,
     };
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);

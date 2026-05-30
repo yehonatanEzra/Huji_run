@@ -208,6 +208,103 @@ def _migrate_individual_target_columns():
 _migrate_individual_target_columns()
 
 
+def _migrate_users_coach_id():
+    """Add User.coach_id column if missing (athlete → their coach)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("users")}
+    if "coach_id" in existing:
+        return
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN coach_id INTEGER REFERENCES users(id)"))
+        try:
+            conn.execute(text("CREATE INDEX ix_users_coach_id ON users(coach_id)"))
+        except Exception:
+            pass
+        conn.commit()
+
+
+_migrate_users_coach_id()
+
+
+def _migrate_training_groups_coach_id():
+    """Add TrainingGroup.coach_id column if missing (group → owning coach)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "training_groups" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("training_groups")}
+    if "coach_id" in existing:
+        return
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE training_groups ADD COLUMN coach_id INTEGER REFERENCES users(id)"))
+        try:
+            conn.execute(text("CREATE INDEX ix_training_groups_coach_id ON training_groups(coach_id)"))
+        except Exception:
+            pass
+        conn.commit()
+
+
+_migrate_training_groups_coach_id()
+
+
+def _migrate_role_enum_add_admin():
+    """Add 'admin' to the role enum on Postgres. SQLite stores the role as a
+    plain string at runtime so no DDL change is needed there."""
+    if engine.dialect.name == "sqlite":
+        return
+    with engine.connect() as conn:
+        try:
+            # ADD VALUE IF NOT EXISTS is the idempotent form (Postgres >= 9.6).
+            conn.execute(text("ALTER TYPE role_enum ADD VALUE IF NOT EXISTS 'admin'"))
+            conn.commit()
+        except Exception:
+            try:
+                conn.execute(text("ALTER TYPE role_enum ADD VALUE 'admin'"))
+                conn.commit()
+            except Exception:
+                pass  # already there
+
+
+_migrate_role_enum_add_admin()
+
+
+def _bootstrap_admin_and_coach_ids():
+    """One-time data backfill: promote the original sole coach to admin and
+    attach every athlete + training group to them. Idempotent — after the
+    first run the WHERE filters match zero rows."""
+    from .database import SessionLocal
+    from .models.training_group import TrainingGroup
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.role == "admin").order_by(User.id.asc()).first()
+        if admin is None:
+            coach = db.query(User).filter(User.role == "coach").order_by(User.id.asc()).first()
+            if coach is None:
+                return  # fresh DB with no coach yet
+            coach.role = "admin"
+            admin = coach
+            db.commit()
+        db.query(User).filter(User.role == "athlete", User.coach_id.is_(None)).update(
+            {User.coach_id: admin.id}, synchronize_session=False
+        )
+        db.query(TrainingGroup).filter(TrainingGroup.coach_id.is_(None)).update(
+            {TrainingGroup.coach_id: admin.id}, synchronize_session=False
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+try:
+    _bootstrap_admin_and_coach_ids()
+except Exception as e:
+    import logging
+    logging.warning(f"Bootstrap admin migration failed: {e}")
+
+
 def _refresh_all_hall_of_fame():
     """Recompute the Hall of Fame for every canonical distance+gender on startup,
     so old results (added before the per-distance refresh was wired in, or

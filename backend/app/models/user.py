@@ -15,9 +15,12 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     gender: Mapped[str] = mapped_column(Enum("M", "F", name="gender_enum"), nullable=False)
     role: Mapped[str] = mapped_column(
-        Enum("athlete", "coach", name="role_enum"), nullable=False, default="athlete"
+        Enum("athlete", "coach", "admin", name="role_enum"), nullable=False, default="athlete"
     )
     training_group_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("training_groups.id"), nullable=True)
+    # Athletes only: which coach this athlete is registered with. Cleared on
+    # leave-coach. Coaches/admins leave this null.
+    coach_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     photo_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

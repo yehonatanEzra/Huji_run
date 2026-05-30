@@ -140,7 +140,7 @@ function RecordsView() {
 
 function ChallengesView() {
   const { user } = useAuth();
-  const isCoach = user?.role === 'coach';
+  const isCoach = user?.role === 'coach' || user?.role === 'admin';
   const [filter, setFilter] = useState('active');
   const [challenges, setChallenges] = useState([]);
   const [loading, setLoading] = useState(true);

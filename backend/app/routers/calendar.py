@@ -139,7 +139,7 @@ def get_week(
 ):
     return _build_week(
         current_user, _week_start(day), db,
-        is_coach=current_user.role == "coach",
+        is_coach=current_user.role in ("coach", "admin"),
         group_id=group_id,
         viewer_id=current_user.id,
     )

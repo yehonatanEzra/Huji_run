@@ -41,6 +41,15 @@ def get_current_user(
 
 
 def require_coach(current_user: Annotated[User, Depends(get_current_user)]) -> User:
-    if current_user.role != "coach":
+    """Allow coach OR admin. Admin is a superset of coach permissions."""
+    if current_user.role not in ("coach", "admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Coach access required")
+    return current_user
+
+
+def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    """Strict admin-only gate. Used for: rename/delete users, race writes,
+    HoF challenge writes, and global feed broadcasts."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user

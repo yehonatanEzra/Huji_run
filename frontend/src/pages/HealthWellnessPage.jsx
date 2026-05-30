@@ -358,7 +358,7 @@ function ProfessionalCard({ professional, isCoach, onEdit, onDelete, onReviews }
 
 export default function HealthWellnessPage() {
   const { user } = useAuth();
-  const isCoach = user?.role === 'coach';
+  const isCoach = user?.role === 'coach' || user?.role === 'admin';
 
   const [professionals, setProfessionals] = useState([]);
   const [loading, setLoading] = useState(true);

@@ -21,7 +21,7 @@ def get_hof_groups(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    if current_user.role == "coach":
+    if current_user.role in ("coach", "admin"):
         groups = db.query(TrainingGroup).order_by(TrainingGroup.name).all()
         return [{"id": g.id, "name": g.name} for g in groups]
     if current_user.training_group_id:

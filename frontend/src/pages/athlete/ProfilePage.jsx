@@ -124,12 +124,12 @@ export default function ProfilePage() {
             </div>
           )}
           <span className="text-sm text-gray-500">
-            {user?.role === 'coach' ? 'Coach' : profile.gender === 'M' ? 'Male' : 'Female'}
+            {(user?.role === 'coach' || user?.role === 'admin') ? 'Coach' : profile.gender === 'M' ? 'Male' : 'Female'}
           </span>
         </div>
       </div>
 
-      {user?.role !== 'coach' && (
+      {user?.role !== 'coach' && user?.role !== 'admin' && (
         <>
           <h3 className="text-base font-semibold mb-3">Personal Bests</h3>
           {profile.personal_bests.length === 0 ? (

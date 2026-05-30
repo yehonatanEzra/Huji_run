@@ -50,8 +50,19 @@ export default function WorkoutPublisherPage() {
     cooldown: '',
     draft_content: '',
   });
-  const [broadcastToAll, setBroadcastToAll] = useState(true);
   const [selectedRecipientIds, setSelectedRecipientIds] = useState([]);
+  // Snapshot of recipient_ids at the moment we opened the edit form. Used so
+  // (a) the "overridden by newer workout" indicator only fires for athletes
+  //     who were already in the list (legacy data), not ones the coach just
+  //     re-added in this session, and
+  // (b) the save-cleanup only removes athletes from other workouts when
+  //     they were newly added during this edit.
+  const [initialRecipientIds, setInitialRecipientIds] = useState([]);
+  // override-confirm panel: null | 'confirm' (yes/no/pick) | 'pick' (per-athlete checkboxes)
+  const [overrideMode, setOverrideMode] = useState(null);
+  const [overridePickIds, setOverridePickIds] = useState([]);
+  // Single-athlete transfer prompt: { athleteName, fromLabels, onConfirm } or null
+  const [transferPrompt, setTransferPrompt] = useState(null);
   const [saving, setSaving] = useState(false);
   const [monthExpanded, setMonthExpanded] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(1);
@@ -128,8 +139,8 @@ export default function WorkoutPublisherPage() {
     setSelectedDay(day);
     setEditingId(null);  // start in list view
     setForm(emptyForm);
-    setBroadcastToAll(true);
     setSelectedRecipientIds([]);
+    setOverrideMode(null);
     if (!groupDetail || groupDetail.id !== selectedGroup.id) {
       fetchGroupDetail();
     }
@@ -147,20 +158,24 @@ export default function WorkoutPublisherPage() {
       draft_content: gw.draft_content || '',
     });
     const recips = gw.recipient_ids || [];
-    setBroadcastToAll(recips.length === 0);
     setSelectedRecipientIds(recips);
+    setInitialRecipientIds(recips);
+    setOverrideMode(null);
   };
 
   const openWorkoutForCreate = () => {
     setEditingId('new');
     setForm(emptyForm);
-    setBroadcastToAll(true);
     setSelectedRecipientIds([]);
+    setInitialRecipientIds([]);
+    setOverrideMode(null);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setForm(emptyForm);
+    setInitialRecipientIds([]);
+    setOverrideMode(null);
   };
 
   const handleSave = async (overrides = {}) => {
@@ -174,12 +189,43 @@ export default function WorkoutPublisherPage() {
       } else if (['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(payload.workout_type)) {
         payload.content = '';
       }
-      payload.recipient_ids = broadcastToAll ? [] : selectedRecipientIds;
+      const newRecips = selectedRecipientIds.slice();
+      payload.recipient_ids = newRecips;
+      // Only athletes the coach NEWLY added during this edit session should
+      // trigger removal from other workouts. Athletes that were already in
+      // this workout's recipient list when the form opened are left alone
+      // (they may already coexist with another workout for legacy reasons).
+      const initialSet = new Set(initialRecipientIds);
+      const newlyAddedSet = new Set(newRecips.filter(aid => !initialSet.has(aid)));
+
+      const otherWorkouts = (selectedDay.group_workouts || []).filter(
+        gw => gw.id !== editingId
+      );
+      const cleanups = [];
+      for (const gw of otherWorkouts) {
+        const oldList = gw.recipient_ids || [];
+        if (oldList.length === 0) continue;  // broadcast — nothing to prune
+        const pruned = oldList.filter(aid => !newlyAddedSet.has(aid));
+        if (pruned.length === oldList.length) continue;  // no overlap
+        cleanups.push({ id: gw.id, recipients: pruned, deleteIfEmpty: pruned.length === 0 });
+      }
+
+      // Save (create or update) THIS workout first.
       if (editingId === 'new' || editingId == null) {
         await createGroupWorkout(selectedGroup.id, selectedDay.date, payload);
       } else {
         await updateGroupWorkoutById(editingId, payload);
       }
+
+      // Apply cleanups serially.
+      for (const c of cleanups) {
+        if (c.deleteIfEmpty) {
+          await deleteGroupWorkoutById(c.id);
+        } else {
+          await updateGroupWorkoutById(c.id, { recipient_ids: c.recipients });
+        }
+      }
+
       await refetchDay(selectedDay.date);
       cancelEdit();
     } catch (err) { console.error(err); }
@@ -504,6 +550,36 @@ export default function WorkoutPublisherPage() {
             ? (form.warmup.trim() || form.main_session.trim() || form.cooldown.trim())
             : form.content.trim();
 
+          // Map athleteId → other workouts that day they're already on
+          // (excluding the workout being edited).
+          const assignmentsByAthlete = {};
+          (selectedDay.group_workouts || []).forEach(gw => {
+            if (gw.id === editingId) return;
+            (gw.recipient_ids || []).forEach(aid => {
+              const label = gw.title || typeMeta(gw.workout_type).label;
+              (assignmentsByAthlete[aid] ||= []).push({ id: gw.id, label });
+            });
+          });
+          const memberIds = (groupDetail?.members || []).map(m => m.id);
+          const unassignedIds = memberIds.filter(id => !assignmentsByAthlete[id]);
+          const assignedCount = memberIds.length - unassignedIds.length;
+
+          // "Overridden" indicator: this is for legacy data where an athlete
+          // sits in two workouts' recipient lists. Only apply it to athletes
+          // who were ALREADY in this workout's initial recipient list —
+          // athletes the coach just added in this session will be moved on
+          // save via the cleanup logic, so they shouldn't appear struck-through.
+          const overriddenIds = new Set();
+          if (typeof editingId === 'number') {
+            const initialSet = new Set(initialRecipientIds);
+            memberIds.forEach(aid => {
+              if (!initialSet.has(aid)) return;
+              if (!selectedRecipientIds.includes(aid)) return;
+              const others = assignmentsByAthlete[aid] || [];
+              if (others.some(o => o.id > editingId)) overriddenIds.add(aid);
+            });
+          }
+
           return (
             <div className="space-y-4">
               {/* Workout type selector */}
@@ -572,52 +648,190 @@ export default function WorkoutPublisherPage() {
 
               {/* Recipients */}
               <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-gray-700">Who gets this workout?</p>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={broadcastToAll}
-                      onChange={(e) => {
-                        setBroadcastToAll(e.target.checked);
-                        if (e.target.checked) setSelectedRecipientIds([]);
-                      }}
-                      className="w-4 h-4 rounded"
-                    />
-                    <span className="text-xs text-gray-700 font-medium">All athletes</span>
-                  </label>
-                </div>
-                {!broadcastToAll && (
-                  groupDetail && groupDetail.members.length > 0 ? (
-                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-                      {groupDetail.members.map(m => {
-                        const checked = selectedRecipientIds.includes(m.id);
-                        return (
-                          <label key={m.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                setSelectedRecipientIds(prev =>
-                                  e.target.checked
-                                    ? [...prev, m.id]
-                                    : prev.filter(id => id !== m.id)
-                                );
-                              }}
-                              className="w-4 h-4 rounded"
-                            />
-                            <span className="text-sm">{m.full_name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  ) : groupDetail ? (
-                    <p className="text-xs text-gray-400 italic">No athletes in this group</p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic">Loading members…</p>
-                  )
+                <p className="text-xs font-semibold text-gray-700">Choose athletes</p>
+
+                {groupDetail && groupDetail.members.length > 0 && (
+                  <>
+                    {assignedCount > 0 && (
+                      <p className="text-[11px] italic text-gray-500">
+                        {assignedCount} of {groupDetail.members.length} athlete{groupDetail.members.length === 1 ? '' : 's'} already have a workout today.
+                      </p>
+                    )}
+
+                    {/* Quick actions */}
+                    {overrideMode == null && (
+                      <div className="flex gap-2 flex-wrap">
+                        <button type="button"
+                          onClick={() => setSelectedRecipientIds(prev => Array.from(new Set([...prev, ...unassignedIds])))}
+                          disabled={unassignedIds.length === 0}
+                          className="text-[11px] px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40">
+                          + Add all unassigned ({unassignedIds.length})
+                        </button>
+                        <button type="button"
+                          onClick={() => {
+                            // Athletes that would be NEWLY selected by "all" and
+                            // are on another workout — those require confirmation.
+                            const conflicting = memberIds.filter(id =>
+                              (assignmentsByAthlete[id] || []).length > 0 && !selectedRecipientIds.includes(id)
+                            );
+                            if (conflicting.length === 0) {
+                              setSelectedRecipientIds(memberIds);
+                            } else {
+                              setOverridePickIds(conflicting);
+                              setOverrideMode('confirm');
+                            }
+                          }}
+                          className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">
+                          + Add all athletes
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Override-confirm panel */}
+                    {overrideMode === 'confirm' && (
+                      <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 space-y-2">
+                        <p className="text-[12px] text-amber-900 font-semibold">
+                          Override {overridePickIds.length} athlete{overridePickIds.length === 1 ? '' : 's'}?
+                        </p>
+                        <p className="text-[11px] text-amber-800">
+                          These already have a workout today:&nbsp;
+                          <span className="font-medium">
+                            {(groupDetail?.members || [])
+                              .filter(m => overridePickIds.includes(m.id))
+                              .map(m => m.full_name).join(', ')}
+                          </span>
+                          . Saving will move them to this workout and remove them from the previous one.
+                        </p>
+                        <div className="flex gap-2 flex-wrap">
+                          <button type="button"
+                            onClick={() => { setSelectedRecipientIds(memberIds); setOverrideMode(null); }}
+                            className="text-[11px] px-2 py-1 rounded bg-amber-600 text-white hover:bg-amber-700">
+                            Override all
+                          </button>
+                          <button type="button"
+                            onClick={() => setOverrideMode('pick')}
+                            className="text-[11px] px-2 py-1 rounded border border-amber-400 text-amber-900 hover:bg-amber-100">
+                            Pick which to override
+                          </button>
+                          <button type="button"
+                            onClick={() => setOverrideMode(null)}
+                            className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pick-which override panel */}
+                    {overrideMode === 'pick' && (
+                      <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 space-y-2">
+                        <p className="text-[12px] text-amber-900 font-semibold">Tick athletes to override</p>
+                        <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                          {(groupDetail?.members || [])
+                            .filter(m => (assignmentsByAthlete[m.id] || []).length > 0 && !selectedRecipientIds.includes(m.id))
+                            .map(m => {
+                              const checked = overridePickIds.includes(m.id);
+                              const labels = (assignmentsByAthlete[m.id] || []).map(a => a.label).join(', ');
+                              return (
+                                <label key={m.id} className="flex items-center gap-2 px-1 py-0.5 cursor-pointer">
+                                  <input type="checkbox" checked={checked}
+                                    onChange={(e) => setOverridePickIds(prev =>
+                                      e.target.checked ? [...prev, m.id] : prev.filter(id => id !== m.id)
+                                    )}
+                                    className="w-4 h-4 rounded" />
+                                  <span className="text-[12px] text-gray-800">{m.full_name}</span>
+                                  <span className="text-[10px] text-gray-500 italic">• on "{labels}"</span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          <button type="button"
+                            onClick={() => {
+                              const unassignedToAdd = memberIds.filter(id => !(assignmentsByAthlete[id]?.length > 0));
+                              const next = Array.from(new Set([...selectedRecipientIds, ...unassignedToAdd, ...overridePickIds]));
+                              setSelectedRecipientIds(next);
+                              setOverrideMode(null);
+                            }}
+                            className="text-[11px] px-2 py-1 rounded bg-amber-600 text-white hover:bg-amber-700">
+                            Apply
+                          </button>
+                          <button type="button"
+                            onClick={() => setOverrideMode('confirm')}
+                            className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">
+                            Back
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-                {!broadcastToAll && selectedRecipientIds.length === 0 && (
+
+                {/* Members checkbox list */}
+                {groupDetail && groupDetail.members.length > 0 ? (
+                  <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                    {groupDetail.members.map(m => {
+                      const inList = selectedRecipientIds.includes(m.id);
+                      const overridden = overriddenIds.has(m.id);
+                      const checked = inList && !overridden;
+                      const otherAssignments = assignmentsByAthlete[m.id] || [];
+                      const onOther = otherAssignments.length > 0;
+                      return (
+                        <label key={m.id} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const willCheck = e.target.checked;
+                              const apply = () => setSelectedRecipientIds(prev =>
+                                willCheck
+                                  ? [...prev, m.id]
+                                  : prev.filter(id => id !== m.id)
+                              );
+                              // If turning on AND athlete is already on another
+                              // workout that day, ask for confirmation first.
+                              if (willCheck && onOther) {
+                                setTransferPrompt({
+                                  athleteName: m.full_name,
+                                  fromLabels: otherAssignments.map(a => a.label),
+                                  onConfirm: apply,
+                                });
+                                return;
+                              }
+                              apply();
+                            }}
+                            className="w-4 h-4 rounded mt-0.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm ${overridden ? 'text-gray-400 line-through' : ''}`}>{m.full_name}</span>
+                              {onOther && (
+                                <span className="text-[10px] text-gray-500 italic">
+                                  • on "{otherAssignments.map(a => a.label).join('", "')}"
+                                </span>
+                              )}
+                            </div>
+                            {overridden && (
+                              <p className="text-[10px] text-amber-700 mt-0.5">
+                                ↪ currently sees a newer workout that day
+                              </p>
+                            )}
+                            {!overridden && onOther && checked && (
+                              <p className="text-[10px] text-amber-700 mt-0.5">
+                                ↪ will move from previous workout on save
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : groupDetail ? (
+                  <p className="text-xs text-gray-400 italic">No athletes in this group</p>
+                ) : (
+                  <p className="text-xs text-gray-400 italic">Loading members…</p>
+                )}
+                {selectedRecipientIds.length === 0 && (
                   <p className="text-[11px] text-orange-600">⚠ No athletes selected — this workout won't be visible to anyone.</p>
                 )}
               </div>
@@ -798,6 +1012,54 @@ export default function WorkoutPublisherPage() {
           </div>
         )}
       </Modal>
+
+      {/* Transfer-confirm sheet — mobile-first; bottom sheet on small screens, centered card on larger */}
+      {transferPrompt && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4 animate-fade-in"
+          onClick={() => setTransferPrompt(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl p-5 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xl shrink-0">↪</div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-gray-900">
+                  Move {transferPrompt.athleteName}?
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Already has{' '}
+                  <span className="font-medium text-gray-800">
+                    "{transferPrompt.fromLabels.join('", "')}"
+                  </span>{' '}
+                  scheduled today. Saving will move them to this workout.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTransferPrompt(null)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold active:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  transferPrompt.onConfirm();
+                  setTransferPrompt(null);
+                }}
+                className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-semibold active:bg-blue-700 shadow-sm"
+              >
+                Move
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

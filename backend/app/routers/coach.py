@@ -192,18 +192,35 @@ def dashboard_week(
     targets = db.query(IndividualTarget).filter(IndividualTarget.date.in_(week_dates)).all()
     target_map: dict[tuple, IndividualTarget] = {(t.athlete_id, t.date): t for t in targets}
 
-    group_workouts = db.query(GroupWorkout).filter(GroupWorkout.date.in_(week_dates)).all()
-    gw_map: dict[tuple, GroupWorkout] = {(gw.training_group_id, gw.date): gw for gw in group_workouts}
+    # All workouts in this week's date range, newest-first per (group, date).
+    group_workouts = (
+        db.query(GroupWorkout)
+        .filter(GroupWorkout.date.in_(week_dates))
+        .order_by(GroupWorkout.id.desc())
+        .all()
+    )
+    # (group, date) -> [workouts newest-first]
+    gw_by_group_day: dict[tuple, list[GroupWorkout]] = {}
+    for gw in group_workouts:
+        gw_by_group_day.setdefault((gw.training_group_id, gw.date), []).append(gw)
 
-    # Preload recipient targeting once for all this-week workouts
+    # Preload recipient targeting for all this-week workouts in one shot.
     from ..models.workout import GroupWorkoutRecipient
     gw_ids = [gw.id for gw in group_workouts]
-    gw_recipients: dict[int, set[int]] = {}
+    gw_recipients: dict[int, set[int]] = {wid: set() for wid in gw_ids}
     if gw_ids:
         for gid, aid in db.query(GroupWorkoutRecipient.group_workout_id, GroupWorkoutRecipient.athlete_id).filter(
             GroupWorkoutRecipient.group_workout_id.in_(gw_ids)
         ).all():
-            gw_recipients.setdefault(gid, set()).add(aid)
+            gw_recipients[gid].add(aid)
+
+    def _pick_for(athlete_id: int, group_id: int, day: date):
+        """Newest workout for (group, day) that targets athlete (broadcast or in recipient list)."""
+        for gw in gw_by_group_day.get((group_id, day), []):
+            rec = gw_recipients.get(gw.id, set())
+            if not rec or athlete_id in rec:
+                return gw
+        return None
 
     group_map = {g.id: g.name for g in db.query(TrainingGroup).all()}
 
@@ -242,12 +259,7 @@ def dashboard_week(
         for d in week_dates:
             log = log_map.get((athlete.id, d))
             target = target_map.get((athlete.id, d))
-            gw = gw_map.get((athlete.training_group_id, d)) if athlete.training_group_id else None
-            # Targeting: if gw has explicit recipients and this athlete isn't in the set, hide it
-            if gw:
-                rec_set = gw_recipients.get(gw.id)
-                if rec_set and athlete.id not in rec_set:
-                    gw = None
+            gw = _pick_for(athlete.id, athlete.training_group_id, d) if athlete.training_group_id else None
             log_out = None
             if log:
                 log_out = WorkoutLogOut.model_validate(log)
@@ -500,23 +512,31 @@ def get_athlete_week(
 
     gw_map = {}
     if athlete.training_group_id:
-        gws = db.query(GroupWorkout).filter(
-            GroupWorkout.training_group_id == athlete.training_group_id,
-            GroupWorkout.date.in_(week_dates),
-        ).all()
-        # Apply per-athlete targeting
+        # Newest-first so the per-day picker below grabs the most recent
+        # workout that targets this athlete.
+        gws = (
+            db.query(GroupWorkout)
+            .filter(
+                GroupWorkout.training_group_id == athlete.training_group_id,
+                GroupWorkout.date.in_(week_dates),
+            )
+            .order_by(GroupWorkout.id.desc())
+            .all()
+        )
         from ..models.workout import GroupWorkoutRecipient
         gw_ids = [g.id for g in gws]
-        recip: dict[int, set[int]] = {}
+        recip: dict[int, set[int]] = {wid: set() for wid in gw_ids}
         if gw_ids:
             for gid, aid in db.query(GroupWorkoutRecipient.group_workout_id, GroupWorkoutRecipient.athlete_id).filter(
                 GroupWorkoutRecipient.group_workout_id.in_(gw_ids)
             ).all():
-                recip.setdefault(gid, set()).add(aid)
-        for gw in gws:
-            rec_set = recip.get(gw.id)
+                recip[gid].add(aid)
+        for gw in gws:  # newest-first
+            if gw.date in gw_map:
+                continue  # already picked the newer one for this date
+            rec_set = recip.get(gw.id, set())
             if rec_set and athlete_id not in rec_set:
-                continue
+                continue  # this workout has explicit recipients and doesn't include this athlete
             gw_map[gw.date] = gw
 
     from ..models.kudos import Kudos

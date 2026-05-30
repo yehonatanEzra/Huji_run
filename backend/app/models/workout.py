@@ -18,7 +18,9 @@ class GroupWorkoutRecipient(Base):
 
 class GroupWorkout(Base):
     __tablename__ = "group_workouts"
-    __table_args__ = (UniqueConstraint("training_group_id", "date", name="uq_group_workout_group_date"),)
+    # No unique constraint on (training_group_id, date): multiple workouts may
+    # exist per (group, date), each with its own recipient subset. The
+    # athlete-side picker resolves overlaps by newest-id-wins.
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     training_group_id: Mapped[int] = mapped_column(Integer, ForeignKey("training_groups.id"), nullable=False, index=True)

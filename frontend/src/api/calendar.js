@@ -6,11 +6,19 @@ export const getWeek = (date, groupId) =>
 export const submitLog = (data) =>
   client.post('/calendar/log', data);
 
-export const upsertGroupWorkout = (groupId, date, body = {}) =>
-  client.put(`/calendar/group/${groupId}/${date}`, body);
+// Coach: full list of workouts for the week, grouped by day. Returns
+//   { week_start, days: [{date, group_workouts: [GroupWorkoutOut]}] }
+export const getCoachGroupWeek = (groupId, date) =>
+  client.get(`/calendar/coach/group/${groupId}`, { params: { day: date } });
 
-export const deleteGroupWorkout = (groupId, date) =>
-  client.delete(`/calendar/group/${groupId}/${date}`);
+export const createGroupWorkout = (groupId, date, body = {}) =>
+  client.post(`/calendar/group/${groupId}/${date}`, body);
+
+export const updateGroupWorkoutById = (workoutId, body = {}) =>
+  client.put(`/calendar/group-workouts/${workoutId}`, body);
+
+export const deleteGroupWorkoutById = (workoutId) =>
+  client.delete(`/calendar/group-workouts/${workoutId}`);
 
 export const upsertTarget = (athleteId, date, body) => {
   // Backward-compat: callers can pass (note, override) as positional args

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths } from 'date-fns';
-import { getWeek, upsertGroupWorkout, deleteGroupWorkout } from '../../api/calendar';
+import { getCoachGroupWeek, createGroupWorkout, updateGroupWorkoutById, deleteGroupWorkoutById } from '../../api/calendar';
 import { listGroups, createGroup, getGroup, renameGroup, deleteGroup, addMemberToGroup, removeMemberFromGroup, listAthletes } from '../../api/coach';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
@@ -39,6 +39,8 @@ export default function WorkoutPublisherPage() {
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDay, setSelectedDay] = useState(null);
+  // editingId: null → list view; 'new' → creating; number → editing that workout
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     workout_type: 'simple',
     title: '',
@@ -78,7 +80,7 @@ export default function WorkoutPublisherPage() {
     setLoading(true);
     try {
       if (view === 'weekly') {
-        const { data } = await getWeek(format(currentDate, 'yyyy-MM-dd'), selectedGroup.id);
+        const { data } = await getCoachGroupWeek(selectedGroup.id, format(currentDate, 'yyyy-MM-dd'));
         setDays(data.days);
       } else {
         const monthStart = startOfMonth(currentDate);
@@ -88,7 +90,7 @@ export default function WorkoutPublisherPage() {
         const weeks = [];
         let ws = calStart;
         while (ws <= calEnd) {
-          weeks.push(getWeek(format(ws, 'yyyy-MM-dd'), selectedGroup.id));
+          weeks.push(getCoachGroupWeek(selectedGroup.id, format(ws, 'yyyy-MM-dd')));
           ws = addDays(ws, 7);
         }
         const results = await Promise.all(weeks);
@@ -98,34 +100,73 @@ export default function WorkoutPublisherPage() {
     finally { setLoading(false); }
   };
 
+  // Re-fetch a single day's workouts without disturbing the rest of the grid —
+  // used after save/delete inside the modal so the "list view" updates live.
+  const refetchDay = async (date) => {
+    if (!selectedGroup) return null;
+    const { data } = await getCoachGroupWeek(selectedGroup.id, date);
+    const updated = data.days.find(d => d.date === date);
+    if (!updated) return null;
+    setDays((prev) => prev.map(d => d.date === date ? updated : d));
+    setSelectedDay(updated);
+    return updated;
+  };
+
   useEffect(() => { fetchData(); }, [currentDate, view, selectedGroup]);
+
+  const emptyForm = {
+    workout_type: 'simple',
+    title: '',
+    content: '',
+    warmup: '',
+    main_session: '',
+    cooldown: '',
+    draft_content: '',
+  };
 
   const openDay = (day) => {
     setSelectedDay(day);
-    const gw = day.group_workout;
-    setForm({
-      workout_type: gw?.workout_type || 'simple',
-      title: gw?.title || '',
-      content: gw?.content || '',
-      warmup: gw?.warmup || '',
-      main_session: gw?.main_session || '',
-      cooldown: gw?.cooldown || '',
-      draft_content: gw?.draft_content || '',
-    });
-    const existingRecipients = gw?.recipient_ids || [];
-    setBroadcastToAll(existingRecipients.length === 0);
-    setSelectedRecipientIds(existingRecipients);
-    // Ensure we have the group's members loaded for the recipient checkboxes
+    setEditingId(null);  // start in list view
+    setForm(emptyForm);
+    setBroadcastToAll(true);
+    setSelectedRecipientIds([]);
     if (!groupDetail || groupDetail.id !== selectedGroup.id) {
       fetchGroupDetail();
     }
+  };
+
+  const openWorkoutForEdit = (gw) => {
+    setEditingId(gw.id);
+    setForm({
+      workout_type: gw.workout_type || 'simple',
+      title: gw.title || '',
+      content: gw.content || '',
+      warmup: gw.warmup || '',
+      main_session: gw.main_session || '',
+      cooldown: gw.cooldown || '',
+      draft_content: gw.draft_content || '',
+    });
+    const recips = gw.recipient_ids || [];
+    setBroadcastToAll(recips.length === 0);
+    setSelectedRecipientIds(recips);
+  };
+
+  const openWorkoutForCreate = () => {
+    setEditingId('new');
+    setForm(emptyForm);
+    setBroadcastToAll(true);
+    setSelectedRecipientIds([]);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm(emptyForm);
   };
 
   const handleSave = async (overrides = {}) => {
     setSaving(true);
     try {
       const payload = { ...form, ...overrides };
-      // Clear fields not applicable to the selected type so the DB doesn't carry stale data
       if (['simple', 'easy', 'rest'].includes(payload.workout_type)) {
         payload.warmup = '';
         payload.main_session = '';
@@ -133,21 +174,25 @@ export default function WorkoutPublisherPage() {
       } else if (['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(payload.workout_type)) {
         payload.content = '';
       }
-      // Recipient targeting: empty list = broadcast to all, non-empty = restrict
       payload.recipient_ids = broadcastToAll ? [] : selectedRecipientIds;
-      await upsertGroupWorkout(selectedGroup.id, selectedDay.date, payload);
-      setSelectedDay(null);
-      fetchData();
+      if (editingId === 'new' || editingId == null) {
+        await createGroupWorkout(selectedGroup.id, selectedDay.date, payload);
+      } else {
+        await updateGroupWorkoutById(editingId, payload);
+      }
+      await refetchDay(selectedDay.date);
+      cancelEdit();
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
   };
 
-  const handleDelete = async () => {
+  const handleDeleteOne = async (workoutId) => {
+    if (!confirm('Delete this workout?')) return;
     setSaving(true);
     try {
-      await deleteGroupWorkout(selectedGroup.id, selectedDay.date);
-      setSelectedDay(null);
-      fetchData();
+      await deleteGroupWorkoutById(workoutId);
+      await refetchDay(selectedDay.date);
+      if (editingId === workoutId) cancelEdit();
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
   };
@@ -198,17 +243,22 @@ export default function WorkoutPublisherPage() {
     : format(currentDate, 'MMMM yyyy');
 
   const renderDayBadges = (day) => {
-    const gw = day.group_workout;
-    if (!gw) return null;
-    const hasPublished = gw.content || gw.warmup || gw.main_session || gw.cooldown;
+    const list = day.group_workouts || [];
+    if (list.length === 0) return null;
+    const shown = list.slice(0, 2);
+    const extra = list.length - shown.length;
     return (
       <div className="flex gap-1 items-center flex-wrap">
-        {hasPublished && (
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${typeMeta(gw.workout_type).color}`}>
+        {shown.map((gw) => (
+          <span key={gw.id} className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${typeMeta(gw.workout_type).color}`}>
             {typeMeta(gw.workout_type).label}
+            {gw.recipient_ids?.length > 0 && <span className="ml-1 opacity-70">·{gw.recipient_ids.length}</span>}
           </span>
+        ))}
+        {extra > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">+{extra}</span>}
+        {list.some(g => g.draft_content) && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Draft</span>
         )}
-        {gw.draft_content && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Draft</span>}
       </div>
     );
   };
@@ -230,17 +280,21 @@ export default function WorkoutPublisherPage() {
             <div className="grid grid-cols-7 gap-1">
               {week.map((day) => {
                 const inMonth = new Date(day.date + 'T00:00').getMonth() === currentDate.getMonth();
-                const gw = day.group_workout;
-                const hasPublished = gw && (gw.content || gw.warmup || gw.main_session || gw.cooldown);
-                const tMeta = hasPublished ? typeMeta(gw.workout_type) : null;
-                const cellIsRace = gw?.workout_type === 'race';
+                const list = day.group_workouts || [];
+                const published = list.filter(g => g.content || g.warmup || g.main_session || g.cooldown);
+                const hasPublished = published.length > 0;
+                const firstPub = published[0];
+                const tMeta = firstPub ? typeMeta(firstPub.workout_type) : null;
+                const cellIsRace = list.some(g => g.workout_type === 'race');
+                const hasDraft = list.some(g => g.draft_content);
+                const titleForCell = firstPub?.title;
                 return (
                   <button key={day.date} onClick={() => openDay(day)}
                     className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
                       !inMonth ? 'opacity-40' : ''
                     } ${cellIsRace ? 'border-2 border-indigo-500 bg-indigo-50' :
                        hasPublished ? 'border border-green-300 bg-green-50' :
-                       gw?.draft_content ? 'border border-yellow-300 bg-yellow-50' :
+                       hasDraft ? 'border border-yellow-300 bg-yellow-50' :
                        'border border-gray-200 bg-white'}`}>
                     {cellIsRace && (
                       <span className="absolute top-0 left-0 text-[10px] leading-none">🏁</span>
@@ -250,14 +304,17 @@ export default function WorkoutPublisherPage() {
                         {tMeta.abbr}
                       </span>
                     )}
+                    {list.length > 1 && (
+                      <span className="absolute top-0 right-0 text-[8px] px-1 leading-tight bg-blue-600 text-white rounded-bl font-bold">{list.length}</span>
+                    )}
                     <span className="font-semibold">{format(new Date(day.date + 'T00:00'), 'd')}</span>
                     <span className="text-[10px] text-gray-400">{format(new Date(day.date + 'T00:00'), 'EEE')}</span>
-                    {hasPublished && gw.title && (
-                      <span className="text-[9px] text-gray-700 mt-0.5 truncate w-full text-center font-medium">{gw.title}</span>
+                    {titleForCell && (
+                      <span className="text-[9px] text-gray-700 mt-0.5 truncate w-full text-center font-medium">{titleForCell}</span>
                     )}
                     <div className="flex gap-0.5 mt-1">
                       {hasPublished && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
-                      {gw?.draft_content && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
+                      {hasDraft && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
                     </div>
                   </button>
                 );
@@ -349,7 +406,10 @@ export default function WorkoutPublisherPage() {
           {loading ? <Spinner /> : view === 'weekly' ? (
             <div className="space-y-2">
               {days.map((day) => {
-                const isRace = day.group_workout?.workout_type === 'race';
+                const list = day.group_workouts || [];
+                const isRace = list.some(g => g.workout_type === 'race');
+                const firstPub = list.find(g => g.content || g.warmup || g.main_session || g.cooldown);
+                const draftOnly = !firstPub && list.find(g => g.draft_content);
                 return (
                 <button key={day.date} onClick={() => openDay(day)}
                   className={`w-full text-left p-3 rounded-xl hover:shadow-sm transition ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' : 'border border-gray-200 bg-white'}`}>
@@ -357,13 +417,29 @@ export default function WorkoutPublisherPage() {
                     <span className="text-sm font-semibold">{isRace && '🏁 '}{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
                     {renderDayBadges(day)}
                   </div>
-                  {(() => {
-                    const gw = day.group_workout;
-                    const snippet = workoutSnippet(gw);
-                    if (snippet) return <p className="text-sm text-gray-700 mt-1 truncate font-medium">{snippet}</p>;
-                    if (gw?.draft_content) return <p className="text-sm text-yellow-600 mt-1 truncate italic">{gw.draft_content}</p>;
-                    return <p className="text-sm text-gray-400 mt-1 italic">No workout set</p>;
-                  })()}
+                  {list.length === 0 ? (
+                    <p className="text-sm text-gray-400 mt-1 italic">No workout set</p>
+                  ) : list.length === 1 ? (
+                    (() => {
+                      const gw = list[0];
+                      const snippet = workoutSnippet(gw);
+                      if (snippet) return <p className="text-sm text-gray-700 mt-1 truncate font-medium">{snippet}</p>;
+                      if (gw.draft_content) return <p className="text-sm text-yellow-600 mt-1 truncate italic">{gw.draft_content}</p>;
+                      return null;
+                    })()
+                  ) : (
+                    <div className="mt-1 space-y-0.5">
+                      {list.slice(0, 3).map((gw) => (
+                        <p key={gw.id} className="text-xs text-gray-600 truncate">
+                          • {workoutSnippet(gw) || gw.draft_content || typeMeta(gw.workout_type).label}
+                          {gw.recipient_ids?.length > 0 && (
+                            <span className="text-gray-400"> · {gw.recipient_ids.length} athlete{gw.recipient_ids.length === 1 ? '' : 's'}</span>
+                          )}
+                        </p>
+                      ))}
+                      {list.length > 3 && <p className="text-[11px] text-gray-400">+{list.length - 3} more…</p>}
+                    </div>
+                  )}
                 </button>
                 );
               })}
@@ -373,8 +449,55 @@ export default function WorkoutPublisherPage() {
       )}
 
       {/* Workout edit modal */}
-      <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''}>
-        {selectedDay && (() => {
+      <Modal open={!!selectedDay} onClose={() => { setSelectedDay(null); cancelEdit(); }} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''}>
+        {selectedDay && editingId == null && (
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">
+              {(selectedDay.group_workouts || []).length === 0
+                ? 'No workouts yet for this day.'
+                : `${selectedDay.group_workouts.length} workout${selectedDay.group_workouts.length === 1 ? '' : 's'} scheduled`}
+            </p>
+            {(selectedDay.group_workouts || []).map((gw) => {
+              const tm = typeMeta(gw.workout_type);
+              const recCount = gw.recipient_ids?.length || 0;
+              const recNames = recCount > 0 && groupDetail
+                ? groupDetail.members.filter(m => gw.recipient_ids.includes(m.id)).map(m => m.full_name)
+                : [];
+              const snippet = workoutSnippet(gw);
+              return (
+                <div key={gw.id} className={`rounded-lg p-3 border ${gw.workout_type === 'race' ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+                  <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${tm.color}`}>{tm.label}</span>
+                        {gw.draft_content && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Draft</span>}
+                      </div>
+                      {(gw.title || snippet) && (
+                        <p className="text-sm font-medium text-gray-800 mt-1 truncate">{gw.title || snippet}</p>
+                      )}
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {recCount === 0
+                          ? '👥 All athletes (broadcast)'
+                          : `👥 ${recCount}: ${recNames.length ? recNames.join(', ') : `${recCount} athlete${recCount === 1 ? '' : 's'}`}`}
+                      </p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={() => openWorkoutForEdit(gw)}
+                        className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50">Edit</button>
+                      <button onClick={() => handleDeleteOne(gw.id)} disabled={saving}
+                        className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">Delete</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <button onClick={openWorkoutForCreate}
+              className="w-full border-2 border-dashed border-blue-300 text-blue-700 rounded-lg py-3 text-sm font-medium hover:bg-blue-50 transition">
+              ➕ Add a workout
+            </button>
+          </div>
+        )}
+        {selectedDay && editingId != null && (() => {
           const meta = typeMeta(form.workout_type);
           const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
           const hasPublishedContent = meta.structured
@@ -515,13 +638,13 @@ export default function WorkoutPublisherPage() {
                 <button onClick={() => handleSave()}
                   disabled={saving || (!hasPublishedContent && !form.title.trim() && !form.draft_content.trim())}
                   className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {saving ? 'Saving...' : 'Save'}</button>
-                <button onClick={() => setSelectedDay(null)}
+                  {saving ? 'Saving...' : (editingId === 'new' ? 'Create workout' : 'Save changes')}</button>
+                <button onClick={cancelEdit}
                   className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
-                  Cancel</button>
+                  Back</button>
               </div>
-              {(selectedDay.group_workout?.content || selectedDay.group_workout?.warmup || selectedDay.group_workout?.main_session || selectedDay.group_workout?.draft_content) && (
-                <button onClick={handleDelete} disabled={saving} className="w-full text-red-500 text-sm hover:underline">Delete all</button>
+              {editingId !== 'new' && typeof editingId === 'number' && (
+                <button onClick={() => handleDeleteOne(editingId)} disabled={saving} className="w-full text-red-500 text-sm hover:underline">Delete this workout</button>
               )}
             </div>
           );

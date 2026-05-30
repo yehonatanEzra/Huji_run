@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
 from ..database import get_db
-from ..dependencies import get_current_user, require_coach
+from ..dependencies import get_current_user, require_coach, require_admin
 from ..models.user import User
 from ..models.challenge import Challenge
 from ..models.workout import WorkoutLog
@@ -112,7 +112,23 @@ def list_challenges(
     today = date.today()
     q = db.query(Challenge)
 
-    if current_user.role not in ("coach", "admin"):
+    # Scoping:
+    #   - Admin: sees all challenges.
+    #   - Coach: sees global challenges + challenges scoped to one of their groups.
+    #   - Athlete: sees global challenges + their own group's.
+    if current_user.role == "admin":
+        pass  # no filter
+    elif current_user.role == "coach":
+        from ..models.training_group import TrainingGroup
+        my_group_ids = [g.id for g in db.query(TrainingGroup).filter(TrainingGroup.coach_id == current_user.id).all()]
+        if my_group_ids:
+            q = q.filter(
+                (Challenge.training_group_id == None) |
+                (Challenge.training_group_id.in_(my_group_ids))
+            )
+        else:
+            q = q.filter(Challenge.training_group_id == None)
+    else:
         q = q.filter(
             (Challenge.training_group_id == None) |
             (Challenge.training_group_id == current_user.training_group_id)
@@ -136,13 +152,25 @@ def get_challenge(
     ch = db.get(Challenge, challenge_id)
     if not ch:
         raise HTTPException(status_code=404, detail="Not found")
+    # Visibility: global challenges (training_group_id is None) are open to all.
+    # Group challenges: admin sees any; coach sees challenges scoped to their
+    # own group; athlete sees their own group only.
+    if ch.training_group_id is not None and current_user.role != "admin":
+        from ..models.training_group import TrainingGroup
+        if current_user.role == "coach":
+            grp = db.get(TrainingGroup, ch.training_group_id)
+            if not grp or grp.coach_id != current_user.id:
+                raise HTTPException(status_code=404, detail="Not found")
+        else:  # athlete
+            if ch.training_group_id != current_user.training_group_id:
+                raise HTTPException(status_code=404, detail="Not found")
     return _compute_leaderboard(ch, db, current_user.id)
 
 
 @router.post("", response_model=ChallengeOut, status_code=201)
 def create_challenge(
     body: ChallengeCreate,
-    coach: User = Depends(require_coach),
+    coach: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     if body.challenge_type not in ("total_km", "best_time"):
@@ -167,7 +195,7 @@ def create_challenge(
 @router.delete("/{challenge_id}", status_code=204)
 def delete_challenge(
     challenge_id: int,
-    coach: User = Depends(require_coach),
+    coach: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     ch = db.get(Challenge, challenge_id)

@@ -157,9 +157,12 @@ def get_photo(user_id: int, db: Session = Depends(get_db)):
 def athlete_profile(
     user_id: int,
     db: Annotated[Session, Depends(get_db)],
-    _: Annotated[User, Depends(require_coach)],
+    coach: Annotated[User, Depends(require_coach)],
 ):
     user = db.get(User, user_id)
     if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Coach can only view profiles of their own athletes (admin: any).
+    if coach.role != "admin" and (user.role != "athlete" or user.coach_id != coach.id):
         raise HTTPException(status_code=404, detail="User not found")
     return _build_profile(user, db)

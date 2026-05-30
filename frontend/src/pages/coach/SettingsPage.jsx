@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react';
 import { listAthletes, updateAthlete, deleteAthlete } from '../../api/coach';
+import { removeAthleteFromRoster } from '../../api/coaching';
+import { useAuth } from '../../contexts/AuthContext';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [athletes, setAthletes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
+  // For admin: hard-delete confirmation modal. For coach: remove-from-roster modal.
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [acting, setActing] = useState(false);
 
   const fetch = () => {
     setLoading(true);
@@ -35,29 +41,52 @@ export default function SettingsPage() {
       setEditingId(null);
       fetch();
     } catch (err) {
-      console.error(err);
+      const msg = err?.response?.data?.detail || 'Could not rename';
+      alert(msg);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async () => {
-    setDeleting(true);
+  const handleHardDelete = async () => {
+    setActing(true);
     try {
       await deleteAthlete(deleteTarget.id);
       setDeleteTarget(null);
       fetch();
     } catch (err) {
-      console.error(err);
+      const msg = err?.response?.data?.detail || 'Could not delete';
+      alert(msg);
     } finally {
-      setDeleting(false);
+      setActing(false);
+    }
+  };
+
+  const handleRemoveFromRoster = async () => {
+    setActing(true);
+    try {
+      await removeAthleteFromRoster(removeTarget.id);
+      setRemoveTarget(null);
+      fetch();
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Could not remove';
+      alert(msg);
+    } finally {
+      setActing(false);
     }
   };
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Settings</h2>
-      <h3 className="text-base font-semibold mb-3">Members ({athletes.length})</h3>
+      <h2 className="text-xl font-bold mb-1">Settings</h2>
+      <p className="text-xs text-gray-500 mb-4">
+        {isAdmin
+          ? 'You can rename or permanently delete any athlete.'
+          : 'You can remove athletes from your roster (they keep their data and can re-pair). Renaming and permanent deletion are admin-only.'}
+      </p>
+      <h3 className="text-base font-semibold mb-3">
+        {isAdmin ? 'Members' : 'My athletes'} ({athletes.length})
+      </h3>
 
       {loading ? <Spinner /> : (
         <div className="space-y-2">
@@ -88,38 +117,73 @@ export default function SettingsPage() {
                     <p className="text-sm font-medium truncate">{a.full_name}</p>
                     <p className="text-xs text-gray-400">{a.gender === 'M' ? 'Male' : 'Female'}</p>
                   </div>
-                  <button
-                    onClick={() => startEdit(a)}
-                    className="text-sm text-blue-600 hover:underline"
-                  >Rename</button>
-                  <button
-                    onClick={() => setDeleteTarget(a)}
-                    className="text-sm text-red-500 hover:underline"
-                  >Remove</button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => startEdit(a)}
+                      className="text-sm text-blue-600 hover:underline"
+                    >Rename</button>
+                  )}
+                  {isAdmin ? (
+                    <button
+                      onClick={() => setDeleteTarget(a)}
+                      className="text-sm text-red-500 hover:underline"
+                    >Delete</button>
+                  ) : (
+                    <button
+                      onClick={() => setRemoveTarget(a)}
+                      className="text-sm text-orange-600 hover:underline"
+                    >Remove</button>
+                  )}
                 </>
               )}
             </div>
           ))}
           {athletes.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-8">No members yet</p>
+            <p className="text-sm text-gray-400 text-center py-8">
+              {isAdmin ? 'No members yet' : 'No athletes registered with you yet. Athletes will request to join from the Find Coach page.'}
+            </p>
           )}
         </div>
       )}
 
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Remove Member">
+      {/* Admin hard-delete */}
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Permanently delete member">
         {deleteTarget && (
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Are you sure you want to remove <strong>{deleteTarget.full_name}</strong>? This will delete all their workout logs and targets.
+              Are you sure you want to permanently delete <strong>{deleteTarget.full_name}</strong>? This wipes all their workout logs, targets, race results, and feed activity. This cannot be undone.
             </p>
             <div className="flex gap-2">
               <button
-                onClick={handleDelete}
-                disabled={deleting}
+                onClick={handleHardDelete}
+                disabled={acting}
                 className="flex-1 bg-red-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-              >{deleting ? 'Removing...' : 'Remove'}</button>
+              >{acting ? 'Deleting…' : 'Delete forever'}</button>
               <button
                 onClick={() => setDeleteTarget(null)}
+                className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+              >Cancel</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Coach remove-from-roster */}
+      <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} title="Remove from roster">
+        {removeTarget && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Remove <strong>{removeTarget.full_name}</strong> from your roster?
+              Their data stays intact and they can register with another coach (or yours again).
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleRemoveFromRoster}
+                disabled={acting}
+                className="flex-1 bg-orange-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
+              >{acting ? 'Removing…' : 'Remove'}</button>
+              <button
+                onClick={() => setRemoveTarget(null)}
                 className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
               >Cancel</button>
             </div>

@@ -26,7 +26,8 @@ export default function RaceDetailPage() {
   const { raceId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isCoach = user?.role === 'coach' || user?.role === 'admin';
+  // Race writes are admin-only now. Coach gets a read-only view of the page.
+  const isCoach = user?.role === 'admin';
 
   const [race, setRace] = useState(null);
   const [tab, setTab] = useState('heats');

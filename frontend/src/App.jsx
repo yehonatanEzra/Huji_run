@@ -6,6 +6,8 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CalendarPage from './pages/athlete/CalendarPage';
 import HomePage from './pages/athlete/HomePage';
+import FindCoachPage from './pages/athlete/FindCoachPage';
+import CoachRequestsPage from './pages/coach/CoachRequestsPage';
 import RaceArchivePage from './pages/athlete/RaceArchivePage';
 import RaceDetailPage from './pages/athlete/RaceDetailPage';
 import HallOfFamePage from './pages/athlete/HallOfFamePage';
@@ -21,7 +23,12 @@ import AboutPage from './pages/AboutPage';
 
 export default function App() {
   const { user } = useAuth();
-  const landingFor = (u) => (u?.role === 'coach' || u?.role === 'admin') ? '/coach/dashboard' : '/home';
+  const landingFor = (u) => {
+    if (u?.role === 'coach' || u?.role === 'admin') return '/coach/dashboard';
+    // Athletes without a coach land on the pairing page.
+    if (u?.role === 'athlete' && !u?.coach_id) return '/find-coach';
+    return '/home';
+  };
 
   return (
     <Routes>
@@ -30,6 +37,8 @@ export default function App() {
 
       <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
+        <Route path="/find-coach" element={<FindCoachPage />} />
+        <Route path="/coach/requests" element={<ProtectedRoute requireCoach><CoachRequestsPage /></ProtectedRoute>} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/feed" element={<FeedPage />} />
         <Route path="/races" element={<RaceArchivePage />} />
@@ -42,7 +51,7 @@ export default function App() {
         <Route path="/coach/workouts" element={<ProtectedRoute requireCoach><WorkoutPublisherPage /></ProtectedRoute>} />
         <Route path="/coach/targets" element={<ProtectedRoute requireCoach><IndividualTargetsPage /></ProtectedRoute>} />
         <Route path="/coach/dashboard" element={<ProtectedRoute requireCoach><TrackingDashboardPage /></ProtectedRoute>} />
-        <Route path="/coach/race-wizard" element={<ProtectedRoute requireCoach><RaceWizardPage /></ProtectedRoute>} />
+        <Route path="/coach/race-wizard" element={<ProtectedRoute requireAdmin><RaceWizardPage /></ProtectedRoute>} />
         <Route path="/coach/settings" element={<ProtectedRoute requireCoach><SettingsPage /></ProtectedRoute>} />
       </Route>
 

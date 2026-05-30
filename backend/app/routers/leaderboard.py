@@ -16,29 +16,51 @@ from ..services.time_utils import seconds_to_display, format_pace
 router = APIRouter(prefix="/hall-of-fame", tags=["hall-of-fame"])
 
 
+def _can_view_group(user: User, group: Optional[TrainingGroup]) -> bool:
+    """Group HoF visibility:
+      - admin sees all groups,
+      - coach sees only groups they own (coach_id == me),
+      - athlete sees only their own group."""
+    if group is None:
+        return False
+    if user.role == "admin":
+        return True
+    if user.role == "coach":
+        return group.coach_id == user.id
+    return user.training_group_id == group.id
+
+
 @router.get("/groups")
 def get_hof_groups(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ):
-    if current_user.role in ("coach", "admin"):
+    if current_user.role == "admin":
         groups = db.query(TrainingGroup).order_by(TrainingGroup.name).all()
-        return [{"id": g.id, "name": g.name} for g in groups]
-    if current_user.training_group_id:
-        group = db.get(TrainingGroup, current_user.training_group_id)
-        if group:
-            return [{"id": group.id, "name": group.name}]
-    return []
+    elif current_user.role == "coach":
+        groups = db.query(TrainingGroup).filter(TrainingGroup.coach_id == current_user.id).order_by(TrainingGroup.name).all()
+    else:
+        # Athlete: only their own group
+        if current_user.training_group_id:
+            group = db.get(TrainingGroup, current_user.training_group_id)
+            return [{"id": group.id, "name": group.name}] if group else []
+        return []
+    return [{"id": g.id, "name": g.name} for g in groups]
 
 
 @router.get("", response_model=HallOfFameResponse)
 def get_hall_of_fame(
     group_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     if group_id is None:
         return _get_overall_hof(db)
+    # Enforce visibility before exposing group results.
+    group = db.get(TrainingGroup, group_id)
+    if not _can_view_group(current_user, group):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Group not found")
     return _get_group_hof(db, group_id)
 
 
@@ -126,6 +148,14 @@ def get_km_leaders(
     month_start = today.replace(day=1)
     next_month = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
 
+    # If the caller is asking for a specific group, enforce that they're allowed
+    # to see it. Otherwise (no group_id) we leave km-leaders as a global view
+    # since the standings are derived from the public race archive anyway.
+    if group_id is not None:
+        group = db.get(TrainingGroup, group_id)
+        if not _can_view_group(current_user, group):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Group not found")
     athlete_filter_ids = None
     user_q = db.query(User)
     if group_id is not None:

@@ -286,7 +286,7 @@ function ProfessionalForm({ initial, onSave, onClose }) {
   );
 }
 
-function ProfessionalCard({ professional, isCoach, onEdit, onDelete, onReviews }) {
+function ProfessionalCard({ professional, canEdit, onEdit, onDelete, onReviews }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
       <div className="flex items-start justify-between gap-2">
@@ -335,7 +335,7 @@ function ProfessionalCard({ professional, isCoach, onEdit, onDelete, onReviews }
         >
           Reviews
         </button>
-        {isCoach && (
+        {canEdit && (
           <>
             <button
               onClick={() => onEdit(professional)}
@@ -450,7 +450,7 @@ export default function HealthWellnessPage() {
             <ProfessionalCard
               key={p.id}
               professional={p}
-              isCoach={isCoach}
+              canEdit={user?.role === 'admin' || p.created_by_id === user?.id}
               onEdit={setEditTarget}
               onDelete={handleDelete}
               onReviews={setReviewTarget}

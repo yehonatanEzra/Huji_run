@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMyProfile, uploadPhoto, updateMyProfile } from '../../api/profile';
+import { getMyPairing, leaveCoach } from '../../api/coaching';
 import Spinner from '../../components/ui/Spinner';
 
 const DISTANCE_LABELS = {
@@ -10,13 +12,17 @@ const DISTANCE_LABELS = {
 
 export default function ProfilePage() {
   const { user, login } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
+  const [pairing, setPairing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const fileRef = useRef();
+  const isAthlete = user?.role === 'athlete';
 
   const fetchProfile = () => {
     getMyProfile()
@@ -26,6 +32,27 @@ export default function ProfilePage() {
   };
 
   useEffect(() => { fetchProfile(); }, []);
+
+  useEffect(() => {
+    if (!isAthlete) return;
+    getMyPairing().then(({ data }) => setPairing(data)).catch(() => {});
+  }, [isAthlete]);
+
+  const handleLeaveCoach = async () => {
+    if (!confirm('Leave your coach? Your past data stays. You can join another coach afterwards.')) return;
+    setLeaving(true);
+    try {
+      await leaveCoach();
+      // Patch local user object so the rest of the app knows we're unpaired.
+      const updated = { ...user, coach_id: null, training_group_id: null };
+      localStorage.setItem('user', JSON.stringify(updated));
+      navigate('/find-coach');
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not leave coach');
+    } finally {
+      setLeaving(false);
+    }
+  };
 
   const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0];
@@ -128,6 +155,34 @@ export default function ProfilePage() {
           </span>
         </div>
       </div>
+
+      {isAthlete && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-5">
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">My coach</p>
+          {pairing?.coach_id ? (
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-base font-semibold text-gray-900">{pairing.coach_name}</p>
+              <button
+                onClick={handleLeaveCoach}
+                disabled={leaving}
+                className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+              >
+                {leaving ? 'Leaving…' : 'Leave'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-base text-gray-500 italic">Not registered</p>
+              <button
+                onClick={() => navigate('/find-coach')}
+                className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+              >
+                Find a coach
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {user?.role !== 'coach' && user?.role !== 'admin' && (
         <>

@@ -114,7 +114,7 @@ export default function ProfilePage() {
 
   return (
     <div>
-      <PageBackground src="/bg-profile.jpg" />
+      <PageBackground src={profile.gender === 'F' ? '/bg-profile-f.jpg' : '/bg-profile-m.jpg'} />
 
       {/* Hero — avatar + name centred, photo shows above */}
       <div className="flex flex-col items-center text-center pt-[22vh] pb-6">

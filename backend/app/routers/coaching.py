@@ -23,6 +23,7 @@ class CoachListItem(BaseModel):
     username: str
     athlete_count: int
     bio: Optional[str] = None
+    has_photo: bool = False
 
 
 class CoachRequestCreate(BaseModel):
@@ -76,6 +77,7 @@ def list_coaches(
             username=c.username,
             athlete_count=int(counts.get(c.id, 0)),
             bio=c.bio,
+            has_photo=c.photo_filename is not None,
         )
         for c in coach_rows
     ]

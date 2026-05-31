@@ -14,8 +14,8 @@ export default function AppShell() {
   const isRoot = ROOT_PATHS.has(location.pathname);
 
   return (
-    <div className="flex flex-col min-h-dvh">
-      <header className="sticky top-0 z-40 bg-blue-700 text-white px-4 py-3 flex items-center justify-between shadow-sm">
+    <div className="h-dvh flex flex-col overflow-hidden">
+      <header className="shrink-0 z-40 bg-black/40 backdrop-blur-md border-b border-white/10 text-white px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {!isRoot && (
             <button
@@ -41,9 +41,14 @@ export default function AppShell() {
           </button>
         </div>
       </header>
-      <main className="flex-1 pb-20 px-4 py-4 max-w-2xl mx-auto w-full">
-        <Outlet />
-      </main>
+
+      {/* Only this div scrolls — nav and header are always visible */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-4 py-4 pb-6 max-w-2xl mx-auto w-full">
+          <Outlet />
+        </div>
+      </div>
+
       <BottomNav />
     </div>
   );

@@ -3,6 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { listRaces, listMyRaces } from '../../api/races';
 import Spinner from '../../components/ui/Spinner';
+import PageBackground from '../../components/PageBackground';
+
+const TAB = 'flex-1 py-2 text-sm font-semibold transition';
+const TAB_ACTIVE = 'bg-white text-black';
+const TAB_INACTIVE = 'text-white/60 hover:text-white';
 
 export default function RaceArchivePage() {
   const { user } = useAuth();
@@ -13,7 +18,6 @@ export default function RaceArchivePage() {
   const [loading, setLoading] = useState(true);
   const [statusTab, setStatusTab] = useState('upcoming');
   const [scopeTab, setScopeTab] = useState('all');
-  // 'all' = approved + my drafts mixed (default); 'drafts' = only my pending/rejected
   const [moderationTab, setModerationTab] = useState('all');
   const isCoachOrAdmin = user?.role === 'coach' || user?.role === 'admin';
 
@@ -35,80 +39,67 @@ export default function RaceArchivePage() {
 
   return (
     <div>
+      <PageBackground src="/bg-races.jpg" />
+
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold">Races</h2>
+        <h2 className="text-xl font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]">Races</h2>
         {isCoachOrAdmin && (
           <button
             onClick={() => navigate('/coach/race-wizard')}
-            className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700"
+            className="bg-white text-black rounded-xl px-4 py-2 text-sm font-semibold hover:bg-white/80 transition active:scale-95"
           >
             + New Race
           </button>
         )}
       </div>
 
-      {/* Coach / admin only: All races vs. My drafts (pending/rejected) */}
+      {/* Coach / admin: All races vs My drafts */}
       {isCoachOrAdmin && (
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-3 text-sm">
-          <button
-            onClick={() => setModerationTab('all')}
-            className={`flex-1 py-2 font-medium transition ${moderationTab === 'all' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600'}`}
-          >All races</button>
-          <button
-            onClick={() => setModerationTab('drafts')}
-            className={`flex-1 py-2 font-medium transition ${moderationTab === 'drafts' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600'}`}
-          >{user?.role === 'admin' ? 'All pending' : 'My drafts'}</button>
+        <div className="flex rounded-xl overflow-hidden mb-3 bg-white/10 backdrop-blur-sm border border-white/20">
+          <button onClick={() => setModerationTab('all')} className={`${TAB} ${moderationTab === 'all' ? TAB_ACTIVE : TAB_INACTIVE}`}>All races</button>
+          <button onClick={() => setModerationTab('drafts')} className={`${TAB} ${moderationTab === 'drafts' ? TAB_ACTIVE : TAB_INACTIVE}`}>
+            {user?.role === 'admin' ? 'All pending' : 'My drafts'}
+          </button>
         </div>
       )}
 
-      {/* Top-level: Upcoming / Completed (drafts mode ignores this) */}
+      {/* Upcoming / Completed */}
       {moderationTab !== 'drafts' && (
-      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-3">
-        <button
-          onClick={() => setStatusTab('upcoming')}
-          className={`flex-1 py-2 text-sm font-medium transition ${statusTab === 'upcoming' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
-        >Upcoming</button>
-        <button
-          onClick={() => setStatusTab('completed')}
-          className={`flex-1 py-2 text-sm font-medium transition ${statusTab === 'completed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
-        >Completed</button>
-      </div>
+        <div className="flex rounded-xl overflow-hidden mb-3 bg-white/10 backdrop-blur-sm border border-white/20">
+          <button onClick={() => setStatusTab('upcoming')} className={`${TAB} ${statusTab === 'upcoming' ? TAB_ACTIVE : TAB_INACTIVE}`}>Upcoming</button>
+          <button onClick={() => setStatusTab('completed')} className={`${TAB} ${statusTab === 'completed' ? TAB_ACTIVE : TAB_INACTIVE}`}>Completed</button>
+        </div>
       )}
 
-      {/* Sub-filter: My / All — hidden in drafts mode */}
+      {/* My / All */}
       {moderationTab !== 'drafts' && (
-      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4 text-xs">
-        <button
-          onClick={() => setScopeTab('my')}
-          className={`flex-1 py-1 font-medium transition ${scopeTab === 'my' ? 'bg-gray-700 text-white' : 'bg-white text-gray-500'}`}
-        >My</button>
-        <button
-          onClick={() => setScopeTab('all')}
-          className={`flex-1 py-1 font-medium transition ${scopeTab === 'all' ? 'bg-gray-700 text-white' : 'bg-white text-gray-500'}`}
-        >All</button>
-      </div>
+        <div className="flex rounded-xl overflow-hidden mb-4 bg-white/10 backdrop-blur-sm border border-white/20">
+          <button onClick={() => setScopeTab('my')} className={`${TAB} text-xs py-1 ${scopeTab === 'my' ? TAB_ACTIVE : TAB_INACTIVE}`}>My</button>
+          <button onClick={() => setScopeTab('all')} className={`${TAB} text-xs py-1 ${scopeTab === 'all' ? TAB_ACTIVE : TAB_INACTIVE}`}>All</button>
+        </div>
       )}
 
+      {/* Search + year filter */}
       <div className="flex gap-2 mb-4">
         <input
           type="text"
           placeholder="Search races..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
         />
         <select
           value={year}
           onChange={(e) => setYear(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/40"
         >
-          <option value="">All Years</option>
-          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          <option value="" className="text-black">All Years</option>
+          {years.map((y) => <option key={y} value={y} className="text-black">{y}</option>)}
         </select>
       </div>
 
       {loading ? <Spinner /> : races.length === 0 ? (
-        <p className="text-center text-gray-400 py-8">
+        <p className="text-center text-white/60 py-8">
           {statusTab === 'upcoming' ? 'No upcoming races' : 'No races found'}
         </p>
       ) : (
@@ -120,26 +111,28 @@ export default function RaceArchivePage() {
               <Link
                 key={race.id}
                 to={`/races/${race.id}`}
-                className={`block border rounded-xl p-4 hover:shadow-sm transition ${
-                  isPending ? 'bg-amber-50 border-amber-200' :
-                  isRejected ? 'bg-red-50 border-red-200' :
-                  'bg-white'
+                className={`block rounded-xl p-4 backdrop-blur-sm border transition hover:scale-[1.01] active:scale-[0.99] ${
+                  isPending ? 'bg-amber-300/20 border-amber-300/40' :
+                  isRejected ? 'bg-red-300/20 border-red-300/40' :
+                  'bg-white/20 border-white/30 hover:bg-white/28'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-sm truncate">{race.name || '(untitled)'}</p>
-                      {isPending && <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold rounded-full px-2 py-0.5">Pending review</span>}
-                      {isRejected && <span className="text-[10px] bg-red-100 text-red-800 font-semibold rounded-full px-2 py-0.5">Rejected</span>}
+                      <p className="font-bold text-sm text-white truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+                        🏁 {race.name || '(untitled)'}
+                      </p>
+                      {isPending && <span className="text-[10px] bg-amber-300/30 text-amber-200 font-semibold rounded-full px-2 py-0.5 border border-amber-300/40">Pending review</span>}
+                      {isRejected && <span className="text-[10px] bg-red-300/30 text-red-200 font-semibold rounded-full px-2 py-0.5 border border-red-300/40">Rejected</span>}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">{race.race_date}</p>
+                    <p className="text-xs text-white/60 mt-0.5">{race.race_date}</p>
                     {isRejected && race.decline_note && (
-                      <p className="text-[11px] text-red-700 italic mt-1">"{race.decline_note}"</p>
+                      <p className="text-[11px] text-red-200 italic mt-1">"{race.decline_note}"</p>
                     )}
                   </div>
                   {race.status === 'upcoming' && !isPending && !isRejected && (
-                    <span className="text-xs bg-blue-50 text-blue-700 font-medium rounded-full px-2 py-0.5 whitespace-nowrap">
+                    <span className="text-xs bg-white/20 text-white font-medium rounded-full px-2 py-0.5 whitespace-nowrap border border-white/25">
                       {race.registration_count} registered
                     </span>
                   )}

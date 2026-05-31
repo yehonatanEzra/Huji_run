@@ -6,6 +6,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
+import PageBackground from '../../components/PageBackground';
+import { NoiseBackground } from '../../components/ui/NoiseBackground';
 
 export default function CalendarPage() {
   const { user } = useAuth();
@@ -115,13 +117,13 @@ export default function CalendarPage() {
       <button
         key={day.date}
         onClick={() => openDay(day)}
-        className={`w-full text-left p-3 rounded-xl transition hover:shadow-sm ${
-          isRace ? 'border-2 border-indigo-500 bg-indigo-50' :
-          isToday ? 'border border-blue-400 bg-blue-50' : 'border border-gray-200 bg-white'
+        className={`w-full text-left p-3 rounded-xl transition hover:shadow-sm backdrop-blur-sm ${
+          isRace ? 'border-2 border-indigo-400/70 bg-indigo-200/25' :
+          isToday ? 'border border-blue-300/60 bg-blue-200/25' : 'border border-white/30 bg-white/20'
         }`}
       >
         <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-semibold">
+          <span className="text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">
             {isRace && <span className="mr-1">🏁</span>}
             {format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}
           </span>
@@ -165,8 +167,8 @@ export default function CalendarPage() {
             const body = t.note || t.main_session || t.warmup;
             return (
               <>
-                {title && <p className="text-sm text-blue-700 font-medium truncate">{title}</p>}
-                {body && body !== title && <p className="text-xs text-blue-600 truncate">{body}</p>}
+                {title && <p className="text-sm text-white font-semibold truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{title}</p>}
+                {body && body !== title && <p className="text-xs text-white/75 truncate">{body}</p>}
               </>
             );
           }
@@ -174,9 +176,9 @@ export default function CalendarPage() {
           const gwSnippet = gw?.title || gw?.content || gw?.main_session || gw?.warmup;
           return (
             <>
-              {gwSnippet && <p className="text-sm text-gray-700 font-medium truncate">{gwSnippet}</p>}
+              {gwSnippet && <p className="text-sm text-white font-semibold truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{gwSnippet}</p>}
               {t && (t.title || t.note) && (
-                <p className="text-xs text-blue-600 mt-1 truncate">
+                <p className="text-xs text-white/75 mt-1 truncate">
                   Coach note: {t.title || t.note}
                 </p>
               )}
@@ -194,15 +196,17 @@ export default function CalendarPage() {
     }
     return (
       <div>
-        <div className="flex items-center justify-end mb-2">
+        <NoiseBackground
+          containerClassName="mb-4 w-full rounded-xl p-[2px]"
+          gradientColors={['rgb(37,99,235)', 'rgb(99,102,241)', 'rgb(139,92,246)']}
+        >
           <button
             onClick={() => setMonthExpanded(true)}
-            className="text-xs text-blue-600 hover:underline font-medium"
-            title="Open larger view"
+            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
           >
-            ⛶ Expand
+            ⛶ Expand monthly view
           </button>
-        </div>
+        </NoiseBackground>
         <div className="space-y-4">
         {weeks.map((week, wi) => (
           <div key={wi}>
@@ -292,31 +296,44 @@ export default function CalendarPage() {
 
   return (
     <div>
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
       <div className="flex items-center justify-between mb-4">
-        <button onClick={goBack} className="text-blue-600 text-sm font-medium">&larr; Prev</button>
-        <h2 className="text-base font-semibold">{headerLabel}</h2>
-        <button onClick={goForward} className="text-blue-600 text-sm font-medium">Next &rarr;</button>
+        <button
+          onClick={goBack}
+          className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 text-white text-sm font-semibold px-3 py-1.5 rounded-xl transition active:scale-95"
+        >
+          <span className="text-base leading-none">‹</span> Prev
+        </button>
+        <h2 className="text-sm font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)] tracking-wide">
+          {headerLabel}
+        </h2>
+        <button
+          onClick={goForward}
+          className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 text-white text-sm font-semibold px-3 py-1.5 rounded-xl transition active:scale-95"
+        >
+          Next <span className="text-base leading-none">›</span>
+        </button>
       </div>
 
-      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4">
+      <div className="flex rounded-xl overflow-hidden mb-4 bg-white/10 backdrop-blur-sm border border-white/20">
         <button
           onClick={() => setView('weekly')}
-          className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'weekly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+          className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'weekly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
         >Weekly</button>
         <button
           onClick={() => setView('monthly')}
-          className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'monthly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+          className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'monthly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
         >Monthly</button>
       </div>
 
       {!loading && (() => {
         const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
         return weekKm > 0 ? (
-          <div className="flex items-center justify-between bg-blue-50 rounded-lg px-4 py-2 mb-4">
-            <span className="text-sm font-medium text-blue-700">
+          <div className="flex items-center justify-between bg-blue-600/40 backdrop-blur-sm rounded-lg px-4 py-2 mb-4 border border-blue-400/30">
+            <span className="text-sm font-medium text-white/90">
               {view === 'weekly' ? 'Weekly' : 'Monthly'} Volume
             </span>
-            <span className="text-lg font-bold text-blue-800">{weekKm.toFixed(1)} km</span>
+            <span className="text-lg font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.5)]">{weekKm.toFixed(1)} km</span>
           </div>
         ) : null;
       })()}
@@ -327,7 +344,7 @@ export default function CalendarPage() {
         </div>
       ) : renderMonthGrid()}
 
-      <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''}>
+      <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
         {selectedDay && (
           <div className="space-y-4">
             {selectedDay.group_workout && (() => {
@@ -347,23 +364,23 @@ export default function CalendarPage() {
               const middleLabel = gw.workout_type === 'race' ? 'Race' : 'Main';
               const isRaceDay = gw.workout_type === 'race';
               return (
-                <div className={`rounded-lg p-3 space-y-2 ${isRaceDay ? 'bg-indigo-50 border-2 border-indigo-500' : 'bg-gray-50'}`}>
+                <div className={`rounded-lg p-3 space-y-2 ${isRaceDay ? 'bg-indigo-400/20 border-2 border-indigo-400/60' : 'bg-white/10 backdrop-blur-sm border border-white/20'}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-gray-500">Group Workout</p>
+                    <p className="text-xs font-medium text-white/50">Group Workout</p>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[gw.workout_type] || TYPE_COLOR.simple}`}>
                       {TYPE_LABELS[gw.workout_type] || 'Simple'}
                     </span>
                   </div>
-                  {gw.title && <p className="text-base font-semibold">{isRaceDay && '🏁 '}{gw.title}</p>}
-                  {!gw.title && isRaceDay && <p className="text-base font-semibold">🏁 Race day</p>}
+                  {gw.title && <p className="text-base font-semibold text-white">{isRaceDay && '🏁 '}{gw.title}</p>}
+                  {!gw.title && isRaceDay && <p className="text-base font-semibold text-white">🏁 Race day</p>}
                   {isStructured ? (
                     <div className="space-y-1.5 text-sm">
-                      {gw.warmup && <p><span className="text-xs uppercase tracking-wider text-gray-400">Warm-up · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
-                      {gw.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">{middleLabel} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
-                      {gw.cooldown && <p><span className="text-xs uppercase tracking-wider text-gray-400">Cool-down · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
+                      {gw.warmup && <p><span className="text-xs uppercase tracking-wider text-white/40">Warm-up · </span><span className="whitespace-pre-wrap text-white/85">{gw.warmup}</span></p>}
+                      {gw.main_session && <p><span className="text-xs uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap text-white/85">{gw.main_session}</span></p>}
+                      {gw.cooldown && <p><span className="text-xs uppercase tracking-wider text-white/40">Cool-down · </span><span className="whitespace-pre-wrap text-white/85">{gw.cooldown}</span></p>}
                     </div>
                   ) : (
-                    gw.content && <p className="text-sm whitespace-pre-wrap">{gw.content}</p>
+                    gw.content && <p className="text-sm whitespace-pre-wrap text-white/85">{gw.content}</p>
                   )}
                 </div>
               );
@@ -385,41 +402,41 @@ export default function CalendarPage() {
               const middleLabel = t.workout_type === 'race' ? 'Race' : 'Main';
               const isRaceT = t.workout_type === 'race';
               return (
-                <div className={`rounded-lg p-3 space-y-2 ${isRaceT ? 'bg-indigo-50 border-2 border-indigo-500' : 'bg-blue-50'}`}>
+                <div className={`rounded-lg p-3 space-y-2 ${isRaceT ? 'bg-indigo-400/20 border-2 border-indigo-400/60' : 'bg-blue-400/15 backdrop-blur-sm border border-blue-300/25'}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-blue-500">Coach's workout for you</p>
+                    <p className="text-xs font-medium text-blue-300">Coach's workout for you</p>
                     {t.workout_type && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[t.workout_type] || TYPE_COLOR.simple}`}>
                         {TYPE_LABELS[t.workout_type] || 'Other'}
                       </span>
                     )}
                   </div>
-                  {t.title && <p className="text-base font-semibold">{isRaceT && '🏁 '}{t.title}</p>}
-                  {!t.title && isRaceT && <p className="text-base font-semibold">🏁 Race day</p>}
+                  {t.title && <p className="text-base font-semibold text-white">{isRaceT && '🏁 '}{t.title}</p>}
+                  {!t.title && isRaceT && <p className="text-base font-semibold text-white">🏁 Race day</p>}
                   {isStructured ? (
                     <div className="space-y-1.5 text-sm">
-                      {t.warmup && <p><span className="text-xs uppercase tracking-wider text-gray-400">Warm-up · </span><span className="whitespace-pre-wrap">{t.warmup}</span></p>}
-                      {t.main_session && <p><span className="text-xs uppercase tracking-wider text-gray-400">{middleLabel} · </span><span className="whitespace-pre-wrap">{t.main_session}</span></p>}
-                      {t.cooldown && <p><span className="text-xs uppercase tracking-wider text-gray-400">Cool-down · </span><span className="whitespace-pre-wrap">{t.cooldown}</span></p>}
+                      {t.warmup && <p><span className="text-xs uppercase tracking-wider text-white/40">Warm-up · </span><span className="whitespace-pre-wrap text-white/85">{t.warmup}</span></p>}
+                      {t.main_session && <p><span className="text-xs uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap text-white/85">{t.main_session}</span></p>}
+                      {t.cooldown && <p><span className="text-xs uppercase tracking-wider text-white/40">Cool-down · </span><span className="whitespace-pre-wrap text-white/85">{t.cooldown}</span></p>}
                     </div>
                   ) : (
-                    t.note && <p className="text-sm whitespace-pre-wrap">{t.note}</p>
+                    t.note && <p className="text-sm whitespace-pre-wrap text-white/85">{t.note}</p>
                   )}
                 </div>
               );
             })()}
 
             {selectedDay.workout_log && selectedDay.workout_log.kudos_count > 0 && (
-              <div className="flex items-center gap-1.5 bg-pink-50 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-1.5 bg-pink-400/15 border border-pink-400/25 rounded-lg px-3 py-2">
                 <span className="text-lg">👏</span>
-                <span className="text-sm font-medium text-pink-700">
+                <span className="text-sm font-medium text-pink-300">
                   {selectedDay.workout_log.kudos_count} kudos
                 </span>
               </div>
             )}
 
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium mb-2">Workout Report</p>
+            <div className="border-t border-white/15 pt-4">
+              <p className="text-sm font-medium text-white mb-2">Workout Report</p>
               <div className="flex gap-2 mb-3">
                 {[
                   { value: 'completed', label: 'Completed', bg: 'bg-green-100 text-green-700 border-green-300', active: 'bg-green-600 text-white border-green-600' },
@@ -439,7 +456,7 @@ export default function CalendarPage() {
               </div>
               {logForm.status !== 'missed' && (
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-gray-600 whitespace-nowrap">Distance (km)</label>
+                  <label className="text-sm text-white/60 whitespace-nowrap">Distance (km)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -447,7 +464,7 @@ export default function CalendarPage() {
                     placeholder="e.g. 8.5"
                     value={logForm.distance_km}
                     onChange={(e) => setLogForm({ ...logForm, distance_km: e.target.value })}
-                    className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400"
                   />
                 </div>
               )}
@@ -456,12 +473,12 @@ export default function CalendarPage() {
                 value={logForm.notes}
                 onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })}
                 rows={3}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
               <button
                 onClick={handleSaveLog}
                 disabled={saving}
-                className="w-full mt-3 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="w-full mt-3 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition"
               >
                 {saving ? 'Saving...' : 'Save Report'}
               </button>
@@ -470,8 +487,8 @@ export default function CalendarPage() {
             {selectedDay.workout_log?.id ? (
               <WorkoutCommentThread workoutLogId={selectedDay.workout_log.id} />
             ) : (
-              <div className="border-t pt-3">
-                <p className="text-xs text-gray-400 italic">💬 Save a report to enable comments with your coach.</p>
+              <div className="border-t border-white/15 pt-3">
+                <p className="text-xs text-white/35 italic">💬 Save a report to enable comments with your coach.</p>
               </div>
             )}
           </div>

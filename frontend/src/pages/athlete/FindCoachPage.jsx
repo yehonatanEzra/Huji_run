@@ -5,6 +5,7 @@ import { listCoaches, getMyPairing, requestCoach, withdrawRequest } from '../../
 import { useAuth } from '../../contexts/AuthContext';
 import { useOutsideClick } from '../../hooks/use-outside-click';
 import Spinner from '../../components/ui/Spinner';
+import PageBackground from '../../components/PageBackground';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -127,6 +128,7 @@ export default function FindCoachPage() {
 
   return (
     <div className="pb-8">
+      <PageBackground src="/bg-find-coach.jpg" />
       <div className="mb-5 px-1">
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-700">Welcome, {user?.full_name}</p>
         <h2 className="text-2xl font-extrabold text-gray-900 mt-1">Find your coach</h2>

@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { NoiseBackground } from './ui/NoiseBackground';
 
 const TYPE = {
   simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
@@ -197,12 +198,21 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
         </div>
 
         {/* CTA — full width, outside the ticket but right under it */}
-        <button
-          onClick={onOpenWorkout}
-          className="mt-4 w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 rounded-xl shadow-md transition"
+        <NoiseBackground
+          containerClassName="mt-4 w-full rounded-xl p-[2px]"
+          gradientColors={
+            isRace
+              ? ['rgb(99,102,241)', 'rgb(168,85,247)', 'rgb(236,72,153)']
+              : ['rgb(37,99,235)', 'rgb(99,102,241)', 'rgb(139,92,246)']
+          }
         >
-          {ctaLabel}
-        </button>
+          <button
+            onClick={onOpenWorkout}
+            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
+          >
+            {ctaLabel}
+          </button>
+        </NoiseBackground>
       </div>
     </div>
   );

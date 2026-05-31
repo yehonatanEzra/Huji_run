@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getHallOfFame, getHofGroups, getKmLeaders } from '../../api/leaderboard';
 import { getChallenges, getChallenge, createChallenge, deleteChallenge } from '../../api/challenges';
 import { listGroups } from '../../api/coach';
-import Tabs from '../../components/ui/Tabs';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import PageBackground from '../../components/PageBackground';
 
 const DISTANCE_LABELS = {
   1500: '1,500m',
@@ -17,6 +18,42 @@ const DISTANCE_LABELS = {
 };
 
 const MEDAL = ['🥇', '🥈', '🥉'];
+
+const TAB = 'flex-1 py-2 text-sm font-semibold transition';
+const TAB_ACTIVE = 'bg-white text-black';
+const TAB_INACTIVE = 'text-white/60 hover:text-white';
+const TAB_ROW = 'flex rounded-xl overflow-hidden mb-4 bg-white/10 backdrop-blur-sm border border-white/20';
+
+function FilterPill({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition ${
+        active
+          ? 'bg-white text-black border-white'
+          : 'bg-white/10 backdrop-blur-sm border-white/20 text-white/70 hover:text-white'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function GlassCard({ children, className = '' }) {
+  return (
+    <div className={`bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function MedalRow({ children }) {
+  return (
+    <div className="flex items-center gap-3 p-2 rounded-lg bg-white/10">
+      {children}
+    </div>
+  );
+}
 
 function RecordsView() {
   const [data, setData] = useState(null);
@@ -51,81 +88,91 @@ function RecordsView() {
     <>
       {groups.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-3 mb-2">
-          <button
-            onClick={() => setSelectedGroup(null)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
-              selectedGroup === null ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-            }`}
-          >Overall</button>
+          <FilterPill active={selectedGroup === null} onClick={() => setSelectedGroup(null)}>Overall</FilterPill>
           {groups.map((g) => (
-            <button
-              key={g.id}
-              onClick={() => setSelectedGroup(g.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                selectedGroup === g.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >{g.name}</button>
+            <FilterPill key={g.id} active={selectedGroup === g.id} onClick={() => setSelectedGroup(g.id)}>
+              {g.name}
+            </FilterPill>
           ))}
         </div>
       )}
 
-      <Tabs
-        tabs={[{ value: 'men', label: 'Men' }, { value: 'women', label: 'Women' }]}
-        active={gender}
-        onChange={setGender}
-      />
+      <div className="flex gap-2 mb-4">
+        {['men', 'women'].map(g => (
+          <button
+            key={g}
+            onClick={() => setGender(g)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition capitalize ${
+              gender === g
+                ? 'bg-white text-black border-white'
+                : 'bg-white/10 backdrop-blur-sm border-white/25 text-white/65 hover:text-white'
+            }`}
+          >{g}</button>
+        ))}
+      </div>
 
       {kmLeaders && (kmLeaders.weekly.length > 0 || kmLeaders.monthly.length > 0) && (
-        <div className="space-y-4 mb-6">
-          {[
-            { title: `Weekly km (${kmLeaders.week_start})`, entries: kmLeaders.weekly },
-            { title: `Monthly km (${kmLeaders.month})`, entries: kmLeaders.monthly },
-          ].map(({ title, entries }) => entries.length > 0 && (
-            <div key={title} className="bg-white rounded-xl border p-4">
-              <h3 className="text-sm font-semibold text-gray-600 mb-3">{title}</h3>
-              <div className="space-y-2">
-                {entries.map((e) => (
-                  <div key={e.rank} className="flex items-center gap-3 p-2 rounded-lg bg-blue-50">
-                    <span className="text-2xl">{MEDAL[e.rank - 1] || `#${e.rank}`}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{e.athlete_name}</p>
-                    </div>
-                    <span className="font-bold text-sm text-blue-800">{e.total_km} km</span>
-                  </div>
-                ))}
+        <div className="mb-6">
+          <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
+            {[
+              { title: `Weekly km`, sub: kmLeaders.week_start, entries: kmLeaders.weekly },
+              { title: `Monthly km`, sub: kmLeaders.month, entries: kmLeaders.monthly },
+            ].filter(({ entries }) => entries.length > 0).map(({ title, sub, entries }) => (
+              <div
+                key={title}
+                className="min-w-[85%] snap-start bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4 flex-shrink-0"
+              >
+                <div className="mb-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">{title}</h3>
+                  <p className="text-[11px] text-white/50 mt-0.5">{sub}</p>
+                </div>
+                <div className="space-y-2">
+                  {entries.map((e) => (
+                    <MedalRow key={e.rank}>
+                      <span className="text-2xl">{MEDAL[e.rank - 1] || `#${e.rank}`}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-white truncate">{e.athlete_name}</p>
+                      </div>
+                      <span className="font-bold text-sm text-blue-200">{e.total_km} km</span>
+                    </MedalRow>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
       {loading ? <Spinner /> : !data ? (
-        <p className="text-center text-gray-500">Failed to load</p>
+        <p className="text-center text-white/50 py-6">Failed to load</p>
       ) : (
-        <div className="space-y-6">
+        <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
           {data.map((dist) => {
             const entries = gender === 'men' ? dist.men : dist.women;
             return (
-              <div key={dist.distance_m} className="bg-white rounded-xl border p-4">
-                <h3 className="text-sm font-semibold text-gray-600 mb-3">
+              <div
+                key={dist.distance_m}
+                className="min-w-[85%] snap-start flex-shrink-0 bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4"
+              >
+                <h3 className="text-xs font-bold uppercase tracking-wider text-white mb-3">
                   {DISTANCE_LABELS[dist.distance_m] || `${dist.distance_m}m`}
                 </h3>
                 {entries.length === 0 ? (
-                  <p className="text-sm text-gray-400">No records yet</p>
+                  <p className="text-sm text-white/40 italic">No records yet</p>
                 ) : (
                   <div className="space-y-2">
                     {entries.map((e) => (
-                      <div key={e.rank} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
+                      <MedalRow key={e.rank}>
                         <span className="text-2xl">{MEDAL[e.rank - 1]}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{e.athlete_name}</p>
-                          <p className="text-xs text-gray-500">{e.achieved_date}</p>
+                          <p className="font-medium text-sm text-white truncate">{e.athlete_name}</p>
+                          <p className="text-xs text-white/50">{e.achieved_date}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-mono font-semibold text-sm">{e.time_display}</p>
-                          <p className="text-xs text-gray-500">{e.pace_display} /km</p>
+                          <p className="font-mono font-semibold text-sm text-white">{e.time_display}</p>
+                          <p className="text-xs text-white/50">{e.pace_display} /km</p>
                         </div>
-                      </div>
+                      </MedalRow>
                     ))}
                   </div>
                 )}
@@ -233,55 +280,55 @@ function ChallengesView() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex gap-2">
           {['active', 'past', 'all'].map(s => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1 rounded-full text-xs font-medium capitalize ${
-                filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >{s}</button>
+            <FilterPill key={s} active={filter === s} onClick={() => setFilter(s)}>
+              {s.charAt(0).toUpperCase() + s.slice(1)}
+            </FilterPill>
           ))}
         </div>
         {isCoach && (
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700"
+            className="bg-white text-black px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/80 transition active:scale-95"
           >+ Challenge</button>
         )}
       </div>
 
       {loading ? <Spinner /> : challenges.length === 0 ? (
-        <p className="text-center text-gray-400 py-8">No challenges yet</p>
+        <p className="text-center text-white/50 italic py-8">No challenges yet</p>
       ) : (
         <div className="space-y-3">
           {challenges.map(ch => (
-            <div key={ch.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div key={ch.id} className="bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl overflow-hidden">
               <button
                 onClick={() => toggleExpand(ch.id)}
                 className="w-full text-left p-4"
               >
                 <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-semibold text-sm">{ch.name}</h3>
+                  <h3 className="font-semibold text-sm text-white">{ch.name}</h3>
                   <div className="flex items-center gap-2">
                     {isCoach && (
                       <span
                         onClick={(e) => { e.stopPropagation(); handleDelete(ch.id); }}
-                        className="text-gray-300 hover:text-red-500 text-lg cursor-pointer"
+                        className="text-white/25 hover:text-red-400 text-lg cursor-pointer transition"
                       >×</span>
                     )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      ch.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                      ch.is_active
+                        ? 'bg-green-400/15 text-green-200 border-green-400/30'
+                        : 'bg-white/10 text-white/40 border-white/15'
                     }`}>
                       {ch.is_active ? `${ch.days_remaining}d left` : 'Ended'}
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                  <span className={`px-1.5 py-0.5 rounded ${
-                    ch.challenge_type === 'total_km' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+                <div className="flex items-center gap-2 text-xs text-white/50">
+                  <span className={`px-1.5 py-0.5 rounded border ${
+                    ch.challenge_type === 'total_km'
+                      ? 'bg-blue-400/15 text-blue-200 border-blue-400/25'
+                      : 'bg-purple-400/15 text-purple-200 border-purple-400/25'
                   }`}>
                     {ch.challenge_type === 'total_km' ? 'Total KM' : 'Best Time'}
                   </span>
@@ -290,27 +337,27 @@ function ChallengesView() {
               </button>
 
               {expanded === ch.id && detail && (
-                <div className="border-t px-4 pb-4 pt-3">
+                <div className="border-t border-white/15 px-4 pb-4 pt-3">
                   {ch.description && (
-                    <p className="text-sm text-gray-600 mb-3">{ch.description}</p>
+                    <p className="text-sm text-white/70 mb-3">{ch.description}</p>
                   )}
                   {detail.leaderboard.length === 0 ? (
-                    <p className="text-sm text-gray-400">No entries yet</p>
+                    <p className="text-sm text-white/40 italic">No entries yet</p>
                   ) : (
                     <div className="space-y-2">
                       {detail.leaderboard.map(e => (
-                        <div key={e.rank} className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
+                        <MedalRow key={e.rank}>
                           <span className="text-xl">{MEDAL[e.rank - 1] || `#${e.rank}`}</span>
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{e.athlete_name}</p>
+                            <p className="font-medium text-sm text-white truncate">{e.athlete_name}</p>
                           </div>
-                          <span className="font-bold text-sm">{e.value_display}</span>
-                        </div>
+                          <span className="font-bold text-sm text-white">{e.value_display}</span>
+                        </MedalRow>
                       ))}
                     </div>
                   )}
                   {detail.my_rank && (
-                    <p className="text-xs text-blue-600 mt-2 font-medium">
+                    <p className="text-xs text-blue-200 mt-2 font-medium">
                       Your rank: #{detail.my_rank}
                     </p>
                   )}
@@ -421,15 +468,50 @@ export default function HallOfFamePage() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Hall of Fame</h2>
-      <Tabs
-        tabs={[
-          { value: 'records', label: 'Records' },
-          { value: 'challenges', label: 'Challenges' },
-        ]}
-        active={section}
-        onChange={setSection}
-      />
+      <PageBackground src="/bg-hof.jpg" />
+
+      {/* Title — springs in on mount, stays forever */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.75, y: 40 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.65, ease: [0.34, 1.56, 0.64, 1] }}
+        className="text-center pt-2 pb-2"
+      >
+        <h2
+          className="text-5xl font-black uppercase tracking-wide leading-none"
+          style={{
+            background: 'linear-gradient(135deg, #fde68a, #f59e0b, #fbbf24, #d97706)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            filter: 'drop-shadow(0 0 18px rgba(251,191,36,0.65))',
+          }}
+        >
+          Hall of Fame
+        </h2>
+        <p className="text-[11px] tracking-[0.25em] uppercase text-amber-200 mt-3 [text-shadow:0_1px_8px_rgba(0,0,0,0.9)]">
+          🏆 &nbsp; Where legends are made &nbsp; 🏆
+        </p>
+
+        {/* Small section toggle — sits right under the title */}
+        <div className="flex justify-center gap-2 mt-4">
+          {['records', 'challenges'].map(s => (
+            <button
+              key={s}
+              onClick={() => setSection(s)}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition capitalize ${
+                section === s
+                  ? 'bg-amber-400/90 text-black border-amber-400'
+                  : 'bg-white/10 backdrop-blur-sm border-white/25 text-white/65 hover:text-white'
+              }`}
+            >
+              {s === 'records' ? '🥇 Records' : '⚡ Challenges'}
+            </button>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Spacer — photo breathes here */}
+      <div className="h-[22vh]" />
       {section === 'records' ? <RecordsView /> : <ChallengesView />}
     </div>
   );

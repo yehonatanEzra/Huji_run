@@ -4,6 +4,7 @@ import { isCoachLike } from '../utils/roles';
 import { getFeed, createAnnouncement, updateAnnouncement, deleteAnnouncement, toggleReaction, addComment, deleteComment } from '../api/feed';
 import { listGroups } from '../api/coach';
 import Modal from '../components/ui/Modal';
+import PageBackground from '../components/PageBackground';
 import Spinner from '../components/ui/Spinner';
 
 const EMOJI_MAP = {
@@ -205,6 +206,7 @@ export default function FeedPage() {
 
   return (
     <div>
+      <PageBackground src="/bg-feed.jpg" />
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-bold">Team Feed</h2>
         {canPost && (
@@ -218,14 +220,14 @@ export default function FeedPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4">
+      <div className="flex rounded-xl overflow-hidden mb-4 bg-white/10 backdrop-blur-sm border border-white/20">
         <button
           onClick={() => setAuthorFilter('all')}
-          className={`flex-1 py-1.5 text-sm font-medium transition ${authorFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+          className={`flex-1 py-1.5 text-sm font-semibold transition ${authorFilter === 'all' ? 'bg-white text-black' : 'text-white/60 hover:text-white'}`}
         >All posts</button>
         <button
           onClick={() => setAuthorFilter('coach')}
-          className={`flex-1 py-1.5 text-sm font-medium transition ${authorFilter === 'coach' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}
+          className={`flex-1 py-1.5 text-sm font-semibold transition ${authorFilter === 'coach' ? 'bg-white text-black' : 'text-white/60 hover:text-white'}`}
         >Coach only</button>
       </div>
 
@@ -236,16 +238,16 @@ export default function FeedPage() {
           {visiblePosts.map(post => {
             const showComments = expandedComments[post.id];
             return (
-              <div key={post.id} className="bg-white border border-gray-200 rounded-xl p-4">
+              <div key={post.id} className="bg-black/50 backdrop-blur-md border border-white/15 rounded-xl p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <Avatar photoUrl={post.author_photo_url} name={post.author_name} />
                     <div>
-                      <h3 className="font-semibold text-sm">{post.title}</h3>
-                      <p className="text-xs text-gray-400">
-                        <span className={(post.author_role === 'coach' || post.author_role === 'admin') ? 'text-amber-600 font-semibold' : ''}>{post.author_name}</span> · {timeAgo(post.created_at)}
+                      <h3 className="font-semibold text-sm text-white">{post.title}</h3>
+                      <p className="text-xs text-white/50">
+                        <span className={(post.author_role === 'coach' || post.author_role === 'admin') ? 'text-white font-bold' : 'text-white/70'}>{post.author_name}</span> · {timeAgo(post.created_at)}
                         {post.training_group_id && (
-                          <span className="ml-1 px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px]">
+                          <span className="ml-1 px-1.5 py-0.5 bg-white/20 text-white/80 rounded text-[10px]">
                             {groups.find(g => g.id === post.training_group_id)?.name || 'Group'}
                           </span>
                         )}
@@ -256,18 +258,18 @@ export default function FeedPage() {
                     {(isCoach || (post.author_id === user?.id)) && (
                       <button
                         onClick={() => openEdit(post)}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="text-xs text-white/60 hover:text-white hover:underline"
                       >Edit</button>
                     )}
                     {(isCoach || (post.author_id === user?.id)) && (
                       <button
                         onClick={() => handleDelete(post.id)}
-                        className="text-gray-300 hover:text-red-500 text-lg leading-none"
+                        className="text-white/30 hover:text-red-400 text-lg leading-none"
                       >×</button>
                     )}
                   </div>
                 </div>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap mb-3">{post.body}</p>
+                <p className="text-sm text-white/85 whitespace-pre-wrap mb-3">{post.body}</p>
 
                 <div className="flex items-center gap-2 mb-2">
                   {Object.entries(EMOJI_MAP).map(([key, icon]) => {
@@ -278,8 +280,8 @@ export default function FeedPage() {
                         onClick={() => handleReact(post.id, key)}
                         className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition ${
                           reaction?.reacted
-                            ? 'bg-blue-50 border-blue-300 text-blue-700'
-                            : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                            ? 'bg-white/30 border-white/50 text-white'
+                            : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20'
                         }`}
                       >
                         <span>{icon}</span>
@@ -290,7 +292,7 @@ export default function FeedPage() {
                   {post.comment_count > 0 && (
                     <button
                       onClick={() => setExpandedComments(prev => ({ ...prev, [post.id]: !prev[post.id] }))}
-                      className="ml-auto text-xs text-gray-500 hover:text-gray-700"
+                      className="ml-auto text-xs text-white/50 hover:text-white/80"
                     >
                       💬 {post.comment_count} {post.comment_count === 1 ? 'comment' : 'comments'}
                     </button>
@@ -298,21 +300,21 @@ export default function FeedPage() {
                 </div>
 
                 {showComments && post.comments.length > 0 && (
-                  <div className="border-t pt-2 mt-2 space-y-2">
+                  <div className="border-t border-white/15 pt-2 mt-2 space-y-2">
                     {post.comments.map(c => (
                       <div key={c.id} className="flex items-start gap-2">
                         <Avatar photoUrl={c.photo_url} name={c.user_name} size="sm" />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs">
-                            <span className={`font-semibold ${(c.user_role === 'coach' || c.user_role === 'admin') ? 'text-amber-600' : ''}`}>{c.user_name}</span>
-                            <span className="text-gray-400 ml-1">{timeAgo(c.created_at)}</span>
+                            <span className={`font-semibold ${(c.user_role === 'coach' || c.user_role === 'admin') ? 'text-white' : 'text-white/80'}`}>{c.user_name}</span>
+                            <span className="text-white/40 ml-1">{timeAgo(c.created_at)}</span>
                           </p>
-                          <p className="text-sm text-gray-700">{c.body}</p>
+                          <p className="text-sm text-white/80">{c.body}</p>
                         </div>
                         {(c.user_id === user?.id || isCoach) && (
                           <button
                             onClick={() => handleDeleteComment(post.id, c.id)}
-                            className="text-gray-300 hover:text-red-500 text-sm"
+                            className="text-white/25 hover:text-red-400 text-sm"
                           >×</button>
                         )}
                       </div>
@@ -327,12 +329,12 @@ export default function FeedPage() {
                     value={commentTexts[post.id] || ''}
                     onChange={e => setCommentTexts(prev => ({ ...prev, [post.id]: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter') handleComment(post.id); }}
-                    className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <button
                     onClick={() => handleComment(post.id)}
                     disabled={!commentTexts[post.id]?.trim()}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-white text-black rounded-lg text-sm font-semibold hover:bg-white/80 disabled:opacity-50"
                   >Send</button>
                 </div>
               </div>
@@ -341,7 +343,7 @@ export default function FeedPage() {
           {hasMore && (
             <button
               onClick={loadMore}
-              className="w-full py-2 text-sm text-blue-600 font-medium hover:bg-blue-50 rounded-lg"
+              className="w-full py-2 text-sm text-white/60 font-medium hover:text-white hover:bg-white/10 rounded-lg transition"
             >
               Load more
             </button>

@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../api/client';
 import Modal from '../components/ui/Modal';
 import Spinner from '../components/ui/Spinner';
+import PageBackground from '../components/PageBackground';
 
 const SPECIALTIES = [
   'Physiotherapist',
@@ -406,6 +407,7 @@ export default function HealthWellnessPage() {
 
   return (
     <div className="space-y-4">
+      <PageBackground src="/bg-health.jpg" />
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">Health & Wellness</h1>
         <button

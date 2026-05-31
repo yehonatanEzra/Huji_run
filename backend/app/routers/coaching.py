@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -9,6 +9,7 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from ..models.coach_request import CoachRequest
+from ..models.workout import IndividualTarget
 
 router = APIRouter(tags=["coaching"])
 
@@ -173,12 +174,17 @@ def leave_coach(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Athlete drops their current coach. Past data stays intact; only the
-    relationship and group membership are cleared."""
+    """Athlete drops their current coach. Past workout logs + targets stay so
+    the history is preserved; future individual targets from the old coach are
+    wiped so the athlete starts clean (and a future coach has an empty slate)."""
     if current_user.role != "athlete":
         raise HTTPException(status_code=403, detail="Only athletes can leave a coach")
     if current_user.coach_id is None:
         return  # already unpaired — idempotent
+    db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == current_user.id,
+        IndividualTarget.date >= date.today(),
+    ).delete(synchronize_session=False)
     current_user.coach_id = None
     current_user.training_group_id = None
     db.commit()
@@ -265,13 +271,18 @@ def remove_athlete_from_roster(
     coach: User = Depends(require_coach),
 ):
     """Coach (or admin) removes an athlete from their roster. Athlete keeps
-    all past data; only coach_id and training_group_id are cleared."""
+    all past data; future individual targets are wiped so they don't linger
+    after the relationship ends."""
     athlete = db.get(User, athlete_id)
     if not athlete or athlete.role != "athlete":
         raise HTTPException(status_code=404, detail="Athlete not found")
     # Coach can only remove athletes they actually coach. Admin can remove any.
     if coach.role != "admin" and athlete.coach_id != coach.id:
         raise HTTPException(status_code=403, detail="Not your athlete")
+    db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == athlete.id,
+        IndividualTarget.date >= date.today(),
+    ).delete(synchronize_session=False)
     athlete.coach_id = None
     athlete.training_group_id = None
     db.commit()

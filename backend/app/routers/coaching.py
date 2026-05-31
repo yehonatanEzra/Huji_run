@@ -21,6 +21,7 @@ class CoachListItem(BaseModel):
     full_name: str
     username: str
     athlete_count: int
+    bio: Optional[str] = None
 
 
 class CoachRequestCreate(BaseModel):
@@ -73,6 +74,7 @@ def list_coaches(
             full_name=c.full_name,
             username=c.username,
             athlete_count=int(counts.get(c.id, 0)),
+            bio=c.bio,
         )
         for c in coach_rows
     ]

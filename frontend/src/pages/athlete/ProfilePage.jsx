@@ -20,6 +20,9 @@ export default function ProfilePage() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [editingBio, setEditingBio] = useState(false);
+  const [bioInput, setBioInput] = useState('');
+  const [savingBio, setSavingBio] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const fileRef = useRef();
   const isAthlete = user?.role === 'athlete';
@@ -65,6 +68,19 @@ export default function ProfilePage() {
       console.error(err);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleSaveBio = async () => {
+    setSavingBio(true);
+    try {
+      const { data } = await updateMyProfile({ bio: bioInput });
+      setProfile((p) => p ? { ...p, bio: data.bio } : p);
+      setEditingBio(false);
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not save bio');
+    } finally {
+      setSavingBio(false);
     }
   };
 
@@ -154,6 +170,54 @@ export default function ProfilePage() {
             {(user?.role === 'coach' || user?.role === 'admin') ? 'Coach' : profile.gender === 'M' ? 'Male' : 'Female'}
           </span>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-5">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">About me</p>
+          {!editingBio && (
+            <button
+              onClick={() => { setBioInput(profile.bio || ''); setEditingBio(true); }}
+              className="text-xs text-blue-600 hover:underline"
+            >{profile.bio ? 'Edit' : 'Add'}</button>
+          )}
+        </div>
+        {editingBio ? (
+          <div className="mt-2">
+            <textarea
+              value={bioInput}
+              onChange={(e) => setBioInput(e.target.value.slice(0, 500))}
+              rows={4}
+              placeholder={(user?.role === 'coach' || user?.role === 'admin')
+                ? 'Tell athletes about your coaching style, experience, training philosophy…'
+                : 'Tell others about yourself — favorite distance, goals, anything.'}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[11px] text-gray-400">{bioInput.length}/500</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditingBio(false)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                >Cancel</button>
+                <button
+                  onClick={handleSaveBio}
+                  disabled={savingBio}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                >{savingBio ? 'Saving…' : 'Save'}</button>
+              </div>
+            </div>
+          </div>
+        ) : profile.bio ? (
+          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{profile.bio}</p>
+        ) : (
+          <p className="text-sm text-gray-400 italic mt-1">
+            {(user?.role === 'coach' || user?.role === 'admin')
+              ? 'No bio yet. Add one so athletes can learn about you.'
+              : 'No bio yet.'}
+          </p>
+        )}
       </div>
 
       {isAthlete && (

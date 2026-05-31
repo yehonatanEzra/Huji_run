@@ -17,6 +17,11 @@ class RaceOut(BaseModel):
     status: str = "upcoming"  # "upcoming" or "completed"
     registration_count: int = 0
     heat_count: int = 0
+    # Moderation state. "approved" is the live, public default; coach-proposed
+    # races sit as "pending" until an admin approves; "rejected" carries
+    # decline_note set by admin.
+    moderation_status: str = "approved"
+    decline_note: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -54,7 +59,10 @@ class ResultOut(BaseModel):
     time_seconds: int
     time_display: str
     pace_display: str
-    placement: int
+    placement: Optional[int] = None
+    moderation_status: str = "approved"
+    decline_note: Optional[str] = None
+    created_by: Optional[int] = None
     model_config = {"from_attributes": True}
 
 
@@ -69,6 +77,9 @@ class RaceDetail(BaseModel):
     race_date: date
     heats: list[HeatOut]
     status: str = "upcoming"
+    moderation_status: str = "approved"
+    decline_note: Optional[str] = None
+    created_by: Optional[int] = None
     model_config = {"from_attributes": True}
 
 

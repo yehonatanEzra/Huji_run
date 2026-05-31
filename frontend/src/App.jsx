@@ -8,6 +8,7 @@ import CalendarPage from './pages/athlete/CalendarPage';
 import HomePage from './pages/athlete/HomePage';
 import FindCoachPage from './pages/athlete/FindCoachPage';
 import CoachRequestsPage from './pages/coach/CoachRequestsPage';
+import AdminPendingPage from './pages/AdminPendingPage';
 import RaceArchivePage from './pages/athlete/RaceArchivePage';
 import RaceDetailPage from './pages/athlete/RaceDetailPage';
 import HallOfFamePage from './pages/athlete/HallOfFamePage';
@@ -51,7 +52,8 @@ export default function App() {
         <Route path="/coach/workouts" element={<ProtectedRoute requireCoach><WorkoutPublisherPage /></ProtectedRoute>} />
         <Route path="/coach/targets" element={<ProtectedRoute requireCoach><IndividualTargetsPage /></ProtectedRoute>} />
         <Route path="/coach/dashboard" element={<ProtectedRoute requireCoach><TrackingDashboardPage /></ProtectedRoute>} />
-        <Route path="/coach/race-wizard" element={<ProtectedRoute requireAdmin><RaceWizardPage /></ProtectedRoute>} />
+        <Route path="/coach/race-wizard" element={<ProtectedRoute requireCoach><RaceWizardPage /></ProtectedRoute>} />
+        <Route path="/admin/pending" element={<ProtectedRoute requireAdmin><AdminPendingPage /></ProtectedRoute>} />
         <Route path="/coach/settings" element={<ProtectedRoute requireCoach><SettingsPage /></ProtectedRoute>} />
       </Route>
 

@@ -30,6 +30,7 @@ class ProfileResponse(BaseModel):
     full_name: str
     gender: str
     photo_url: Optional[str] = None
+    bio: Optional[str] = None
     personal_bests: list[PBEntry]
     race_history: list[RaceHistoryEntry]
 

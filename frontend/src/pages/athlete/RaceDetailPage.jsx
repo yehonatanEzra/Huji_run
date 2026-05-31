@@ -26,8 +26,8 @@ export default function RaceDetailPage() {
   const { raceId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  // Race writes are admin-only now. Coach gets a read-only view of the page.
-  const isCoach = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
+  const isCoachOrAdmin = user?.role === 'coach' || user?.role === 'admin';
 
   const [race, setRace] = useState(null);
   const [tab, setTab] = useState('heats');
@@ -158,7 +158,7 @@ export default function RaceDetailPage() {
     setResolvedGender(null);
     setNewGender('');
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (val.length >= 2 && isCoach) {
+    if (val.length >= 2 && isCoachOrAdmin) {
       debounceRef.current = setTimeout(async () => {
         try {
           const { data } = await searchAthletes(val);
@@ -202,6 +202,19 @@ export default function RaceDetailPage() {
   if (!race) return <p className="text-gray-500">Race not found</p>;
 
   const distances = [...new Set(race.heats.map((h) => h.distance_m))];
+  // A coach can edit/delete their own race only while it's pending/rejected.
+  // Admin can edit any race.
+  const canEditRace = isAdmin || (
+    user?.role === 'coach' &&
+    (race.moderation_status === 'pending' || race.moderation_status === 'rejected') &&
+    race.created_by === user?.id
+  );
+  // Per-result modify check used inside the heat table.
+  const canModifyResult = (r) => {
+    if (isAdmin) return true;
+    if (!isCoachOrAdmin) return false;
+    return r.created_by === user?.id && (r.moderation_status === 'pending' || r.moderation_status === 'rejected');
+  };
 
   return (
     <div>
@@ -210,7 +223,7 @@ export default function RaceDetailPage() {
           <h2 className="text-xl font-bold">{race.name}</h2>
           <p className="text-sm text-gray-500 mb-4">{race.race_date}</p>
         </div>
-        {isCoach && (
+        {canEditRace && (
           <div className="flex gap-2">
             <button
               onClick={() => { setEditName(race.name); setEditDate(race.race_date); setEditing(true); }}
@@ -225,9 +238,28 @@ export default function RaceDetailPage() {
         )}
       </div>
 
+      {/* Moderation banner */}
+      {race.moderation_status === 'pending' && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4">
+          <p className="text-xs text-amber-900">
+            <span className="font-semibold">Pending review.</span>{' '}
+            {isAdmin
+              ? 'This race was proposed by a coach. Approve or reject it from the Review tab.'
+              : 'Only you and admins can see this race until an admin approves it.'}
+          </p>
+        </div>
+      )}
+      {race.moderation_status === 'rejected' && (
+        <div className="bg-red-50 border border-red-300 rounded-lg p-3 mb-4">
+          <p className="text-xs text-red-900">
+            <span className="font-semibold">Rejected.</span> {race.decline_note || 'No note provided.'}
+          </p>
+        </div>
+      )}
+
       {race.status === 'upcoming' ? (
         <>
-          {isCoach && (
+          {canEditRace && (
             <div className="mb-3">
               {addingHeat ? (
                 <div className="flex gap-2 items-center">
@@ -269,7 +301,7 @@ export default function RaceDetailPage() {
         />
       )}
 
-      {isCoach && tab === 'heats' && (
+      {canEditRace && tab === 'heats' && (
         <div className="mb-3">
           {addingHeat ? (
             <div className="flex gap-2 items-center">
@@ -299,14 +331,17 @@ export default function RaceDetailPage() {
                   <p className="text-sm font-semibold">{hw.heat.label}</p>
                   <p className="text-xs text-gray-500">{DISTANCE_LABELS[hw.heat.distance_m]}</p>
                 </div>
-                {isCoach && (
-                  <div className="flex gap-2">
+                <div className="flex gap-2">
+                  {/* Add Runner: any coach or admin can propose a result */}
+                  {isCoachOrAdmin && (
                     <button onClick={() => { setAddingResult(hw.heat.id); setNewName(''); setNewTime(''); setNewGender(''); setResolvedGender(null); }}
                       className="text-blue-600 text-xs font-medium">+ Runner</button>
+                  )}
+                  {canEditRace && (
                     <button onClick={() => handleDeleteHeat(hw.heat.id)}
                       className="text-red-500 text-xs font-medium">Delete</button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
 
               {addingResult === hw.heat.id && (
@@ -362,26 +397,41 @@ export default function RaceDetailPage() {
                     <th className="px-3 py-1.5 text-left">Name</th>
                     <th className="px-3 py-1.5 text-right">Time</th>
                     <th className="px-3 py-1.5 text-right">Pace</th>
-                    {isCoach && <th className="px-3 py-1.5 w-16"></th>}
+                    {isCoachOrAdmin && <th className="px-3 py-1.5 w-16"></th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {hw.results.map((r) => (
-                    <tr key={r.id} className="border-t">
-                      <td className="px-3 py-2 font-medium">{r.placement}</td>
-                      <td className="px-3 py-2">{r.athlete_name}</td>
-                      <td className="px-3 py-2 text-right font-mono">{r.time_display}</td>
-                      <td className="px-3 py-2 text-right text-gray-500">{r.pace_display}</td>
-                      {isCoach && (
-                        <td className="px-3 py-2 text-right">
-                          <button onClick={() => openEditResult(r, hw.heat.id)}
-                            className="text-blue-600 text-xs mr-2">Edit</button>
-                          <button onClick={() => handleDeleteResult(hw.heat.id, r.id)}
-                            className="text-red-500 text-xs">X</button>
+                  {hw.results.map((r) => {
+                    const pending = r.moderation_status === 'pending';
+                    const rejected = r.moderation_status === 'rejected';
+                    return (
+                      <tr key={r.id} className={`border-t ${pending ? 'bg-amber-50' : rejected ? 'bg-red-50' : ''}`}>
+                        <td className="px-3 py-2 font-medium">{r.placement ?? '—'}</td>
+                        <td className="px-3 py-2">
+                          {r.athlete_name}
+                          {pending && <span className="ml-2 text-[10px] bg-amber-100 text-amber-800 font-semibold rounded-full px-1.5 py-0.5">Pending</span>}
+                          {rejected && <span className="ml-2 text-[10px] bg-red-100 text-red-800 font-semibold rounded-full px-1.5 py-0.5">Rejected</span>}
+                          {rejected && r.decline_note && (
+                            <p className="text-[11px] text-red-700 italic mt-0.5">"{r.decline_note}"</p>
+                          )}
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        <td className="px-3 py-2 text-right font-mono">{r.time_display}</td>
+                        <td className="px-3 py-2 text-right text-gray-500">{r.pace_display}</td>
+                        {isCoachOrAdmin && (
+                          <td className="px-3 py-2 text-right">
+                            {canModifyResult(r) && (
+                              <>
+                                <button onClick={() => openEditResult(r, hw.heat.id)}
+                                  className="text-blue-600 text-xs mr-2">Edit</button>
+                                <button onClick={() => handleDeleteResult(hw.heat.id, r.id)}
+                                  className="text-red-500 text-xs">X</button>
+                              </>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

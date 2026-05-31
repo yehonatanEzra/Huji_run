@@ -6,7 +6,7 @@ from .database import engine, Base
 from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, RaceRegistration, HallOfFame, HealthProfessional, HealthReview, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
 from .models.workout import WorkoutLogComment  # noqa: F401  (ensure table is registered with Base)
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review
 
 Base.metadata.create_all(bind=engine)
 
@@ -271,6 +271,75 @@ def _migrate_role_enum_add_admin():
 _migrate_role_enum_add_admin()
 
 
+def _migrate_race_moderation_columns():
+    """Add status + decision metadata to races and results so coaches can
+    propose race-side changes that admins approve."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "races" in inspector.get_table_names():
+        existing = {c["name"] for c in inspector.get_columns("races")}
+        to_add = []
+        if "status" not in existing:
+            to_add.append(("status", "VARCHAR(20) NOT NULL DEFAULT 'approved'"))
+        if "decline_note" not in existing:
+            to_add.append(("decline_note", "TEXT"))
+        if "decided_at" not in existing:
+            to_add.append(("decided_at", "DATETIME"))
+        if "decided_by" not in existing:
+            to_add.append(("decided_by", "INTEGER REFERENCES users(id)"))
+        if to_add:
+            with engine.connect() as conn:
+                for col, ddl in to_add:
+                    conn.execute(text(f"ALTER TABLE races ADD COLUMN {col} {ddl}"))
+                try:
+                    conn.execute(text("CREATE INDEX ix_races_status ON races(status)"))
+                except Exception:
+                    pass
+                conn.commit()
+    if "results" in inspector.get_table_names():
+        existing = {c["name"] for c in inspector.get_columns("results")}
+        to_add = []
+        if "status" not in existing:
+            to_add.append(("status", "VARCHAR(20) NOT NULL DEFAULT 'approved'"))
+        if "created_by" not in existing:
+            to_add.append(("created_by", "INTEGER REFERENCES users(id)"))
+        if "decline_note" not in existing:
+            to_add.append(("decline_note", "TEXT"))
+        if "decided_at" not in existing:
+            to_add.append(("decided_at", "DATETIME"))
+        if "decided_by" not in existing:
+            to_add.append(("decided_by", "INTEGER REFERENCES users(id)"))
+        if to_add:
+            with engine.connect() as conn:
+                for col, ddl in to_add:
+                    conn.execute(text(f"ALTER TABLE results ADD COLUMN {col} {ddl}"))
+                try:
+                    conn.execute(text("CREATE INDEX ix_results_status ON results(status)"))
+                except Exception:
+                    pass
+                conn.commit()
+
+
+_migrate_race_moderation_columns()
+
+
+def _migrate_users_bio():
+    """Add User.bio column if missing (free-text self-description)."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("users")}
+    if "bio" in existing:
+        return
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN bio TEXT"))
+        conn.commit()
+
+
+_migrate_users_bio()
+
+
 def _bootstrap_admin_and_coach_ids():
     """One-time data backfill: promote the original sole coach to admin and
     attach every athlete + training group to them. Idempotent — after the
@@ -354,6 +423,7 @@ app.include_router(challenges.router, prefix=API_PREFIX)
 app.include_router(workout_comments.router, prefix=API_PREFIX)
 app.include_router(home.router, prefix=API_PREFIX)
 app.include_router(coaching.router, prefix=API_PREFIX)
+app.include_router(admin_review.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

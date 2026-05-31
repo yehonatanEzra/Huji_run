@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const ROOT_PATHS = new Set([
   '/home', '/find-coach', '/calendar', '/races', '/hall-of-fame', '/health-wellness',
-  '/profile', '/feed', '/coach/dashboard', '/coach/requests',
+  '/profile', '/feed', '/coach/dashboard', '/coach/requests', '/admin/pending',
 ]);
 
 export default function AppShell() {

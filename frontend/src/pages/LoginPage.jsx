@@ -4,7 +4,7 @@ import { login as loginApi } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { NoiseBackground } from '../components/ui/NoiseBackground';
 
-const GLASS_INPUT = 'w-full bg-white/10 border border-white/25 rounded-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40 focus:bg-white/15 transition';
+const GLASS_INPUT = 'w-full bg-white/10 border border-white/25 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40 focus:bg-white/15 transition';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -42,7 +42,7 @@ export default function LoginPage() {
         {/* Branding — top of the photo */}
         <div className="text-center pt-14">
           <p className="text-[11px] font-bold tracking-[0.35em] text-white/55 uppercase mb-3">
-            Hebrew University
+            Push Your Limits
           </p>
           <h1 className="text-6xl font-black text-white tracking-tight [text-shadow:0_2px_20px_rgba(0,0,0,0.7)] leading-none">
             HUJI RUN
@@ -59,9 +59,9 @@ export default function LoginPage() {
 
         {/* Form pinned to bottom */}
         <div className="w-full max-w-sm pb-10">
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-1">Welcome back</h2>
-            <p className="text-white/45 text-sm mb-5">Sign in to your account</p>
+          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-5 shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-0.5">Welcome back</h2>
+            <p className="text-white/45 text-xs mb-4">Sign in to your account</p>
 
             {error && (
               <div className="bg-red-500/20 border border-red-400/35 rounded-xl px-4 py-2.5 mb-4">
@@ -97,7 +97,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98] disabled:opacity-50"
+                    className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-2.5 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98] disabled:opacity-50"
                   >
                     {loading ? 'Signing in…' : 'Sign In'}
                   </button>
@@ -105,7 +105,7 @@ export default function LoginPage() {
               </div>
             </form>
 
-            <p className="text-center text-sm text-white/40 mt-5">
+            <p className="text-center text-xs text-white/40 mt-4">
               No account yet?{' '}
               <Link to="/register" className="text-white font-semibold hover:underline">
                 Register

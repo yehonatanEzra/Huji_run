@@ -78,8 +78,8 @@ export default function ProfilePage() {
   const handleSaveBio = async () => {
     setSavingBio(true);
     try {
-      await updateMyProfile({ bio: bioInput });
-      await fetchProfile();
+      const { data } = await updateMyProfile({ bio: bioInput });
+      setProfile(prev => ({ ...prev, bio: data.bio }));
       setEditingBio(false);
     } catch (err) {
       alert(err?.response?.data?.detail || 'Could not save bio');
@@ -93,12 +93,12 @@ export default function ProfilePage() {
     setSavingName(true);
     try {
       const { data } = await updateMyProfile({ full_name: nameInput.trim() });
+      setProfile(prev => ({ ...prev, full_name: data.full_name }));
       const stored = JSON.parse(localStorage.getItem('user') || '{}');
       stored.full_name = data.full_name;
       localStorage.setItem('user', JSON.stringify(stored));
       login({ access_token: localStorage.getItem('token'), ...stored });
       setEditingName(false);
-      fetchProfile();
     } catch (err) {
       console.error(err);
     } finally {

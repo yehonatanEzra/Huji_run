@@ -36,6 +36,7 @@ def _to_out(db: Session, p: HealthProfessional) -> ProfessionalOut:
         avg_rating=avg,
         review_count=count,
         created_at=p.created_at,
+        created_by_id=p.created_by_id,
     )
 
 

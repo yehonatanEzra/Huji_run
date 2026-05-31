@@ -4,11 +4,16 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getMyProfile, uploadPhoto, updateMyProfile } from '../../api/profile';
 import { getMyPairing, leaveCoach } from '../../api/coaching';
 import Spinner from '../../components/ui/Spinner';
+import PageBackground from '../../components/PageBackground';
 
 const DISTANCE_LABELS = {
   1500: '1,500m', 3000: '3,000m', 5000: '5,000m',
   10000: '10,000m', 21100: 'Half Marathon', 42200: 'Marathon',
 };
+
+const GLASS_CARD = 'bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4';
+const SECTION_LABEL = 'text-[10px] uppercase tracking-widest text-white/55 font-semibold';
+const GLASS_INPUT = 'w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40';
 
 export default function ProfilePage() {
   const { user, login } = useAuth();
@@ -26,6 +31,7 @@ export default function ProfilePage() {
   const [leaving, setLeaving] = useState(false);
   const fileRef = useRef();
   const isAthlete = user?.role === 'athlete';
+  const isCoach = user?.role === 'coach' || user?.role === 'admin';
 
   const fetchProfile = () =>
     getMyProfile()
@@ -45,7 +51,6 @@ export default function ProfilePage() {
     setLeaving(true);
     try {
       await leaveCoach();
-      // Patch local user object so the rest of the app knows we're unpaired.
       const updated = { ...user, coach_id: null, training_group_id: null };
       localStorage.setItem('user', JSON.stringify(updated));
       navigate('/find-coach');
@@ -102,31 +107,35 @@ export default function ProfilePage() {
   };
 
   if (loading) return <Spinner />;
-  if (!profile) return <p className="text-center text-gray-500">Failed to load profile</p>;
+  if (!profile) return <p className="text-center text-white/60">Failed to load profile</p>;
 
   const photoSrc = profile.photo_url ? profile.photo_url + '?t=' + Date.now() : null;
+  const roleLabel = isCoach ? 'Coach' : profile.gender === 'M' ? 'Male athlete' : 'Female athlete';
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <div className="relative">
+      <PageBackground src="/bg-profile.jpg" />
+
+      {/* Hero — avatar + name centred, photo shows above */}
+      <div className="flex flex-col items-center text-center pt-[22vh] pb-6">
+        <div className="relative mb-3">
           {photoSrc ? (
             <img
               src={photoSrc}
               alt={profile.full_name}
-              className="w-16 h-16 rounded-full object-cover border-2 border-blue-200"
+              className="w-20 h-20 rounded-full object-cover border-2 border-white/50 shadow-lg"
             />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-2xl font-bold text-blue-600">
+            <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm border-2 border-white/40 flex items-center justify-center text-3xl font-bold text-white shadow-lg">
               {profile.full_name.charAt(0).toUpperCase()}
             </div>
           )}
           <button
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="absolute -bottom-1 -right-1 w-6 h-6 bg-blue-600 text-white rounded-full text-xs flex items-center justify-center hover:bg-blue-700"
+            className="absolute -bottom-1 -right-1 w-7 h-7 bg-white text-black rounded-full text-xs flex items-center justify-center hover:bg-white/80 transition shadow"
           >
-            {uploading ? '...' : '📷'}
+            {uploading ? '…' : '📷'}
           </button>
           <input
             ref={fileRef}
@@ -136,109 +145,106 @@ export default function ProfilePage() {
             className="hidden"
           />
         </div>
-        <div>
-          {editingName ? (
-            <div className="flex items-center gap-2">
-              <input
-                value={nameInput}
-                onChange={e => setNameInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); }}
-                className="border rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-              />
-              <button
-                onClick={handleSaveName}
-                disabled={savingName}
-                className="text-sm text-white bg-blue-600 rounded-lg px-2 py-1 hover:bg-blue-700 disabled:opacity-50"
-              >Save</button>
-              <button
-                onClick={() => setEditingName(false)}
-                className="text-sm text-gray-500"
-              >Cancel</button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold">{profile.full_name}</h2>
-              <button
-                onClick={() => { setNameInput(profile.full_name); setEditingName(true); }}
-                className="text-xs text-blue-600 hover:underline"
-              >Edit</button>
-            </div>
-          )}
-          <span className="text-sm text-gray-500">
-            {(user?.role === 'coach' || user?.role === 'admin') ? 'Coach' : profile.gender === 'M' ? 'Male' : 'Female'}
-          </span>
-        </div>
+
+        {editingName ? (
+          <div className="flex items-center gap-2 mt-1">
+            <input
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); }}
+              className="bg-white/15 border border-white/30 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40 text-center"
+              autoFocus
+            />
+            <button
+              onClick={handleSaveName}
+              disabled={savingName}
+              className="text-xs bg-white text-black rounded-lg px-3 py-1.5 font-semibold hover:bg-white/80 disabled:opacity-50"
+            >Save</button>
+            <button
+              onClick={() => setEditingName(false)}
+              className="text-xs text-white/60 hover:text-white"
+            >Cancel</button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">{profile.full_name}</h2>
+            <button
+              onClick={() => { setNameInput(profile.full_name); setEditingName(true); }}
+              className="text-xs text-white/55 hover:text-white transition"
+            >✏️</button>
+          </div>
+        )}
+        <p className="text-sm text-white/60 mt-0.5 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">{roleLabel}</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-5">
-        <div className="flex items-center justify-between">
-          <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">About me</p>
+      {/* About me */}
+      <div className={`${GLASS_CARD} mb-4`}>
+        <div className="flex items-center justify-between mb-2">
+          <p className={SECTION_LABEL}>About me</p>
           {!editingBio && (
             <button
               onClick={() => { setBioInput(profile.bio || ''); setEditingBio(true); }}
-              className="text-xs text-blue-600 hover:underline"
-            >{profile.bio ? 'Edit' : 'Add'}</button>
+              className="text-xs text-white/55 hover:text-white transition"
+            >{profile.bio ? 'Edit' : '+ Add'}</button>
           )}
         </div>
         {editingBio ? (
-          <div className="mt-2">
+          <>
             <textarea
               value={bioInput}
               onChange={(e) => setBioInput(e.target.value.slice(0, 500))}
               rows={4}
-              placeholder={(user?.role === 'coach' || user?.role === 'admin')
+              placeholder={isCoach
                 ? 'Tell athletes about your coaching style, experience, training philosophy…'
                 : 'Tell others about yourself — favorite distance, goals, anything.'}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={GLASS_INPUT}
               autoFocus
             />
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-[11px] text-gray-400">{bioInput.length}/500</span>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-[11px] text-white/40">{bioInput.length}/500</span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setEditingBio(false)}
-                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                  className="text-xs px-3 py-1.5 rounded-lg border border-white/25 text-white/70 hover:text-white transition"
                 >Cancel</button>
                 <button
                   onClick={handleSaveBio}
                   disabled={savingBio}
-                  className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-white text-black font-semibold hover:bg-white/80 disabled:opacity-50 transition"
                 >{savingBio ? 'Saving…' : 'Save'}</button>
               </div>
             </div>
-          </div>
+          </>
         ) : profile.bio ? (
-          <p className="text-sm text-gray-800 mt-1 whitespace-pre-wrap">{profile.bio}</p>
+          <p className="text-sm text-white/85 whitespace-pre-wrap">{profile.bio}</p>
         ) : (
-          <p className="text-sm text-gray-400 italic mt-1">
-            {(user?.role === 'coach' || user?.role === 'admin')
-              ? 'No bio yet. Add one so athletes can learn about you.'
-              : 'No bio yet.'}
+          <p className="text-sm text-white/40 italic">
+            {isCoach ? 'No bio yet. Add one so athletes can learn about you.' : 'No bio yet.'}
           </p>
         )}
       </div>
 
+      {/* My coach */}
       {isAthlete && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-5">
-          <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">My coach</p>
+        <div className={`${GLASS_CARD} mb-4`}>
+          <p className={`${SECTION_LABEL} mb-2`}>My coach</p>
           {pairing?.coach_id ? (
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-base font-semibold text-gray-900">{pairing.coach_name}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-base font-semibold text-white">{pairing.coach_name}</p>
               <button
                 onClick={handleLeaveCoach}
                 disabled={leaving}
-                className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                className="text-xs px-3 py-1.5 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-400/15 disabled:opacity-50 transition"
               >
                 {leaving ? 'Leaving…' : 'Leave'}
               </button>
             </div>
           ) : (
-            <div className="flex items-center justify-between mt-1">
-              <p className="text-base text-gray-500 italic">Not registered</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-white/50 italic">Not registered</p>
               <button
                 onClick={() => navigate('/find-coach')}
-                className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                className="text-xs px-3 py-1.5 rounded-lg bg-white text-black font-semibold hover:bg-white/80 transition"
               >
                 Find a coach
               </button>
@@ -247,48 +253,53 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {user?.role !== 'coach' && user?.role !== 'admin' && (
+      {/* Personal Bests + Race History (athletes only) */}
+      {!isCoach && (
         <>
-          <h3 className="text-base font-semibold mb-3">Personal Bests</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-white/70 mb-3 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+            Personal Bests
+          </h3>
           {profile.personal_bests.length === 0 ? (
-            <p className="text-sm text-gray-400 mb-6">No records yet</p>
+            <p className="text-sm text-white/40 italic mb-6">No records yet</p>
           ) : (
             <div className="grid grid-cols-2 gap-3 mb-6">
               {profile.personal_bests.map((pb) => (
-                <div key={pb.distance_m} className="bg-white border rounded-xl p-3">
-                  <p className="text-xs text-gray-500 font-medium">{DISTANCE_LABELS[pb.distance_m]}</p>
-                  <p className="text-lg font-mono font-bold text-blue-700">{pb.time_display}</p>
-                  <p className="text-xs text-gray-400">{pb.pace_display} /km</p>
-                  <p className="text-xs text-gray-400 mt-1">{pb.race_name} - {pb.achieved_date}</p>
+                <div key={pb.distance_m} className="bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-3">
+                  <p className="text-[11px] text-white/55 font-medium uppercase tracking-wide">{DISTANCE_LABELS[pb.distance_m]}</p>
+                  <p className="text-xl font-mono font-bold text-blue-200 mt-0.5">{pb.time_display}</p>
+                  <p className="text-xs text-white/50">{pb.pace_display} /km</p>
+                  <p className="text-[11px] text-white/40 mt-1 truncate">{pb.race_name} · {pb.achieved_date}</p>
                 </div>
               ))}
             </div>
           )}
 
-          <h3 className="text-base font-semibold mb-3">Race History</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-white/70 mb-3 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+            Race History
+          </h3>
           {profile.race_history.length === 0 ? (
-            <p className="text-sm text-gray-400">No races yet</p>
+            <p className="text-sm text-white/40 italic">No races yet</p>
           ) : (
-            <div className="bg-white border rounded-xl overflow-hidden">
+            <div className="bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl overflow-hidden">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-medium text-gray-500">Race</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-500">Dist</th>
-                    <th className="text-right px-3 py-2 font-medium text-gray-500">Time</th>
-                    <th className="text-right px-3 py-2 font-medium text-gray-500">#</th>
+                <thead>
+                  <tr className="bg-white/10">
+                    <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">Race</th>
+                    <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">Dist</th>
+                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">Time</th>
+                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">#</th>
                   </tr>
                 </thead>
                 <tbody>
                   {profile.race_history.map((r, i) => (
-                    <tr key={i} className="border-t">
+                    <tr key={i} className="border-t border-white/10">
                       <td className="px-3 py-2">
-                        <p className="font-medium">{r.race_name}</p>
-                        <p className="text-xs text-gray-400">{r.race_date}</p>
+                        <p className="font-medium text-white truncate max-w-[110px]">{r.race_name}</p>
+                        <p className="text-xs text-white/45">{r.race_date}</p>
                       </td>
-                      <td className="px-3 py-2 text-gray-600">{DISTANCE_LABELS[r.distance_m] || `${r.distance_m}m`}</td>
-                      <td className="px-3 py-2 text-right font-mono">{r.time_display}</td>
-                      <td className="px-3 py-2 text-right">{r.placement}</td>
+                      <td className="px-3 py-2 text-white/65 text-xs">{DISTANCE_LABELS[r.distance_m] || `${r.distance_m}m`}</td>
+                      <td className="px-3 py-2 text-right font-mono text-white/85">{r.time_display}</td>
+                      <td className="px-3 py-2 text-right text-white/65">{r.placement}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { NoiseBackground } from './ui/NoiseBackground';
 
 const TYPE = {
   simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
@@ -19,7 +20,7 @@ function pickWorkout(today) {
   return null;
 }
 
-export default function TrainingTicket({ today, weekKm, runs, lastRace, group, onOpenWorkout }) {
+export default function TrainingTicket({ today, weekKm, runs, lastRace, group, onOpenWorkout, hasBgImage = false }) {
   const picked = pickWorkout(today);
   const workout = picked?.w;
   const wt = workout?.workout_type || 'simple';
@@ -36,31 +37,48 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
   const status = log?.status;
   const reported = !!log;
 
+  // Glass-mode theme — all conditional classes computed here so the JSX stays clean.
+  // ↓ TUNE CARD TRANSPARENCY HERE — raise white/XX to make more opaque, lower to show more bg
+  const g = hasBgImage;
+  const bodyBg     = g ? 'bg-white/25 backdrop-blur-md'
+                       : isRace ? 'bg-indigo-50' : 'bg-white';
+  const stubBg     = g ? 'bg-black/30 backdrop-blur-sm'
+                       : isRace ? 'bg-indigo-100/60' : 'bg-blue-50';
+  const cardRing   = g ? 'ring-white/25' : 'ring-gray-200';
+  const notchBg    = g ? 'bg-transparent' : 'bg-blue-50';
+  const divider    = g ? 'border-white/30' : 'border-gray-300';
+  const logoText   = g ? 'text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.8)]' : 'text-blue-700';
+  const titleGrad  = isRace
+    ? (g ? 'bg-gradient-to-br from-white to-indigo-200' : 'bg-gradient-to-br from-indigo-700 to-purple-600')
+    : (g ? 'bg-gradient-to-br from-white to-blue-200'   : 'bg-gradient-to-br from-gray-900 to-blue-600');
+  // ↓ TUNE TEXT COLORS HERE for glass mode (right side of each ternary)
+  const metaText   = g ? 'text-white/80 [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]'  : 'text-gray-500';
+  const bodyText   = g ? 'text-white    [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]'  : 'text-gray-700';
+  const emptyText  = g ? 'text-white/70 [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]'  : 'text-gray-400';
+  const labelText  = g ? 'text-white/70 [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]'  : 'text-gray-400';
+  const bigNum     = g ? 'text-white    [text-shadow:0_1px_4px_rgba(0,0,0,0.8)]'  : 'text-gray-900';
+  const statVal    = g ? 'text-white    [text-shadow:0_1px_4px_rgba(0,0,0,0.8)]'  : 'text-gray-900';
+  const statLbl    = g ? 'text-white/75 [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]'  : 'text-gray-500';
+  const raceName   = g ? 'text-white    [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]'  : 'text-gray-900';
+  const raceTime   = g ? 'text-blue-200 [text-shadow:0_1px_4px_rgba(0,0,0,0.8)]'  : 'text-indigo-700';
+  const noReport   = g ? 'text-white/65 italic [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]' : 'text-gray-400 italic';
+
+  const ctaLabel = workout ? "Open today's workout" : 'Open training calendar';
+
   const body = (() => {
     if (!workout) return null;
     if (isStructured) {
       return (
         <div className="space-y-1.5 text-sm">
-          {workout.warmup && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">Warm-up · </span><span className="whitespace-pre-wrap">{workout.warmup}</span></p>}
-          {workout.main_session && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">{middleLabel} · </span><span className="whitespace-pre-wrap">{workout.main_session}</span></p>}
-          {workout.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">Cool-down · </span><span className="whitespace-pre-wrap">{workout.cooldown}</span></p>}
+          {workout.warmup      && <p><span className={`text-[10px] uppercase tracking-wider ${labelText}`}>Warm-up · </span><span className={`whitespace-pre-wrap ${bodyText}`}>{workout.warmup}</span></p>}
+          {workout.main_session && <p><span className={`text-[10px] uppercase tracking-wider ${labelText}`}>{middleLabel} · </span><span className={`whitespace-pre-wrap ${bodyText}`}>{workout.main_session}</span></p>}
+          {workout.cooldown    && <p><span className={`text-[10px] uppercase tracking-wider ${labelText}`}>Cool-down · </span><span className={`whitespace-pre-wrap ${bodyText}`}>{workout.cooldown}</span></p>}
         </div>
       );
     }
     const content = workout.content ?? workout.note;
-    return content ? <p className="text-sm whitespace-pre-wrap text-gray-700">{content}</p> : null;
+    return content ? <p className={`text-sm whitespace-pre-wrap ${bodyText}`}>{content}</p> : null;
   })();
-
-  const bodyBg = isRace ? 'bg-indigo-50' : 'bg-white';
-  const stubBg = isRace ? 'bg-indigo-100/60' : 'bg-blue-50';
-  const titleGradient = isRace
-    ? 'bg-gradient-to-br from-indigo-700 to-purple-600'
-    : 'bg-gradient-to-br from-gray-900 to-blue-600';
-  // Notch (perforation hole) color must match the *outer* page background so it
-  // looks like the card was actually punched through. Page bg is blue-50.
-  const notchBg = 'bg-blue-50';
-
-  const ctaLabel = workout ? "Open today's workout" : 'Open training calendar';
 
   return (
     <div className="w-full max-w-md mx-auto [perspective:1000px]">
@@ -78,7 +96,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
         />
 
         <div
-          className="relative rounded-2xl shadow-xl ring-1 ring-gray-200 overflow-hidden transition-transform duration-500 ease-out group-hover:[transform:rotateX(3deg)_rotateY(-3deg)_scale(1.01)]"
+          className={`relative rounded-2xl shadow-xl ring-1 ${cardRing} overflow-hidden transition-transform duration-500 ease-out group-hover:[transform:rotateX(3deg)_rotateY(-3deg)_scale(1.01)]`}
           style={{ transformStyle: 'preserve-3d' }}
         >
           {/* TOP — body */}
@@ -87,7 +105,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-1.5">
                 <span className="text-lg">🎟️</span>
-                <span className="text-xs font-extrabold tracking-tight text-blue-700">HUJI RUN</span>
+                <span className={`text-xs font-extrabold tracking-tight ${logoText}`}>HUJI RUN</span>
               </div>
               {workout && (
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${typeMeta.color}`}>
@@ -98,18 +116,18 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
 
             {/* Title */}
             {workout && (
-              <h1 className={`text-3xl font-black leading-tight uppercase ${titleGradient} bg-clip-text text-transparent`}>
+              <h1 className={`text-3xl font-black leading-tight uppercase ${titleGrad} bg-clip-text text-transparent`}>
                 {titleDisplay}
               </h1>
             )}
-            <p className="text-xs text-gray-500 mt-1 mb-4">
+            <p className={`text-xs mt-1 mb-4 ${metaText}`}>
               {dateStr}
               {group && <> · {group.name}</>}
             </p>
 
             {/* Body */}
             {workout ? body : (
-              <p className="text-sm text-gray-400 italic">
+              <p className={`text-sm italic ${emptyText}`}>
                 {wt === 'rest' ? 'Rest day — nothing scheduled.' : 'No workout scheduled for today.'}
               </p>
             )}
@@ -119,7 +137,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
           <div className="relative h-4">
             <div className={`absolute -left-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full ${notchBg}`} />
             <div className={`absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full ${notchBg}`} />
-            <div className="absolute left-4 right-4 top-1/2 border-t-2 border-dashed border-gray-300" />
+            <div className={`absolute left-4 right-4 top-1/2 border-t-2 border-dashed ${divider}`} />
           </div>
 
           {/* BOTTOM — stub */}
@@ -127,15 +145,15 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
             <div className="grid grid-cols-2 gap-4 items-center">
               {/* Left: weekly km */}
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Km this week</p>
-                <p className="text-4xl font-extrabold text-gray-900 leading-none mt-1">
+                <p className={`text-[10px] uppercase tracking-widest font-semibold ${metaText}`}>Km this week</p>
+                <p className={`text-4xl font-extrabold leading-none mt-1 ${bigNum}`}>
                   {weekKm.toFixed(1)}
                 </p>
               </div>
 
               {/* Right: status */}
               <div className="text-right">
-                <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">Today</p>
+                <p className={`text-[10px] uppercase tracking-widest font-semibold ${metaText}`}>Today</p>
                 {reported ? (
                   <p className={`mt-1 inline-block text-xs font-bold px-2.5 py-1 rounded-full ${
                     status === 'completed' ? 'bg-green-100 text-green-700' :
@@ -145,57 +163,66 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
                     {status === 'completed' ? '✓ Completed' : status === 'partial' ? '½ Partial' : '✗ Missed'}
                   </p>
                 ) : (
-                  <p className="mt-1 text-xs italic text-gray-400">Not reported</p>
+                  <p className={`mt-1 text-xs ${noReport}`}>Not reported</p>
                 )}
               </div>
             </div>
 
             {/* Stat row */}
-            <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-dashed border-gray-300">
-              <Stat label="Runs this week"  value={runs.week} />
-              <Stat label="Runs this month" value={runs.month} />
-              <Stat label="All-time"        value={runs.total} />
+            <div className={`grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-dashed ${divider}`}>
+              <Stat label="Runs this week"  value={runs.week}  valClass={statVal} lblClass={statLbl} />
+              <Stat label="Runs this month" value={runs.month} valClass={statVal} lblClass={statLbl} />
+              <Stat label="All-time"        value={runs.total} valClass={statVal} lblClass={statLbl} />
             </div>
 
             {/* Last race */}
-            <div className="mt-5 pt-4 border-t border-dashed border-gray-300">
-              <p className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold mb-1">Last race</p>
+            <div className={`mt-5 pt-4 border-t border-dashed ${divider}`}>
+              <p className={`text-[10px] uppercase tracking-widest font-semibold mb-1 ${metaText}`}>Last race</p>
               {lastRace ? (
                 <div className="flex items-baseline justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-bold text-gray-900 truncate">🏁 {lastRace.name}</p>
-                    <p className="text-[11px] text-gray-500">
+                    <p className={`font-bold truncate ${raceName}`}>🏁 {lastRace.name}</p>
+                    <p className={`text-[11px] ${metaText}`}>
                       {format(new Date(lastRace.date + 'T00:00'), 'MMM d, yyyy')} · {lastRace.distance_label}
                     </p>
                   </div>
-                  <p className="text-lg font-extrabold text-indigo-700 font-mono whitespace-nowrap">
+                  <p className={`text-lg font-extrabold font-mono whitespace-nowrap ${raceTime}`}>
                     {lastRace.result_time_str}
                   </p>
                 </div>
               ) : (
-                <p className="text-xs italic text-gray-400">No race yet — your first will show up here.</p>
+                <p className={`text-xs italic ${emptyText}`}>No race yet — your first will show up here.</p>
               )}
             </div>
           </div>
         </div>
 
         {/* CTA — full width, outside the ticket but right under it */}
-        <button
-          onClick={onOpenWorkout}
-          className="mt-4 w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 rounded-xl shadow-md transition"
+        <NoiseBackground
+          containerClassName="mt-4 w-full rounded-xl p-[2px]"
+          gradientColors={
+            isRace
+              ? ['rgb(99,102,241)', 'rgb(168,85,247)', 'rgb(236,72,153)']
+              : ['rgb(37,99,235)', 'rgb(99,102,241)', 'rgb(139,92,246)']
+          }
         >
-          {ctaLabel}
-        </button>
+          <button
+            onClick={onOpenWorkout}
+            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
+          >
+            {ctaLabel}
+          </button>
+        </NoiseBackground>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, valClass, lblClass }) {
   return (
     <div className="text-center">
-      <p className="text-xl font-extrabold text-gray-900 leading-none">{value}</p>
-      <p className="text-[10px] uppercase tracking-wider text-gray-500 mt-1">{label}</p>
+      <p className={`text-xl font-extrabold leading-none ${valClass}`}>{value}</p>
+      <p className={`text-[10px] uppercase tracking-wider mt-1 ${lblClass}`}>{label}</p>
     </div>
   );
 }

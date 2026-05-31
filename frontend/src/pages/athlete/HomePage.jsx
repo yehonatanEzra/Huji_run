@@ -50,12 +50,24 @@ export default function HomePage() {
     navigate(hasWorkout ? '/calendar?open=today' : '/calendar');
   };
 
+  const bgUrl = '/bg.jpg';
+
   return (
-    <div className="pb-8">
+    <div className="relative pb-8">
+      {bgUrl && (
+        <>
+          <div
+            className="fixed inset-0 -z-10 bg-cover bg-center"
+            style={{ backgroundImage: `url(${bgUrl})` }}
+          />
+          {/* ↓ TUNE OVERLAY DARKNESS HERE — raise the number to darken, lower to show more photo */}
+          <div className="fixed inset-0 -z-10 bg-black/45" />
+        </>
+      )}
       <div className="mb-6 px-1">
-        <p className="text-sm font-semibold uppercase tracking-widest text-blue-700">Welcome back,</p>
+        <p className={`text-sm font-semibold uppercase tracking-widest ${bgUrl ? 'text-blue-200' : 'text-blue-600'}`}>Welcome back,</p>
         <div className="mt-1">
-          <AnimatedWelcome name={user?.full_name || 'Runner'} />
+          <AnimatedWelcome name={user?.full_name || 'Runner'} color={bgUrl ? '#ffffff' : undefined} />
         </div>
       </div>
 
@@ -70,6 +82,7 @@ export default function HomePage() {
         lastRace={summary.last_race}
         group={summary.group}
         onOpenWorkout={handleOpen}
+        hasBgImage={!!bgUrl}
       />
     </div>
   );

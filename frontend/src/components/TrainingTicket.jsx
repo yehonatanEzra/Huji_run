@@ -100,9 +100,9 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
           style={{ transformStyle: 'preserve-3d' }}
         >
           {/* TOP — body */}
-          <div className={`relative px-6 pt-5 pb-6 ${bodyBg}`}>
+          <div className={`relative px-4 pt-3 pb-4 ${bodyBg}`}>
             {/* Logo + type pill */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-lg">🎟️</span>
                 <span className={`text-xs font-extrabold tracking-tight ${logoText}`}>HUJI RUN</span>
@@ -116,11 +116,11 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
 
             {/* Title */}
             {workout && (
-              <h1 className={`text-3xl font-black leading-tight uppercase ${titleGrad} bg-clip-text text-transparent`}>
+              <h1 className={`text-2xl font-black leading-tight uppercase ${titleGrad} bg-clip-text text-transparent`}>
                 {titleDisplay}
               </h1>
             )}
-            <p className={`text-xs mt-1 mb-4 ${metaText}`}>
+            <p className={`text-xs mt-0.5 mb-2 ${metaText}`}>
               {dateStr}
               {group && <> · {group.name}</>}
             </p>
@@ -141,12 +141,12 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
           </div>
 
           {/* BOTTOM — stub */}
-          <div className={`relative px-6 py-5 ${stubBg}`}>
+          <div className={`relative px-4 py-3 ${stubBg}`}>
             <div className="grid grid-cols-2 gap-4 items-center">
               {/* Left: weekly km */}
               <div>
                 <p className={`text-[10px] uppercase tracking-widest font-semibold ${metaText}`}>Km this week</p>
-                <p className={`text-4xl font-extrabold leading-none mt-1 ${bigNum}`}>
+                <p className={`text-3xl font-extrabold leading-none mt-0.5 ${bigNum}`}>
                   {weekKm.toFixed(1)}
                 </p>
               </div>
@@ -169,14 +169,14 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
             </div>
 
             {/* Stat row */}
-            <div className={`grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-dashed ${divider}`}>
+            <div className={`grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-dashed ${divider}`}>
               <Stat label="Runs this week"  value={runs.week}  valClass={statVal} lblClass={statLbl} />
               <Stat label="Runs this month" value={runs.month} valClass={statVal} lblClass={statLbl} />
               <Stat label="All-time"        value={runs.total} valClass={statVal} lblClass={statLbl} />
             </div>
 
             {/* Last race */}
-            <div className={`mt-5 pt-4 border-t border-dashed ${divider}`}>
+            <div className={`mt-3 pt-3 border-t border-dashed ${divider}`}>
               <p className={`text-[10px] uppercase tracking-widest font-semibold mb-1 ${metaText}`}>Last race</p>
               {lastRace ? (
                 <div className="flex items-baseline justify-between gap-3">
@@ -199,7 +199,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
 
         {/* CTA — full width, outside the ticket but right under it */}
         <NoiseBackground
-          containerClassName="mt-4 w-full rounded-xl p-[2px]"
+          containerClassName="mt-2 w-full rounded-xl p-[2px]"
           gradientColors={
             isRace
               ? ['rgb(99,102,241)', 'rgb(168,85,247)', 'rgb(236,72,153)']
@@ -208,7 +208,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
         >
           <button
             onClick={onOpenWorkout}
-            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
+            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-2 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
           >
             {ctaLabel}
           </button>
@@ -221,8 +221,8 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
 function Stat({ label, value, valClass, lblClass }) {
   return (
     <div className="text-center">
-      <p className={`text-xl font-extrabold leading-none ${valClass}`}>{value}</p>
-      <p className={`text-[10px] uppercase tracking-wider mt-1 ${lblClass}`}>{label}</p>
+      <p className={`text-base font-extrabold leading-none ${valClass}`}>{value}</p>
+      <p className={`text-[9px] uppercase tracking-wider mt-0.5 ${lblClass}`}>{label}</p>
     </div>
   );
 }

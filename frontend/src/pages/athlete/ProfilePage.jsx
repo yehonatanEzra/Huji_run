@@ -27,12 +27,11 @@ export default function ProfilePage() {
   const fileRef = useRef();
   const isAthlete = user?.role === 'athlete';
 
-  const fetchProfile = () => {
+  const fetchProfile = () =>
     getMyProfile()
       .then(({ data }) => setProfile(data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  };
 
   useEffect(() => { fetchProfile(); }, []);
 
@@ -74,8 +73,8 @@ export default function ProfilePage() {
   const handleSaveBio = async () => {
     setSavingBio(true);
     try {
-      const { data } = await updateMyProfile({ bio: bioInput });
-      setProfile((p) => p ? { ...p, bio: data.bio } : p);
+      await updateMyProfile({ bio: bioInput });
+      await fetchProfile();
       setEditingBio(false);
     } catch (err) {
       alert(err?.response?.data?.detail || 'Could not save bio');

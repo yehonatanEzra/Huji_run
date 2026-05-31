@@ -93,20 +93,25 @@ export default function FindCoachPage() {
           {coaches.map((c) => {
             const isPendingThis = pending && pending.coach_id === c.id;
             return (
-              <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{c.full_name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {c.athlete_count} athlete{c.athlete_count === 1 ? '' : 's'} · @{c.username}
-                  </p>
+              <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-gray-900 truncate">{c.full_name}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {c.athlete_count} athlete{c.athlete_count === 1 ? '' : 's'} · @{c.username}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRequest(c.id)}
+                    disabled={acting || !!pending}
+                    className="shrink-0 text-sm px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-40"
+                  >
+                    {isPendingThis ? 'Pending…' : 'Request to join'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleRequest(c.id)}
-                  disabled={acting || !!pending}
-                  className="shrink-0 ml-3 text-sm px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-40"
-                >
-                  {isPendingThis ? 'Pending…' : 'Request to join'}
-                </button>
+                {c.bio && (
+                  <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{c.bio}</p>
+                )}
               </div>
             );
           })}

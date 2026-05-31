@@ -20,6 +20,13 @@ class Race(Base):
     # Hidden races back manual-PB entries — kept so PBs/HoF link to a Result+Heat,
     # but excluded from the public Races list.
     is_manual: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    # Moderation state: pending | approved | rejected. Default "approved" so the
+    # entire backfill + every admin-created race lives normally; coach-proposed
+    # races start "pending" until an admin approves.
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="approved", server_default="approved", index=True)
+    decline_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
 
     heats = relationship("Heat", back_populates="race", cascade="all, delete-orphan")
     hall_of_fame_entries = relationship("HallOfFame", back_populates="race")
@@ -51,9 +58,17 @@ class Result(Base):
     gender: Mapped[str] = mapped_column(Enum("M", "F", name="result_gender_enum"), nullable=False)
     time_seconds: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    # Moderation state — same lifecycle as Race.
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="approved", server_default="approved", index=True)
+    created_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    decline_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
 
     heat = relationship("Heat", back_populates="results")
-    user = relationship("User", back_populates="results")
+    # Result has 3 FKs to users (user_id = the runner, created_by = proposer,
+    # decided_by = admin who approved). Pin the back-pop to user_id.
+    user = relationship("User", back_populates="results", foreign_keys=[user_id])
 
 
 class RaceRegistration(Base):

@@ -680,27 +680,31 @@ def add_athlete_pb(
         heat = db.get(Heat, body.heat_id)
         if not heat or heat.race_id != body.race_id:
             raise HTTPException(status_code=404, detail="Heat not found")
+        # Manual PB linked to a real race — auto-approved (admin-visible
+        # context: it's a record for this coach's own athlete that flows into HoF).
         result = Result(
             heat_id=body.heat_id,
             athlete_name=athlete.full_name,
             user_id=athlete.id,
             gender=athlete.gender or "M",
             time_seconds=body.time_seconds,
+            status="approved",
+            created_by=coach.id,
         )
         db.add(result)
         db.commit()
         refresh_hall_of_fame(db, heat.distance_m, result.gender)
         return {"ok": True, "linked_to_race": True}
 
-    # Manual PBs: race exists only to anchor the Result+Heat for HoF.
-    # If the coach didn't provide a competition name, leave the race name empty
-    # so the profile UI shows just "distance · time · date" with no source label.
+    # Manual PBs (hidden race): also auto-approved, since they don't pollute
+    # the public race list and they're already scoped to this coach's roster.
     race_name = (body.competition_name or "").strip()
     race = Race(
         name=race_name,
         race_date=date.today(),
         created_by=coach.id,
         is_manual=True,
+        status="approved",
     )
     db.add(race)
     db.flush()
@@ -717,6 +721,8 @@ def add_athlete_pb(
         user_id=athlete.id,
         gender=athlete.gender or "M",
         time_seconds=body.time_seconds,
+        status="approved",
+        created_by=coach.id,
     )
     db.add(result)
     db.commit()

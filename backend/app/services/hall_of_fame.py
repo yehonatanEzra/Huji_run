@@ -5,11 +5,18 @@ from ..models.hall_of_fame import HallOfFame
 
 def refresh_hall_of_fame(db: Session, distance_m: int, gender: str) -> None:
     """Recompute and cache the top-3 for a given distance+gender (one entry per athlete)."""
+    # Only approved races + approved results feed the Hall of Fame so that
+    # coach-pending submissions can never bump records before admin sign-off.
     all_results = (
         db.query(Result, Heat, Race)
         .join(Heat, Result.heat_id == Heat.id)
         .join(Race, Heat.race_id == Race.id)
-        .filter(Heat.distance_m == distance_m, Result.gender == gender)
+        .filter(
+            Heat.distance_m == distance_m,
+            Result.gender == gender,
+            Result.status == "approved",
+            Race.status == "approved",
+        )
         .order_by(Result.time_seconds.asc())
         .all()
     )

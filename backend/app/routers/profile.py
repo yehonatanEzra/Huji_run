@@ -92,6 +92,7 @@ def _build_profile(user: User, db: Session) -> ProfileResponse:
         full_name=user.full_name,
         gender=user.gender,
         photo_url=photo_url,
+        bio=user.bio,
         personal_bests=sorted(personal_bests, key=lambda x: x.distance_m),
         race_history=race_history,
     )
@@ -111,10 +112,23 @@ def update_my_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    changed = False
     if "full_name" in body and body["full_name"].strip():
         current_user.full_name = body["full_name"].strip()
+        changed = True
+    if "bio" in body:
+        raw = body["bio"]
+        if raw is None:
+            current_user.bio = None
+        else:
+            text_val = str(raw).strip()
+            if len(text_val) > 500:
+                raise HTTPException(status_code=400, detail="Bio must be 500 characters or fewer")
+            current_user.bio = text_val or None
+        changed = True
+    if changed:
         db.commit()
-    return {"full_name": current_user.full_name}
+    return {"full_name": current_user.full_name, "bio": current_user.bio}
 
 
 @router.post("/photo")

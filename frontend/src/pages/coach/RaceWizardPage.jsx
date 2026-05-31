@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createRace, addHeat, addResult } from '../../api/races';
 import { searchAthletes } from '../../api/coach';
+import { useAuth } from '../../contexts/AuthContext';
 
 const DISTANCE_OPTIONS = [
   { label: '1,500m', value: 1500 },
@@ -24,6 +25,8 @@ export default function RaceWizardPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isCoachOnly = user?.role === 'coach';
 
   const handleStep1 = async () => {
     if (!raceName.trim() || !raceDate) return;
@@ -57,7 +60,15 @@ export default function RaceWizardPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Create Race</h2>
+      <h2 className="text-xl font-bold mb-2">Create Race</h2>
+      {isCoachOnly && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+          <p className="text-xs text-amber-900">
+            <span className="font-semibold">Pending admin approval.</span>{' '}
+            This race will be visible only to you and an admin until an admin approves it.
+          </p>
+        </div>
+      )}
       <div className="flex gap-2 mb-6">
         {[1, 2, 3].map((s) => (
           <div key={s} className={`flex-1 h-1.5 rounded-full ${step >= s ? 'bg-blue-600' : 'bg-gray-200'}`} />

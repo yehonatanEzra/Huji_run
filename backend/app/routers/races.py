@@ -17,8 +17,51 @@ from ..services.hall_of_fame import refresh_hall_of_fame
 router = APIRouter(prefix="/races", tags=["races"])
 
 
+# ── Moderation helpers ────────────────────────────────────────────────────────
+
+
+def _can_see_race(user: User, race: Race) -> bool:
+    """A pending race is visible only to its author + admins. Approved + manual
+    races are visible to everyone. Rejected races are visible only to the
+    author + admins (so the coach can see admin's note on their drafts)."""
+    if race.status == "approved":
+        return True
+    if user.role == "admin":
+        return True
+    return race.created_by == user.id
+
+
+def _can_modify_race(user: User, race: Race) -> bool:
+    if user.role == "admin":
+        return True
+    return race.created_by == user.id and race.status in ("pending", "rejected")
+
+
+def _can_see_result(user: User, race: Race, result: Result) -> bool:
+    """Approved results visible to all (once the race itself is visible).
+    Pending/rejected results visible only to the proposing coach + admins."""
+    if not _can_see_race(user, race):
+        return False
+    if result.status == "approved":
+        return True
+    if user.role == "admin":
+        return True
+    return result.created_by == user.id
+
+
+def _can_modify_result(user: User, result: Result) -> bool:
+    if user.role == "admin":
+        return True
+    return result.created_by == user.id and result.status in ("pending", "rejected")
+
+
 def _race_status(db: Session, race_id: int) -> str:
-    has_result = db.query(Result).join(Heat, Result.heat_id == Heat.id).filter(Heat.race_id == race_id).first()
+    has_result = (
+        db.query(Result)
+        .join(Heat, Result.heat_id == Heat.id)
+        .filter(Heat.race_id == race_id, Result.status == "approved")
+        .first()
+    )
     return "completed" if has_result else "upcoming"
 
 
@@ -41,11 +84,28 @@ def list_races(
     search: Optional[str] = Query(None),
     year: Optional[int] = Query(None),
     mine: bool = Query(False),
+    drafts: bool = Query(False),
     status_filter: Optional[str] = Query(None, alias="status"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     q = db.query(Race).filter(Race.is_manual == False)  # noqa: E712
+    # Moderation visibility: approved races are public; pending/rejected races
+    # are visible only to their author + admins.
+    if drafts:
+        # Show only "my pending + rejected" races (used by the coach drafts tab).
+        if current_user.role == "admin":
+            q = q.filter(Race.status.in_(("pending", "rejected")))
+        else:
+            q = q.filter(Race.status.in_(("pending", "rejected")), Race.created_by == current_user.id)
+    elif current_user.role == "admin":
+        pass  # admins can see all races by default
+    else:
+        # Approved races for everyone, plus the caller's own pending/rejected.
+        q = q.filter(
+            (Race.status == "approved")
+            | (Race.created_by == current_user.id)
+        )
     if mine:
         result_race_ids = (
             db.query(Heat.race_id)
@@ -65,16 +125,21 @@ def list_races(
     if year:
         q = q.filter(extract("year", Race.race_date) == year)
     races = q.order_by(Race.race_date.desc()).all()
-    out = [_attach_race_meta(db, r) for r in races]
+    out = []
+    for r in races:
+        meta = _attach_race_meta(db, r)
+        meta["moderation_status"] = r.status
+        meta["decline_note"] = r.decline_note
+        out.append(meta)
     if status_filter in ("upcoming", "completed"):
         out = [r for r in out if r["status"] == status_filter]
     return out
 
 
 @router.get("/{race_id}", response_model=RaceDetail)
-def get_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_race(race_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     race = db.get(Race, race_id)
-    if not race:
+    if not race or not _can_see_race(current_user, race):
         raise HTTPException(status_code=404, detail="Race not found")
     return {
         "id": race.id,
@@ -82,6 +147,9 @@ def get_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(get_
         "race_date": race.race_date,
         "heats": [{"id": h.id, "race_id": h.race_id, "distance_m": h.distance_m, "label": h.label} for h in race.heats],
         "status": _race_status(db, race.id),
+        "moderation_status": race.status,
+        "decline_note": race.decline_note,
+        "created_by": race.created_by,
     }
 
 
@@ -226,14 +294,23 @@ def get_race_results(
     race_id: int,
     distance_m: int = Query(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    race = db.get(Race, race_id)
+    if not race or not _can_see_race(current_user, race):
+        raise HTTPException(status_code=404, detail="Race not found")
     heats = db.query(Heat).filter(Heat.race_id == race_id, Heat.distance_m == distance_m).all()
     output = []
     for heat in heats:
-        sorted_results = sorted(heat.results, key=lambda r: r.time_seconds)
+        # Drop results the caller isn't allowed to see (e.g. another coach's pending).
+        visible_results = [r for r in heat.results if _can_see_result(current_user, race, r)]
+        sorted_results = sorted(visible_results, key=lambda r: r.time_seconds)
         result_outs = []
-        for placement, r in enumerate(sorted_results, start=1):
+        # Placement is computed on APPROVED results only (so a pending result
+        # doesn't bump someone's official placement).
+        approved_sorted = sorted([r for r in visible_results if r.status == "approved"], key=lambda r: r.time_seconds)
+        approved_placement = {r.id: i + 1 for i, r in enumerate(approved_sorted)}
+        for r in sorted_results:
             result_outs.append(ResultOut(
                 id=r.id,
                 heat_id=r.heat_id,
@@ -242,7 +319,10 @@ def get_race_results(
                 time_seconds=r.time_seconds,
                 time_display=seconds_to_display(r.time_seconds),
                 pace_display=format_pace(r.time_seconds, distance_m),
-                placement=placement,
+                placement=approved_placement.get(r.id),
+                moderation_status=r.status,
+                decline_note=r.decline_note,
+                created_by=r.created_by,
             ))
         output.append(HeatWithResults(heat=HeatOut.model_validate(heat), results=result_outs))
     return output
@@ -253,10 +333,15 @@ def get_race_leaderboard(
     race_id: int,
     distance_m: int = Query(...),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    race = db.get(Race, race_id)
+    if not race or not _can_see_race(current_user, race):
+        raise HTTPException(status_code=404, detail="Race not found")
     heats = db.query(Heat).filter(Heat.race_id == race_id, Heat.distance_m == distance_m).all()
-    all_results = [r for heat in heats for r in heat.results]
+    # Leaderboard reflects approved results only — pending entries shouldn't
+    # disturb official rankings.
+    all_results = [r for heat in heats for r in heat.results if r.status == "approved"]
 
     def build_board(gender: str):
         filtered = sorted(
@@ -277,15 +362,22 @@ def get_race_leaderboard(
     return {"men": build_board("M"), "women": build_board("F")}
 
 
-# ── Coach write endpoints ──────────────────────────────────────────────────────
+# ── Coach + Admin write endpoints (with moderation) ──────────────────────────
 
 @router.post("", response_model=RaceOut, status_code=status.HTTP_201_CREATED)
 def create_race(
     body: RaceCreate,
     db: Session = Depends(get_db),
-    coach: User = Depends(require_admin),
+    coach: User = Depends(require_coach),
 ):
-    race = Race(name=body.name.strip(), race_date=body.race_date, created_by=coach.id)
+    """Admin creates approved races directly; coaches create pending races
+    that need admin approval before going public."""
+    race = Race(
+        name=body.name.strip(),
+        race_date=body.race_date,
+        created_by=coach.id,
+        status="approved" if coach.role == "admin" else "pending",
+    )
     db.add(race)
     db.commit()
     db.refresh(race)
@@ -297,11 +389,15 @@ def add_heat(
     race_id: int,
     body: HeatCreate,
     db: Session = Depends(get_db),
-    coach: User = Depends(require_admin),
+    coach: User = Depends(require_coach),
 ):
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
+    # Coaches can add heats only to their own pending/rejected races. Admin
+    # can add heats to any race.
+    if not _can_modify_race(coach, race):
+        raise HTTPException(status_code=403, detail="You can't add heats to this race")
     heat = Heat(race_id=race_id, distance_m=body.distance_m, label=body.label.strip())
     db.add(heat)
     db.commit()
@@ -315,11 +411,14 @@ def add_result(
     heat_id: int,
     body: ResultCreate,
     db: Session = Depends(get_db),
-    coach: User = Depends(require_admin),
+    coach: User = Depends(require_coach),
 ):
+    race = db.get(Race, race_id)
     heat = db.get(Heat, heat_id)
-    if not heat or heat.race_id != race_id:
+    if not race or not heat or heat.race_id != race_id:
         raise HTTPException(status_code=404, detail="Heat not found")
+    if not _can_see_race(coach, race):
+        raise HTTPException(status_code=404, detail="Race not found")
 
     try:
         time_sec = parse_time(body.time_raw)
@@ -338,24 +437,28 @@ def add_result(
             detail="Gender must be provided when athlete name doesn't match a registered user"
         )
 
+    new_status = "approved" if coach.role == "admin" else "pending"
     result = Result(
         heat_id=heat_id,
         athlete_name=body.athlete_name.strip(),
         user_id=matched_user.id if matched_user else None,
         gender=gender,
         time_seconds=time_sec,
+        status=new_status,
+        created_by=coach.id,
     )
     db.add(result)
     db.flush()
 
-    # Trigger Hall of Fame refresh
-    refresh_hall_of_fame(db, heat.distance_m, gender)
+    # Refresh HoF only when the result is actually approved.
+    if new_status == "approved":
+        refresh_hall_of_fame(db, heat.distance_m, gender)
     db.commit()
     db.refresh(result)
 
-    # Compute placement within this heat
-    siblings = sorted(heat.results, key=lambda r: r.time_seconds)
-    placement = next(i + 1 for i, r in enumerate(siblings) if r.id == result.id)
+    # Compute placement within this heat (approved only).
+    approved = sorted([r for r in heat.results if r.status == "approved"], key=lambda r: r.time_seconds)
+    placement = next((i + 1 for i, r in enumerate(approved) if r.id == result.id), None)
 
     return ResultOut(
         id=result.id,
@@ -366,6 +469,9 @@ def add_result(
         time_display=seconds_to_display(result.time_seconds),
         pace_display=format_pace(result.time_seconds, heat.distance_m),
         placement=placement,
+        moderation_status=result.status,
+        decline_note=result.decline_note,
+        created_by=result.created_by,
     )
 
 
@@ -374,23 +480,33 @@ def update_race(
     race_id: int,
     body: RaceCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    coach: User = Depends(require_coach),
 ):
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
+    if not _can_modify_race(coach, race):
+        raise HTTPException(status_code=403, detail="Approved races can only be edited by admin")
     race.name = body.name.strip()
     race.race_date = body.race_date
+    # An edit to a rejected race puts it back into the review queue.
+    if race.status == "rejected" and coach.role != "admin":
+        race.status = "pending"
+        race.decline_note = None
+        race.decided_at = None
+        race.decided_by = None
     db.commit()
     db.refresh(race)
     return race
 
 
 @router.delete("/{race_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_race(race_id: int, db: Session = Depends(get_db), _: User = Depends(require_admin)):
+def delete_race(race_id: int, db: Session = Depends(get_db), coach: User = Depends(require_coach)):
     race = db.get(Race, race_id)
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
+    if not _can_modify_race(coach, race):
+        raise HTTPException(status_code=403, detail="Approved races can only be deleted by admin")
     db.delete(race)
     db.commit()
 
@@ -400,11 +516,14 @@ def delete_heat(
     race_id: int,
     heat_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    coach: User = Depends(require_coach),
 ):
     heat = db.get(Heat, heat_id)
     if not heat or heat.race_id != race_id:
         raise HTTPException(status_code=404, detail="Heat not found")
+    race = db.get(Race, race_id)
+    if not _can_modify_race(coach, race):
+        raise HTTPException(status_code=403, detail="Can't modify heats on an approved race")
     db.delete(heat)
     db.commit()
 
@@ -416,7 +535,7 @@ def update_result(
     result_id: int,
     body: ResultCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    coach: User = Depends(require_coach),
 ):
     heat = db.get(Heat, heat_id)
     if not heat or heat.race_id != race_id:
@@ -424,6 +543,8 @@ def update_result(
     result = db.get(Result, result_id)
     if not result or result.heat_id != heat_id:
         raise HTTPException(status_code=404, detail="Result not found")
+    if not _can_modify_result(coach, result):
+        raise HTTPException(status_code=403, detail="You can only edit your own pending results")
 
     try:
         time_sec = parse_time(body.time_raw)
@@ -435,20 +556,29 @@ def update_result(
     ).first()
 
     old_gender = result.gender
+    was_approved = result.status == "approved"
     result.athlete_name = body.athlete_name.strip()
     result.time_seconds = time_sec
     result.user_id = matched_user.id if matched_user else None
     result.gender = matched_user.gender if matched_user else (body.gender or old_gender)
+    # Coach edit on a rejected result puts it back into pending review.
+    if result.status == "rejected" and coach.role != "admin":
+        result.status = "pending"
+        result.decline_note = None
+        result.decided_at = None
+        result.decided_by = None
     db.flush()
 
-    refresh_hall_of_fame(db, heat.distance_m, result.gender)
-    if old_gender != result.gender:
-        refresh_hall_of_fame(db, heat.distance_m, old_gender)
+    # Only refresh HoF if the result was/is approved (admin edits live data).
+    if was_approved or result.status == "approved":
+        refresh_hall_of_fame(db, heat.distance_m, result.gender)
+        if old_gender != result.gender:
+            refresh_hall_of_fame(db, heat.distance_m, old_gender)
     db.commit()
     db.refresh(result)
 
-    siblings = sorted(heat.results, key=lambda r: r.time_seconds)
-    placement = next(i + 1 for i, r in enumerate(siblings) if r.id == result.id)
+    approved = sorted([r for r in heat.results if r.status == "approved"], key=lambda r: r.time_seconds)
+    placement = next((i + 1 for i, r in enumerate(approved) if r.id == result.id), None)
 
     return ResultOut(
         id=result.id,
@@ -459,6 +589,9 @@ def update_result(
         time_display=seconds_to_display(result.time_seconds),
         pace_display=format_pace(result.time_seconds, heat.distance_m),
         placement=placement,
+        moderation_status=result.status,
+        decline_note=result.decline_note,
+        created_by=result.created_by,
     )
 
 
@@ -468,7 +601,7 @@ def delete_result(
     heat_id: int,
     result_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    coach: User = Depends(require_coach),
 ):
     heat = db.get(Heat, heat_id)
     if not heat or heat.race_id != race_id:
@@ -476,9 +609,12 @@ def delete_result(
     result = db.get(Result, result_id)
     if not result or result.heat_id != heat_id:
         raise HTTPException(status_code=404, detail="Result not found")
+    if not _can_modify_result(coach, result):
+        raise HTTPException(status_code=403, detail="You can only delete your own pending results")
     gender = result.gender
     distance_m = heat.distance_m
     race = db.get(Race, race_id)
+    was_approved = result.status == "approved"
     db.delete(result)
     db.flush()
     # If this was the last result on a manual-PB race, clean up the orphan race+heat
@@ -486,5 +622,6 @@ def delete_result(
         remaining = db.query(Result).join(Heat, Result.heat_id == Heat.id).filter(Heat.race_id == race_id).count()
         if remaining == 0:
             db.delete(race)  # cascades to heats
-    refresh_hall_of_fame(db, distance_m, gender)
+    if was_approved:
+        refresh_hall_of_fame(db, distance_m, gender)
     db.commit()

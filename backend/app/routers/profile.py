@@ -128,6 +128,7 @@ def update_my_profile(
         changed = True
     if changed:
         db.commit()
+        db.refresh(current_user)
     return {"full_name": current_user.full_name, "bio": current_user.bio}
 
 

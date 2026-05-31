@@ -6,7 +6,7 @@ export default function AnimatedWelcome({ name, color }) {
   const isRtl = /[֐-׿؀-ۿ]/.test(text);
 
   return (
-    <div className="welcome-loader-wrapper text-3xl sm:text-4xl" style={color ? { color } : undefined}>
+    <div className="welcome-loader-wrapper text-2xl sm:text-3xl" style={color ? { color } : undefined}>
       <span className="sr-only">{text}</span>
       <span                
         aria-hidden="true"                                                                                                                                                                                                            

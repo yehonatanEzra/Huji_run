@@ -64,7 +64,7 @@ export default function HomePage() {
           <div className="fixed inset-0 -z-10 bg-black/45" />
         </>
       )}
-      <div className="mb-6 px-1">
+      <div className="mb-3 px-1">
         <p className={`text-sm font-semibold uppercase tracking-widest ${bgUrl ? 'text-blue-200' : 'text-blue-600'}`}>Welcome back,</p>
         <div className="mt-1">
           <AnimatedWelcome name={user?.full_name || 'Runner'} color={bgUrl ? '#ffffff' : undefined} />

@@ -29,7 +29,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
   const typeMeta = TYPE[wt] || TYPE.simple;
 
   const dateStr = format(new Date(), 'EEEE, MMM d');
-  const title = workout?.title || typeMeta.label;
+  const title = workout ? (workout.title || typeMeta.label) : '';
   const titleDisplay = isRace ? `🏁 ${title}` : title;
 
   const log = today?.workout_log;
@@ -89,15 +89,19 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
                 <span className="text-lg">🎟️</span>
                 <span className="text-xs font-extrabold tracking-tight text-blue-700">HUJI RUN</span>
               </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${typeMeta.color}`}>
-                {typeMeta.label}
-              </span>
+              {workout && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${typeMeta.color}`}>
+                  {typeMeta.label}
+                </span>
+              )}
             </div>
 
             {/* Title */}
-            <h1 className={`text-3xl font-black leading-tight uppercase ${titleGradient} bg-clip-text text-transparent`}>
-              {titleDisplay}
-            </h1>
+            {workout && (
+              <h1 className={`text-3xl font-black leading-tight uppercase ${titleGradient} bg-clip-text text-transparent`}>
+                {titleDisplay}
+              </h1>
+            )}
             <p className="text-xs text-gray-500 mt-1 mb-4">
               {dateStr}
               {group && <> · {group.name}</>}

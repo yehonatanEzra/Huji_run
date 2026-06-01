@@ -56,13 +56,15 @@ export default function WorkoutCommentThread({ workoutLogId, onCountChange }) {
   if (!workoutLogId) return null;
 
   return (
-    <div className="border-t border-white/15 pt-3">
-      <p className="text-sm font-semibold text-white mb-2 flex items-center gap-2">
-        <span>💬 Comments</span>
+    <div className="border-t border-white/15 pt-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-base font-bold text-white">Comments</span>
         {comments.length > 0 && (
-          <span className="text-xs text-white/45">({comments.length})</span>
+          <span className="text-xs text-white/55 bg-white/10 border border-white/20 rounded-full px-2 py-0.5">
+            {comments.length}
+          </span>
         )}
-      </p>
+      </div>
 
       {loading ? (
         <p className="text-xs text-white/40 italic">Loading…</p>
@@ -106,21 +108,23 @@ export default function WorkoutCommentThread({ workoutLogId, onCountChange }) {
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="bg-white/10 backdrop-blur-sm border border-white/25 rounded-xl p-2 focus-within:border-blue-400/60 focus-within:ring-2 focus-within:ring-blue-400/30 transition">
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Write a comment…"
+          placeholder="Write a comment to the athlete…"
           rows={2}
-          className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+          className="w-full bg-transparent text-sm text-white placeholder-white/50 focus:outline-none resize-none"
         />
-        <button
-          onClick={handlePost}
-          disabled={posting || !draft.trim()}
-          className="bg-blue-500 hover:bg-blue-400 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50 transition"
-        >
-          {posting ? '…' : 'Post'}
-        </button>
+        <div className="flex justify-end mt-1">
+          <button
+            onClick={handlePost}
+            disabled={posting || !draft.trim()}
+            className="bg-blue-500 hover:bg-blue-400 text-white rounded-lg px-4 py-1.5 text-sm font-semibold disabled:opacity-50 transition"
+          >
+            {posting ? 'Posting…' : 'Post comment'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -182,6 +182,7 @@ def submit_log(
         log.completed = body.status == "completed"
         log.distance_km = body.distance_km
         log.notes = body.notes
+        log.manual_override = body.manual_override
     else:
         log = WorkoutLog(
             athlete_id=current_user.id,
@@ -190,6 +191,7 @@ def submit_log(
             completed=body.status == "completed",
             distance_km=body.distance_km,
             notes=body.notes,
+            manual_override=body.manual_override,
         )
         db.add(log)
     db.commit()

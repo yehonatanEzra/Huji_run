@@ -75,6 +75,7 @@ class WorkoutLog(Base):
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="missed")
     distance_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    manual_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     logged_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     athlete = relationship("User", back_populates="workout_logs")

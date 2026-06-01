@@ -54,19 +54,20 @@ export default function CoachRequestsPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Join requests</h2>
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <h2 className="text-xl font-bold mb-4 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Join requests</h2>
       {requests.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-500">
+        <div className="text-center py-12 text-sm text-white/60">
           No pending requests.
         </div>
       ) : (
         <div className="space-y-2">
           {requests.map((r) => (
-            <div key={r.id} className="bg-white rounded-xl border border-gray-200 p-4">
+            <div key={r.id} className="bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{r.athlete_name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="font-semibold text-white truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{r.athlete_name}</p>
+                  <p className="text-xs text-white/65 mt-0.5">
                     Sent {format(new Date(r.created_at), 'MMM d, HH:mm')}
                   </p>
                 </div>
@@ -74,14 +75,14 @@ export default function CoachRequestsPage() {
                   <button
                     onClick={() => setDeclineTarget(r)}
                     disabled={acting}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 disabled:opacity-50 transition"
                   >
                     Decline
                   </button>
                   <button
                     onClick={() => handleAccept(r.id)}
                     disabled={acting}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-50 transition"
                   >
                     Accept
                   </button>

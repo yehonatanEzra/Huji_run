@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -52,7 +52,7 @@ class UpdateAthleteName(BaseModel):
 
 
 class TrainingGroupCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=20)
 
 
 class TrainingGroupOut(BaseModel):

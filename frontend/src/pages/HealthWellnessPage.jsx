@@ -311,7 +311,7 @@ function ProfessionalCard({ professional, canEdit, onEdit, onDelete, onReviews, 
             </a>
             {professional.notes && (
               <p className="text-sm text-white/65 flex items-start gap-2">
-                <span className="mt-0.5">📝</span><span>{professional.notes}</span>
+                <span className="mt-0.5"></span><span>{professional.notes}</span>
               </p>
             )}
           </div>

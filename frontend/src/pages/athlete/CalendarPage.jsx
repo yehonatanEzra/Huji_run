@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
+import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, subYears, addYears, isSameMonth } from 'date-fns';
 import { getWeek, submitLog } from '../../api/calendar';
 import { getMyStravaActivities } from '../../api/strava';
 import { useAuth } from '../../contexts/AuthContext';
+import StravaActivityDetail from '../../components/StravaActivityDetail';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
@@ -20,13 +21,70 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
-  const [expandedZoom, setExpandedZoom] = useState(1);
+  const [expandedZoom, setExpandedZoom] = useState(0.75);
+  const expandedScrollRef = useRef(null);
+  const pinchRef = useRef({ startDist: 0, startZoom: 1 });
+
+  // Pinch-to-zoom on touch + Ctrl/Cmd-scroll on desktop, scoped to the
+  // expanded month view's scroll container. The +/− buttons keep working too.
+  useEffect(() => {
+    if (!monthExpanded) return;
+    const el = expandedScrollRef.current;
+    if (!el) return;
+
+    const clamp = (v) => +Math.max(0.3, Math.min(1.8, v)).toFixed(2);
+
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.05 : 0.05;
+      setExpandedZoom((z) => clamp(z + delta));
+    };
+
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 2) return;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current.startDist = Math.hypot(dx, dy);
+      // Snapshot the zoom at the moment the pinch began
+      setExpandedZoom((z) => {
+        pinchRef.current.startZoom = z;
+        return z;
+      });
+    };
+
+    const onTouchMove = (e) => {
+      if (e.touches.length !== 2 || !pinchRef.current.startDist) return;
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const ratio = newDist / pinchRef.current.startDist;
+      setExpandedZoom(clamp(pinchRef.current.startZoom * ratio));
+    };
+
+    const onTouchEnd = () => {
+      pinchRef.current.startDist = 0;
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [monthExpanded]);
   const [logForm, setLogForm] = useState({ status: 'missed', notes: '' });
   const [saving, setSaving] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [autoOpenedToday, setAutoOpenedToday] = useState(false);
   const [stravaActivities, setStravaActivities] = useState(null);
   const [stravaLoading, setStravaLoading] = useState(false);
+  const [selectedStravaActivity, setSelectedStravaActivity] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -57,6 +115,13 @@ export default function CalendarPage() {
   };
 
   useEffect(() => { fetchData(); }, [currentDate, view]);
+
+  // Refetch after a global Strava sync
+  useEffect(() => {
+    const onSync = () => fetchData();
+    window.addEventListener('strava-synced', onSync);
+    return () => window.removeEventListener('strava-synced', onSync);
+  }, [currentDate, view]);
 
   // Auto-open today's day modal when arriving with ?open=today (from the home page CTA).
   useEffect(() => {
@@ -90,13 +155,19 @@ export default function CalendarPage() {
       status: day.workout_log?.status || 'missed',
       distance_km: day.workout_log?.distance_km || '',
       notes: day.workout_log?.notes || '',
+      manual_override: day.workout_log?.manual_override || false,
     });
   };
 
   const handleSaveLog = async () => {
     setSaving(true);
     try {
-      const payload = { date: selectedDay.date, status: logForm.status, notes: logForm.notes };
+      const payload = {
+        date: selectedDay.date,
+        status: logForm.status,
+        notes: logForm.notes,
+        manual_override: !!logForm.manual_override,
+      };
       if (logForm.distance_km !== '' && logForm.distance_km != null) {
         payload.distance_km = parseFloat(logForm.distance_km);
       }
@@ -157,6 +228,14 @@ export default function CalendarPage() {
             })()}
             {hasLog?.kudos_count > 0 && (
               <span className="text-xs text-pink-600">👏 {hasLog.kudos_count}</span>
+            )}
+            {hasLog?.manual_override && (
+              <span
+                className="text-[9px] font-bold uppercase tracking-wider bg-emerald-500 text-white px-1.5 py-0.5 rounded"
+                title="Manual — not overwritten by Strava"
+              >
+                Manual
+              </span>
             )}
             {hasLog && (
               <span className={`text-xs px-2 py-0.5 rounded-full ${
@@ -316,9 +395,17 @@ export default function CalendarPage() {
         >
           <span className="text-base leading-none">‹</span> Prev
         </button>
-        <h2 className="text-sm font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)] tracking-wide">
-          {headerLabel}
-        </h2>
+        {view === 'monthly' ? (
+          <YearMonthLabel
+            currentDate={currentDate}
+            onYearChange={(y) => setCurrentDate(new Date(y, currentDate.getMonth(), 1))}
+            className="text-sm font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)] tracking-wide"
+          />
+        ) : (
+          <h2 className="text-sm font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)] tracking-wide">
+            {headerLabel}
+          </h2>
+        )}
         <button
           onClick={goForward}
           className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 text-white text-sm font-semibold px-3 py-1.5 rounded-xl transition active:scale-95"
@@ -337,6 +424,7 @@ export default function CalendarPage() {
           className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'monthly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
         >Monthly</button>
       </div>
+
 
       {!loading && (() => {
         const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
@@ -469,15 +557,33 @@ export default function CalendarPage() {
               {logForm.status !== 'missed' && (
                 <div className="flex items-center gap-2">
                   <label className="text-sm text-white/60 whitespace-nowrap">Distance (km)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    placeholder="e.g. 8.5"
-                    value={logForm.distance_km}
-                    onChange={(e) => setLogForm({ ...logForm, distance_km: e.target.value })}
-                    className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  />
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="e.g. 8.5"
+                      value={logForm.distance_km}
+                      onChange={(e) => setLogForm({ ...logForm, distance_km: e.target.value })}
+                      className={`w-full bg-white/10 border border-white/20 rounded-lg pl-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400 ${user?.strava_connected ? 'pr-20' : 'pr-3'}`}
+                    />
+                    {user?.strava_connected && (
+                      <button
+                        type="button"
+                        onClick={() => setLogForm({ ...logForm, manual_override: !logForm.manual_override })}
+                        title={logForm.manual_override
+                          ? 'Manual: Strava sync will not overwrite this day'
+                          : 'Tap to lock — Strava sync will skip this day'}
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition ${
+                          logForm.manual_override
+                            ? 'bg-emerald-500 text-white shadow'
+                            : 'bg-white/10 text-white/55 hover:bg-white/20 hover:text-white'
+                        }`}
+                      >
+                        Manual
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
               <textarea
@@ -505,7 +611,14 @@ export default function CalendarPage() {
                 : stravaActivities.length === 0 ? (
                   <p className="text-xs text-white/40 italic">No Strava activities this day</p>
                 ) : stravaActivities.map(a => (
-                  <StravaActivityRow key={a.id} activity={a} />
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setSelectedStravaActivity(a)}
+                    className="block w-full text-left hover:brightness-125 active:scale-[0.99] transition"
+                  >
+                    <StravaActivityRow activity={a} />
+                  </button>
                 ))}
               </div>
             )}
@@ -522,35 +635,54 @@ export default function CalendarPage() {
       </Modal>
 
       {/* Expanded month view */}
-      <Modal open={monthExpanded} onClose={() => setMonthExpanded(false)} title={format(currentDate, 'MMMM yyyy')}>
+      <Modal
+        open={monthExpanded}
+        onClose={() => setMonthExpanded(false)}
+        title="Training log"
+        fullScreen
+        panelClassName="bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950"
+      >
         <div>
           {/* Zoom controls */}
           <div className="flex items-center justify-end gap-2 mb-2">
-            <span className="text-xs text-gray-500">Zoom</span>
+            <span className="text-xs text-white/60">Zoom</span>
             <button
               onClick={() => setExpandedZoom(z => Math.max(0.3, +(z - 0.05).toFixed(2)))}
               disabled={expandedZoom <= 0.3}
-              className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+              className="w-7 h-7 rounded border border-white/20 bg-white/5 text-white text-sm font-bold hover:bg-white/15 disabled:opacity-30 transition"
             >−</button>
-            <span className="text-xs font-mono w-10 text-center">{Math.round(expandedZoom * 100)}%</span>
+            <span className="text-xs font-mono w-10 text-center text-white/85">{Math.round(expandedZoom * 100)}%</span>
             <button
               onClick={() => setExpandedZoom(z => Math.min(1.8, +(z + 0.05).toFixed(2)))}
               disabled={expandedZoom >= 1.8}
-              className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+              className="w-7 h-7 rounded border border-white/20 bg-white/5 text-white text-sm font-bold hover:bg-white/15 disabled:opacity-30 transition"
             >+</button>
-            <button onClick={() => setExpandedZoom(1)} className="text-xs text-blue-600 hover:underline ml-1">Reset</button>
           </div>
 
-          {/* Month navigation at the top */}
+          {/* Month + year navigation at the top */}
           <div className="flex items-center justify-between mb-3">
-            <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
-            <span className="text-sm font-semibold">{format(currentDate, 'MMMM yyyy')}</span>
-            <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+            <button
+              onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+              className="text-blue-300 hover:text-blue-200 text-sm transition"
+            >&larr; Prev</button>
+            <YearMonthLabel
+              currentDate={currentDate}
+              onYearChange={(y) => setCurrentDate(new Date(y, currentDate.getMonth(), 1))}
+              className="text-sm font-semibold text-white"
+            />
+            <button
+              onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+              className="text-blue-300 hover:text-blue-200 text-sm transition"
+            >Next &rarr;</button>
           </div>
 
-          <div className="overflow-x-auto -mx-2">
-            <div className="px-2" style={{ minWidth: `${Math.round(960 * expandedZoom)}px` }}>
-              <div className="grid gap-1 mb-1 text-xs text-gray-500 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
+          <div
+            ref={expandedScrollRef}
+            className="overflow-x-auto -mx-2"
+            style={{ touchAction: 'pan-x pan-y' }}
+          >
+            <div className="px-2" style={{ minWidth: '960px', zoom: expandedZoom }}>
+              <div className="grid gap-1 mb-1 text-xs text-white/60 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => <div key={i}>{d}</div>)}
                 <div className="text-right pr-1">Week</div>
               </div>
@@ -578,11 +710,11 @@ export default function CalendarPage() {
                       const inMonth = isSameMonth(dayDate, currentDate);
                       const status = d.workout_log ? (d.workout_log.status || (d.workout_log.completed ? 'completed' : 'missed')) : null;
                       const bg = !inMonth ? 'bg-transparent border-transparent' :
-                        status === 'completed' ? 'bg-green-50 border-green-300 hover:bg-green-100' :
-                        status === 'partial' ? 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100' :
-                        status === 'missed' ? 'bg-red-50 border-red-300 hover:bg-red-100' :
-                        'bg-white border-gray-200 hover:bg-gray-50';
-                      const cellHeight = Math.round(150 * expandedZoom);
+                        status === 'completed' ? 'bg-green-500/40 border-green-400/50 hover:bg-green-500/50' :
+                        status === 'partial' ? 'bg-yellow-500/35 border-yellow-400/45 hover:bg-yellow-500/45' :
+                        status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
+                        'bg-white/20 border-white/30 hover:bg-white/30';
+                      const cellHeight = 150;
                       if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
                       const personalOverride = d.individual_target?.override_group;
                       const it = d.individual_target;
@@ -617,7 +749,7 @@ export default function CalendarPage() {
                           style={{ minHeight: `${cellHeight}px` }}
                         >
                           <div className="flex items-start justify-between px-2 pt-1.5">
-                            <span className="text-[11px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
+                            <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}</span>
                             {typeChip && (
                               <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${typeChip.color}`}>
                                 {typeChip.label}
@@ -628,34 +760,36 @@ export default function CalendarPage() {
                           {/* Top half: planned workout */}
                           <div className="flex-1 px-2 py-1 min-h-0">
                             {workoutTitle && (
-                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-700' : 'text-gray-800'}`}>
+                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-200' : 'text-white'} [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]`}>
                                 {cellIsRace && '🏁 '}{workoutTitle}
                               </p>
                             )}
                             {!workoutTitle && cellIsRace && (
-                              <p className="text-xs font-semibold leading-tight text-indigo-700">🏁 Race</p>
+                              <p className="text-xs font-semibold leading-tight text-indigo-200">🏁 Race</p>
                             )}
                             {workoutBody && (
-                              <p className="text-[10px] text-gray-500 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>
+                              <p className="text-[10px] text-white/65 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>
                             )}
                           </div>
 
                           {/* Divider */}
-                          <div className="border-t border-dashed border-gray-300/70 mx-1" />
+                          <div className="border-t border-dashed border-white/25 mx-1" />
 
                           {/* Bottom half: my report */}
-                          <div className="flex-1 px-2 py-1 min-h-0">
+                          <div className="flex-1 flex flex-col px-2 py-1 min-h-0">
                             {d.workout_log ? (
                               <>
-                                {d.workout_log.notes && (
-                                  <p className="text-[10px] text-gray-700 leading-tight line-clamp-2 whitespace-pre-wrap">{d.workout_log.notes}</p>
-                                )}
+                                {d.workout_log.notes ? (
+                                  <p className="text-[10px] text-white/80 leading-tight line-clamp-2 whitespace-pre-wrap flex-1">{d.workout_log.notes}</p>
+                                ) : !d.workout_log.distance_km ? (
+                                  <p className="text-[10px] text-white/40 italic flex-1">No report</p>
+                                ) : <div className="flex-1" />}
                                 {d.workout_log.distance_km > 0 && (
-                                  <p className="text-xs text-blue-700 font-bold mt-0.5">{d.workout_log.distance_km.toFixed(1)}k</p>
+                                  <p className="text-xs text-blue-200 font-bold leading-none mt-1 self-end">{d.workout_log.distance_km.toFixed(1)} km</p>
                                 )}
                               </>
                             ) : (
-                              <p className="text-[10px] text-gray-300 italic">No report</p>
+                              <p className="text-[10px] text-white/40 italic">No report</p>
                             )}
                           </div>
 
@@ -665,11 +799,11 @@ export default function CalendarPage() {
                     })}
                     {/* Week stats column */}
                     <div className="flex flex-col items-end justify-center text-right px-1 text-xs">
-                      <div className="font-bold text-blue-700">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      <div className="font-bold text-blue-200">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
                       <div className="flex gap-1.5 mt-1 text-[11px] font-mono">
-                        <span className="text-green-700">V{wkDone}</span>
-                        <span className="text-yellow-700">~{wkPart}</span>
-                        <span className="text-red-700">X{wkMiss}</span>
+                        <span className="text-green-300">V{wkDone}</span>
+                        <span className="text-yellow-300">~{wkPart}</span>
+                        <span className="text-red-300">X{wkMiss}</span>
                       </div>
                     </div>
                   </div>
@@ -691,14 +825,14 @@ export default function CalendarPage() {
                   else mMiss++;
                 }
                 return (
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-sm font-semibold text-gray-700">{format(currentDate, 'MMMM')} totals</span>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/15">
+                    <span className="text-sm font-semibold text-white/85">{format(currentDate, 'MMMM')} totals</span>
                     <div className="flex items-center gap-4 text-sm">
-                      <span className="font-bold text-blue-700">{mKm.toFixed(1)} km</span>
+                      <span className="font-bold text-blue-200">{mKm.toFixed(1)} km</span>
                       <div className="flex gap-2 text-xs font-mono">
-                        <span className="text-green-700">V{mDone}</span>
-                        <span className="text-yellow-700">~{mPart}</span>
-                        <span className="text-red-700">X{mMiss}</span>
+                        <span className="text-green-300">V{mDone}</span>
+                        <span className="text-yellow-300">~{mPart}</span>
+                        <span className="text-red-300">X{mMiss}</span>
                       </div>
                     </div>
                   </div>
@@ -708,6 +842,64 @@ export default function CalendarPage() {
           </div>
         </div>
       </Modal>
+
+      {selectedStravaActivity && (
+        <StravaActivityDetail
+          activityId={selectedStravaActivity.id}
+          onClose={() => setSelectedStravaActivity(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function YearMonthLabel({ currentDate, onYearChange, className = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const currentYear = currentDate.getFullYear();
+  const thisYear = new Date().getFullYear();
+  // Show 8 years back, 4 years forward — covers history + future planning
+  const years = Array.from({ length: 13 }, (_, i) => thisYear - 8 + i);
+
+  return (
+    <div className="relative" ref={ref}>
+      <h2 className={className}>
+        {format(currentDate, 'MMMM')}{' '}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="hover:underline focus:outline-none focus:underline transition"
+          title="Switch year"
+        >
+          {format(currentDate, 'yyyy')}
+        </button>
+      </h2>
+      {open && (
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-blue-950 border border-white/20 rounded-lg shadow-2xl py-1 w-24 max-h-72 overflow-y-auto">
+          {years.map((y) => (
+            <button
+              key={y}
+              onClick={() => { onYearChange(y); setOpen(false); }}
+              className={`block w-full px-3 py-1.5 text-sm text-center transition ${
+                y === currentYear
+                  ? 'bg-blue-500 text-white font-semibold'
+                  : 'text-white/75 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

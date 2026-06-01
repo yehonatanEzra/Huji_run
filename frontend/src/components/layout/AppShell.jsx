@@ -1,6 +1,7 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import NotificationBell from '../NotificationBell';
+import StravaSyncIconButton from '../StravaSyncIconButton';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ROOT_PATHS = new Set([
@@ -13,10 +14,11 @@ export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const isRoot = ROOT_PATHS.has(location.pathname);
+  const isAbout = location.pathname === '/about';
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
-      <header className="shrink-0 z-40 bg-black/40 backdrop-blur-md border-b border-white/10 text-white px-4 py-3 flex items-center justify-between">
+      <header className={`shrink-0 z-40 border-b border-white/10 text-white px-4 py-3 flex items-center justify-between ${isAbout ? 'bg-black' : 'bg-black/40 backdrop-blur-md'}`}>
         <div className="flex items-center gap-2">
           {!isRoot && (
             <button
@@ -36,6 +38,7 @@ export default function AppShell() {
           </button>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <StravaSyncIconButton />
           <NotificationBell />
           <span className="opacity-80 hidden sm:inline">{user?.full_name}</span>
           <button onClick={logout} className="underline opacity-70 hover:opacity-100">
@@ -51,7 +54,9 @@ export default function AppShell() {
         </div>
       </div>
 
-      <BottomNav />
+      <div className={isAbout ? 'bg-black' : ''}>
+        <BottomNav />
+      </div>
     </div>
   );
 }

@@ -60,6 +60,7 @@ class WorkoutLogUpsert(BaseModel):
     status: str = "missed"
     distance_km: Optional[float] = None
     notes: Optional[str] = None
+    manual_override: bool = False
 
 
 class ReactionItem(BaseModel):
@@ -75,6 +76,7 @@ class WorkoutLogOut(BaseModel):
     status: str
     distance_km: Optional[float] = None
     notes: Optional[str]
+    manual_override: bool = False
     kudos_count: int = 0
     has_kudos: bool = False
     reactions: List[ReactionItem] = []

@@ -275,8 +275,8 @@ export default function ProfilePage() {
 
       {/* Strava connection */}
       <div className={`${GLASS_CARD} mb-4`}>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0 flex-1">
             <p className={SECTION_LABEL}>Strava</p>
             {stravaMsg && (
               <p className={`text-xs mt-1 ${stravaMsg.startsWith('✓') ? 'text-green-300' : 'text-red-300'}`}>
@@ -285,7 +285,7 @@ export default function ProfilePage() {
             )}
           </div>
           {user?.strava_connected ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
               <span className="text-xs font-semibold text-orange-300 bg-orange-400/20 border border-orange-400/30 px-2.5 py-1 rounded-full">
                 🏃 Connected
               </span>

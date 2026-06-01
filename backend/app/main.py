@@ -367,6 +367,24 @@ def _migrate_users_strava():
 _migrate_users_strava()
 
 
+def _migrate_workout_logs_manual_override():
+    """Add manual_override column to workout_logs if missing."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "workout_logs" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("workout_logs")}
+    if "manual_override" in existing:
+        return
+    default_clause = "FALSE" if engine.dialect.name != "sqlite" else "0"
+    with engine.connect() as conn:
+        conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN manual_override BOOLEAN NOT NULL DEFAULT {default_clause}"))
+        conn.commit()
+
+
+_migrate_workout_logs_manual_override()
+
+
 def _bootstrap_admin_and_coach_ids():
     """One-time data backfill: promote the original sole coach to admin and
     attach every athlete + training group to them. Idempotent — after the

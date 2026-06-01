@@ -23,11 +23,16 @@ export default function HomePage() {
     if (user?.role === 'athlete' && !user?.coach_id) return;
     let alive = true;
     setLoading(true);
-    getHomeSummary()
+    const fetchSummary = () => getHomeSummary()
       .then(({ data }) => alive && setSummary(data))
-      .catch(() => {})
-      .finally(() => alive && setLoading(false));
-    return () => { alive = false; };
+      .catch(() => {});
+    fetchSummary().finally(() => alive && setLoading(false));
+    const onSync = () => fetchSummary();
+    window.addEventListener('strava-synced', onSync);
+    return () => {
+      alive = false;
+      window.removeEventListener('strava-synced', onSync);
+    };
   }, [user]);
 
   if (loading) {

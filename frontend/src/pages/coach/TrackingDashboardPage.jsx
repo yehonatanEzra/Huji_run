@@ -18,6 +18,7 @@ import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
 import Modal from '../../components/ui/Modal';
+import StravaActivityDetail from '../../components/StravaActivityDetail';
 import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 
@@ -51,28 +52,19 @@ export default function TrackingDashboardPage() {
 
   const [stravaActivities, setStravaActivities] = useState(null);
   const [stravaLoading, setStravaLoading] = useState(false);
-  const [stravaError, setStravaError] = useState('');
+  const [selectedStravaActivity, setSelectedStravaActivity] = useState(null);
 
-  // Reset Strava state whenever the selected day changes
+  // Auto-fetch Strava activities when a day is opened. Silently hides if the
+  // athlete has not connected Strava (409) or if the fetch fails.
   useEffect(() => {
     setStravaActivities(null);
-    setStravaLoading(false);
-    setStravaError('');
-  }, [selected]);
-
-  const handleLoadStrava = async () => {
     if (!selected) return;
     setStravaLoading(true);
-    setStravaError('');
-    try {
-      const { data } = await getAthleteStravaActivities(selected.athlete.id, selected.day.date);
-      setStravaActivities(data);
-    } catch (err) {
-      setStravaError(err?.response?.data?.detail || 'Could not load Strava data');
-    } finally {
-      setStravaLoading(false);
-    }
-  };
+    getAthleteStravaActivities(selected.athlete.id, selected.day.date)
+      .then(({ data }) => setStravaActivities(data))
+      .catch(() => setStravaActivities(null))
+      .finally(() => setStravaLoading(false));
+  }, [selected]);
 
   const openEditResult = (item) => {
     setEditingResult(item);
@@ -752,41 +744,42 @@ export default function TrackingDashboardPage() {
       </Modal>
 
       <Modal open={!!selected} onClose={() => setSelected(null)}
-        title={selected ? `${selected.athlete.full_name} — ${format(new Date(selected.day.date + 'T00:00'), 'EEE, MMM d')}` : ''}>
+        title={selected ? `${selected.athlete.full_name} — ${format(new Date(selected.day.date + 'T00:00'), 'EEE, MMM d')}` : ''}
+        panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
         {selected && (
           <div className="space-y-4">
             {/* Group workout section */}
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs font-semibold text-gray-500 mb-1">
+            <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-lg p-3">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50 mb-1.5">
                 Group Workout ({selected.athlete.group_name || 'No group'})
               </p>
               {(() => {
                 const gw = selected.day.group_workout;
-                if (!gw) return <p className="text-sm text-gray-400 italic">No group workout for this day</p>;
+                if (!gw) return <p className="text-sm text-white/40 italic">No group workout for this day</p>;
                 const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
                 const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
                 const MAIN_LABEL = { race: 'Race' };
                 const middleLabel = MAIN_LABEL[gw.workout_type] || 'Main';
                 const gwIsRace = gw.workout_type === 'race';
                 return (
-                  <div className={`space-y-1.5 ${gwIsRace ? '-m-3 p-3 rounded-lg bg-indigo-50 border-2 border-indigo-500' : ''}`}>
+                  <div className={`space-y-1.5 ${gwIsRace ? '-m-3 p-3 rounded-lg bg-indigo-400/20 border-2 border-indigo-400/60' : ''}`}>
                     {(gw.title || gw.workout_type) && (
                       <div className="flex items-center gap-2">
-                        {gw.title && <p className="text-sm font-semibold">{gwIsRace && '🏁 '}{gw.title}</p>}
-                        {!gw.title && gwIsRace && <p className="text-sm font-semibold">🏁 Race day</p>}
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-medium">
+                        {gw.title && <p className="text-sm font-semibold text-white">{gwIsRace && '🏁 '}{gw.title}</p>}
+                        {!gw.title && gwIsRace && <p className="text-sm font-semibold text-white">🏁 Race day</p>}
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/20 text-white/75 font-medium">
                           {TYPE_LABELS[gw.workout_type] || 'Simple'}
                         </span>
                       </div>
                     )}
                     {isStructured ? (
-                      <div className="text-sm space-y-1">
-                        {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
-                        {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">{middleLabel} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
-                        {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-gray-400">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
+                      <div className="text-sm space-y-1 text-white/85">
+                        {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-white/40">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
+                        {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                        {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-white/40">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
                       </div>
                     ) : (
-                      gw.content && <p className="text-sm whitespace-pre-wrap">{gw.content}</p>
+                      gw.content && <p className="text-sm whitespace-pre-wrap text-white/85">{gw.content}</p>
                     )}
                   </div>
                 );
@@ -794,29 +787,29 @@ export default function TrackingDashboardPage() {
             </div>
 
             {/* Athlete report section */}
-            <div className={`rounded-lg p-3 ${selected.day.log ? (
-              (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'completed' ? 'bg-green-50' :
-              (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
-            ) : 'bg-gray-50'}`}>
-              <p className="text-xs font-semibold text-gray-500 mb-1">Athlete Report</p>
+            <div className={`rounded-lg p-3 border ${selected.day.log ? (
+              (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'completed' ? 'bg-green-500/15 border-green-400/30' :
+              (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'bg-yellow-500/15 border-yellow-400/30' : 'bg-red-500/15 border-red-400/30'
+            ) : 'bg-white/10 border-white/15'}`}>
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50 mb-1.5">Athlete Report</p>
               {selected.day.log ? (
                 <>
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">{
+                    <p className="text-sm font-semibold text-white">{
                       (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'completed' ? 'Completed' :
                       (selected.day.log.status || (selected.day.log.completed ? 'completed' : 'missed')) === 'partial' ? 'Half Completed' : 'Missed'
                     }</p>
-                    <span className="text-sm font-bold text-blue-700">
+                    <span className="text-sm font-bold text-blue-200">
                       {selected.day.log.distance_km > 0 ? `${selected.day.log.distance_km.toFixed(1)} km` : '— km'}
                     </span>
                   </div>
-                  {selected.day.log.notes && <p className="text-sm text-gray-600 mt-1">{selected.day.log.notes}</p>}
+                  {selected.day.log.notes && <p className="text-sm text-white/75 mt-1 whitespace-pre-wrap">{selected.day.log.notes}</p>}
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {selected.day.log.id && (() => {
                       const REACTIONS = [
-                        { key: 'clap', icon: '👏', activeBg: 'bg-pink-100', activeText: 'text-pink-700', activeBorder: 'border-pink-300', hoverBg: 'hover:bg-pink-50' },
-                        { key: 'heart', icon: '❤️', activeBg: 'bg-red-100', activeText: 'text-red-700', activeBorder: 'border-red-300', hoverBg: 'hover:bg-red-50' },
-                        { key: 'dislike', icon: '👎', activeBg: 'bg-gray-200', activeText: 'text-gray-800', activeBorder: 'border-gray-400', hoverBg: 'hover:bg-gray-100' },
+                        { key: 'clap', icon: '👏', activeBg: 'bg-pink-400/25', activeText: 'text-pink-200', activeBorder: 'border-pink-400/40', hoverBg: 'hover:bg-white/15' },
+                        { key: 'heart', icon: '❤️', activeBg: 'bg-red-400/25', activeText: 'text-red-200', activeBorder: 'border-red-400/40', hoverBg: 'hover:bg-white/15' },
+                        { key: 'dislike', icon: '👎', activeBg: 'bg-white/20', activeText: 'text-white', activeBorder: 'border-white/40', hoverBg: 'hover:bg-white/15' },
                       ];
                       const reactions = selected.day.log.reactions || [];
                       const find = (key) => reactions.find(r => r.emoji === key);
@@ -837,7 +830,7 @@ export default function TrackingDashboardPage() {
                               fetchData();
                             }}
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition border ${
-                              reacted ? `${activeBg} ${activeText} ${activeBorder}` : `bg-gray-50 text-gray-500 border-gray-200 ${hoverBg}`
+                              reacted ? `${activeBg} ${activeText} ${activeBorder}` : `bg-white/5 text-white/55 border-white/15 ${hoverBg}`
                             }`}
                           >
                             <span>{icon}</span>
@@ -846,30 +839,33 @@ export default function TrackingDashboardPage() {
                         );
                       });
                     })()}
-                    <button
-                      onClick={handleLoadStrava}
-                      disabled={stravaLoading}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200 transition disabled:opacity-50"
-                    >
-                      <span>🏃</span>
-                      <span>{stravaLoading ? 'Loading…' : 'Strava activities'}</span>
-                    </button>
                   </div>
-                  {stravaError && (
-                    <p className="text-xs text-red-500 mt-2">{stravaError}</p>
-                  )}
-                  {stravaActivities !== null && (
-                    <div className="mt-2 space-y-1.5">
-                      {stravaActivities.length === 0 ? (
-                        <p className="text-xs text-gray-400 italic">No Strava activities this day</p>
-                      ) : stravaActivities.map(a => (
-                        <StravaActivityRow key={a.id} activity={a} />
-                      ))}
+                  {(stravaLoading || (stravaActivities && stravaActivities.length > 0)) && (
+                    <div className="mt-3 pt-3 border-t border-white/15">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-orange-300 mb-1.5">
+                        🏃 Strava activities
+                      </p>
+                      {stravaLoading ? (
+                        <p className="text-xs text-white/40 italic">Loading…</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {stravaActivities.map(a => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => setSelectedStravaActivity(a)}
+                              className="w-full text-left hover:brightness-125 active:scale-[0.99] transition"
+                            >
+                              <StravaActivityRow activity={a} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
               ) : (
-                <p className="text-sm text-gray-400 italic">No report submitted</p>
+                <p className="text-sm text-white/40 italic">No report submitted</p>
               )}
             </div>
 
@@ -879,14 +875,15 @@ export default function TrackingDashboardPage() {
             )}
 
             {/* Personal workout section */}
-            <div className="border-t pt-3">
-              <p className="text-xs font-semibold text-blue-700 mb-2">Personal Workout</p>
+            <div className="border-t border-white/15 pt-4">
+              <p className="text-base font-bold text-white mb-3">Personal Workout</p>
               {(() => {
                 const meta = typeMetaFor(personalForm.workout_type);
                 const setF = (k, v) => setPersonalForm(f => ({ ...f, [k]: v }));
                 const hasAny = meta.structured
                   ? (personalForm.warmup.trim() || personalForm.main_session.trim() || personalForm.cooldown.trim() || personalForm.title.trim())
                   : (personalForm.note.trim() || personalForm.title.trim());
+                const inputCls = 'w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-400';
                 return (
                   <div className="space-y-2">
                     <div className="grid grid-cols-3 gap-1.5">
@@ -895,7 +892,7 @@ export default function TrackingDashboardPage() {
                           className={`text-xs px-2 py-1 rounded-lg font-medium border transition ${
                             personalForm.workout_type === t.value
                               ? `${t.color} border-current`
-                              : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                              : 'bg-white/5 text-white/60 border-white/15 hover:bg-white/15'
                           }`}>
                           {t.label}
                         </button>
@@ -904,30 +901,30 @@ export default function TrackingDashboardPage() {
                     <input type="text" value={personalForm.title}
                       onChange={(e) => setF('title', e.target.value)}
                       placeholder="Title (shown on calendar)"
-                      className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className={inputCls} />
 
                     {meta.structured ? (
                       <>
                         <textarea value={personalForm.warmup} onChange={(e) => setF('warmup', e.target.value)}
                           placeholder="Warm-up" rows={1}
-                          className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          className={inputCls} />
                         <textarea value={personalForm.main_session} onChange={(e) => setF('main_session', e.target.value)}
                           placeholder={meta.mainLabel || 'Main session'} rows={2}
-                          className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          className={inputCls} />
                         <textarea value={personalForm.cooldown} onChange={(e) => setF('cooldown', e.target.value)}
                           placeholder="Cool-down" rows={1}
-                          className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                          className={inputCls} />
                       </>
                     ) : (
                       <textarea value={personalForm.note} onChange={(e) => setF('note', e.target.value)}
                         placeholder="Write a personal workout..." rows={2}
-                        className="w-full border border-blue-200 rounded-lg px-3 py-1.5 text-sm bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className={inputCls} />
                     )}
 
                     {hasAny && (
-                      <label className="flex items-center gap-2">
-                        <input type="checkbox" checked={overrideGroup} onChange={(e) => setOverrideGroup(e.target.checked)} className="w-4 h-4 rounded" />
-                        <span className="text-xs text-gray-600">Show this instead of group workout</span>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={overrideGroup} onChange={(e) => setOverrideGroup(e.target.checked)} className="w-4 h-4 rounded accent-blue-500" />
+                        <span className="text-xs text-white/75">Show this instead of group workout</span>
                       </label>
                     )}
                   </div>
@@ -935,11 +932,11 @@ export default function TrackingDashboardPage() {
               })()}
               <div className="flex gap-2 mt-3">
                 <button onClick={handleSavePersonal} disabled={saving}
-                  className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                  className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition">
                   {saving ? 'Saving...' : 'Save'}
                 </button>
                 <button onClick={() => setSelected(null)}
-                  className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                  className="flex-1 border border-white/25 text-white/75 hover:text-white hover:bg-white/10 rounded-lg py-2.5 text-sm font-medium transition">
                   Cancel
                 </button>
               </div>
@@ -1181,6 +1178,14 @@ export default function TrackingDashboardPage() {
           </div>
         )}
       </Modal>
+
+      {selectedStravaActivity && selected && (
+        <StravaActivityDetail
+          activityId={selectedStravaActivity.id}
+          athleteId={selected.athlete.id}
+          onClose={() => setSelectedStravaActivity(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1190,11 +1195,11 @@ function StravaActivityRow({ activity }) {
   const mins = Math.floor(activity.moving_time_s / 60);
   const secs = String(activity.moving_time_s % 60).padStart(2, '0');
   return (
-    <div className="flex items-center gap-2 text-xs bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1.5">
-      <span className="font-semibold text-orange-700 truncate flex-1">{activity.name}</span>
-      <span className="bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium shrink-0">{activity.type}</span>
-      <span className="text-gray-600 font-mono shrink-0">{km} km</span>
-      <span className="text-gray-500 font-mono shrink-0">{mins}:{secs}</span>
+    <div className="flex items-center gap-2 text-xs bg-orange-400/15 border border-orange-400/25 rounded-lg px-2.5 py-1.5">
+      <span className="font-semibold text-orange-200 truncate flex-1">{activity.name}</span>
+      <span className="bg-orange-400/20 text-orange-300 px-1.5 py-0.5 rounded font-medium shrink-0">{activity.type}</span>
+      <span className="text-white/70 font-mono shrink-0">{km} km</span>
+      <span className="text-white/50 font-mono shrink-0">{mins}:{secs}</span>
     </div>
   );
 }

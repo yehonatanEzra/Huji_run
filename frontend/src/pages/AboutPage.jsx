@@ -59,7 +59,7 @@ export default function AboutPage() {
             engineering and on the track: precision, optimization, and relentless consistency.
           </p>
         </div>
-      </Section>058
+      </Section>
 
       {/* PERSONAL BESTS */}
       <Section
@@ -118,7 +118,7 @@ export default function AboutPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 border border-white/20 text-xs font-medium hover:bg-white/20 transition"
             >
-              Check my LinkedIn <span className="opacity-70">↗</span>
+              Check my LinkedIn
             </a>
           </p>
           <p className="flex items-center gap-2 flex-wrap">
@@ -129,7 +129,7 @@ export default function AboutPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 border border-white/20 text-xs font-medium hover:bg-white/20 transition"
             >
-              Check my code <span className="opacity-70">↗</span>
+              Check my code
             </a>
           </p>
         </div>

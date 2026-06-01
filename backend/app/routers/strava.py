@@ -67,7 +67,9 @@ def _is_run(activity: dict) -> bool:
 def _ensure_fresh_token(user: User, db: Session) -> str:
     """Return a valid access token, refreshing it first if it's about to expire."""
     if user.strava_token_expires_at and user.strava_token_expires_at > time.time() + 60:
+        logger.info("Strava token cached for user %s (expires_at=%s, now=%s)", user.id, user.strava_token_expires_at, int(time.time()))
         return user.strava_access_token
+    logger.info("Strava token refresh for user %s (expires_at=%s, now=%s)", user.id, user.strava_token_expires_at, int(time.time()))
     r = httpx.post(
         STRAVA_TOKEN_URL,
         data={
@@ -78,6 +80,8 @@ def _ensure_fresh_token(user: User, db: Session) -> str:
         },
         timeout=STRAVA_HTTP_TIMEOUT,
     )
+    if r.status_code >= 400:
+        logger.warning("Strava token refresh failed for user %s: %s %s", user.id, r.status_code, r.text[:300])
     r.raise_for_status()
     d = r.json()
     user.strava_access_token = d["access_token"]
@@ -375,6 +379,19 @@ def sync_strava(
 
     try:
         token = _ensure_fresh_token(current_user, db)
+    except httpx.HTTPStatusError as e:
+        logger.warning("Strava sync token-refresh HTTP error for user %s: %s %s", current_user.id, e.response.status_code, e.response.text[:300])
+        if e.response.status_code in (400, 401):
+            raise HTTPException(
+                status_code=409,
+                detail="Strava connection expired — please reconnect from your Profile.",
+            )
+        raise HTTPException(status_code=502, detail=f"Strava token-refresh error: {e.response.status_code}")
+    except Exception:
+        logger.exception("Strava sync token-refresh failed for user %s", current_user.id)
+        raise HTTPException(status_code=502, detail="Could not refresh Strava token")
+
+    try:
         r = httpx.get(
             STRAVA_ACTIVITIES_URL,
             headers={"Authorization": f"Bearer {token}"},
@@ -384,15 +401,15 @@ def sync_strava(
         r.raise_for_status()
         activities = r.json()
     except httpx.HTTPStatusError as e:
-        logger.warning("Strava sync HTTP error for user %s: %s %s", current_user.id, e.response.status_code, e.response.text[:300])
+        logger.warning("Strava sync activities HTTP error for user %s: %s %s (after=%s before=%s)", current_user.id, e.response.status_code, e.response.text[:300], after, before)
         if e.response.status_code in (400, 401):
             raise HTTPException(
                 status_code=409,
                 detail="Strava connection expired — please reconnect from your Profile.",
             )
-        raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
+        raise HTTPException(status_code=502, detail=f"Strava activities error: {e.response.status_code}")
     except Exception:
-        logger.exception("Strava sync failed for user %s", current_user.id)
+        logger.exception("Strava sync activities call failed for user %s", current_user.id)
         raise HTTPException(status_code=502, detail="Could not reach Strava")
 
     # Group activities by local date (the first 10 characters represent yyyy-MM-dd)

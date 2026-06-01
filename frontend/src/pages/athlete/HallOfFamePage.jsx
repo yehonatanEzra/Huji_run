@@ -140,7 +140,7 @@ function RecordsView() {
                   )}
                 </div>
                 <div className="space-y-2">
-                  {entries.map((e) => (
+                  {entries.slice(0, 3).map((e) => (
                     <MedalRow key={e.rank}>
                       <span className="text-2xl">{MEDAL[e.rank - 1] || `#${e.rank}`}</span>
                       <div className="flex-1 min-w-0">

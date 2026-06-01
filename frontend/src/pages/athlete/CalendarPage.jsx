@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, subYears, addYears, isSameMonth } from 'date-fns';
 import { getWeek, submitLog } from '../../api/calendar';
 import { getMyStravaActivities } from '../../api/strava';
@@ -13,8 +13,6 @@ import { NoiseBackground } from '../../components/ui/NoiseBackground';
 
 export default function CalendarPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const isUnpairedAthlete = user?.role === 'athlete' && !user?.coach_id;
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('weekly');
   const [days, setDays] = useState([]);
@@ -364,26 +362,6 @@ export default function CalendarPage() {
       </div>
     );
   };
-
-  if (isUnpairedAthlete) {
-    return (
-      <div className="pb-8">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 text-center mt-4">
-          <div className="text-4xl mb-3">🏃</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">No coach yet</h2>
-          <p className="text-sm text-gray-600 mb-5">
-            Join a coach to start receiving workouts and tracking your training.
-          </p>
-          <button
-            onClick={() => navigate('/find-coach')}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 rounded-xl"
-          >
-            Find a coach
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div>

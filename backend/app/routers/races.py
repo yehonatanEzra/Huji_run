@@ -7,7 +7,7 @@ from ..dependencies import get_current_user, require_coach, require_admin
 from ..models.user import User
 from ..models.race import Race, Heat, Result, RaceRegistration, CANONICAL_DISTANCES
 from ..schemas.race import (
-    RaceCreate, RaceOut, HeatCreate, HeatOut,
+    RaceCreate, RaceOut, HeatCreate, HeatRename, HeatOut,
     ResultCreate, ResultOut, HeatWithResults, RaceDetail,
     RegistrationCreate, RegistrationUpdate, RegistrationOut,
 )
@@ -538,6 +538,26 @@ def delete_heat(
         raise HTTPException(status_code=403, detail="Can't modify heats on an approved race")
     db.delete(heat)
     db.commit()
+
+
+@router.patch("/{race_id}/heats/{heat_id}", response_model=HeatOut)
+def rename_heat(
+    race_id: int,
+    heat_id: int,
+    body: HeatRename,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    heat = db.get(Heat, heat_id)
+    if not heat or heat.race_id != race_id:
+        raise HTTPException(status_code=404, detail="Heat not found")
+    new_label = body.label.strip()
+    if not new_label:
+        raise HTTPException(status_code=422, detail="Label cannot be empty")
+    heat.label = new_label
+    db.commit()
+    db.refresh(heat)
+    return heat
 
 
 @router.patch("/{race_id}/heats/{heat_id}/results/{result_id}")

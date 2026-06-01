@@ -330,25 +330,30 @@ def get_athlete_activity_detail(
 
 
 @router.post("/sync")
+
+@router.post("/sync")
 def sync_strava(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
     days: int = Query(14, ge=1, le=90, description="How many days back to sync"),
 ):
-    """Fetch Strava activities for the last N days and create/update workout logs.
-
-    Multiple activities on the same day are merged: distances summed, names joined
-    into the notes field. Existing workout logs are overwritten so Strava remains
-    the source of truth. The status is set to 'completed' on every synced day.
     """
+    Fetch Strava activities for the last N days and create/update workout logs.
+    This endpoint is designed to be idempotent and safe to call multiple times.
+    """
+    # Validate that the current user has connected their Strava account
     if not current_user.strava_access_token:
         raise HTTPException(status_code=409, detail="Strava is not connected")
 
-    today = date_type.today()
-    start_day = today - timedelta(days=days - 1)
-    after = int(datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc).timestamp())
-    before = int(datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc).timestamp())
+    # 2. Securely calculate UTC timestamps based on system time.
+    # Using time.time() prevents 500 errors caused by server-side timezone differences.
+    now_ts = int(time.time())
+    seconds_back = days * 86400  # 86400 seconds in a day
+    
+    after = now_ts - seconds_back
+    before = now_ts + 86400  # 1-day safety buffer forward to avoid missing today's activities
 
+    # 3. Request activities from Strava API within the calculated timestamp range
     try:
         token = _ensure_fresh_token(current_user, db)
         r = httpx.get(
@@ -359,18 +364,18 @@ def sync_strava(
         r.raise_for_status()
         activities = r.json()
     except httpx.HTTPStatusError as e:
-        # 401/400 on token refresh means the refresh token is bad — user needs
-        # to reconnect from the Profile page.
+        # 400/401 on token refresh means the refresh token is bad — user needs to reconnect
         if e.response.status_code in (400, 401):
             raise HTTPException(
                 status_code=409,
                 detail="Strava connection expired — please reconnect from your Profile.",
             )
+        # Raise 502 if Strava returns any other error (e.g., the previous 500 Internal Error)
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception:
         raise HTTPException(status_code=502, detail="Could not reach Strava")
 
-    # Group activities by local date — each `start_date_local` is "yyyy-MM-ddTHH:mm:ssZ"
+    # 4. Group activities by local date (the first 10 characters represent yyyy-MM-dd)
     by_date: dict[str, list] = {}
     for a in activities:
         local = a.get("start_date_local", "")
@@ -378,37 +383,44 @@ def sync_strava(
             continue
         by_date.setdefault(local[:10], []).append(a)
 
+    # 5. Process data and update the database
     created = 0
     updated = 0
     skipped = 0
     skipped_non_run_days = 0
+    
     for date_str, acts in by_date.items():
         day = datetime.strptime(date_str, "%Y-%m-%d").date()
 
-        # Only running activities count toward the km total. Days with only
-        # non-run activities (Walk, Ride, Swim, …) get no workout_log entry;
-        # those activities are still visible via the per-day activity list.
+        # Filter: Only running activities count toward the running km total.
+        # Days with non-run activities only (Walk, Ride, Swim) get skipped for logs.
         run_acts = [a for a in acts if _is_run(a)]
         if not run_acts:
             skipped_non_run_days += 1
             continue
 
+        # Calculate total distance in km (Strava returns distance in meters)
         total_km = sum(a.get("distance", 0) for a in run_acts) / 1000.0
+        
+        # Build the notes string summarizing activity names and distances
         parts = [
             f"{a.get('name', 'Activity')} ({a.get('distance', 0) / 1000:.1f}km)"
             for a in run_acts
         ]
         notes = "Strava: " + " · ".join(parts)
 
+        # Check if a workout log already exists for this athlete on this date
         log = db.query(WorkoutLog).filter(
             WorkoutLog.athlete_id == current_user.id,
             WorkoutLog.date == day,
         ).first()
 
+        # If manual override is enabled, skip to avoid overwriting coach/user changes
         if log and log.manual_override:
             skipped += 1
             continue
 
+        # Update existing log or create a brand new WorkoutLog entry
         if log:
             log.status = "completed"
             log.completed = True
@@ -426,7 +438,10 @@ def sync_strava(
             ))
             created += 1
 
+    # Commit all changes to the database
     db.commit()
+    
+    # 6. Return sync statistics payload back to the frontend
     return {
         "activities": len(activities),
         "days_with_activity": len(by_date),

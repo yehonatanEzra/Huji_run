@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     # When true, photo uploads return 503 (use this on hosts without persistent storage).
     DISABLE_PHOTO_UPLOADS: bool = False
 
+    STRAVA_CLIENT_ID: str = ""
+    STRAVA_CLIENT_SECRET: str = ""
+    STRAVA_REDIRECT_URI: str = "http://localhost:8000/api/v1/strava/callback"
+    FRONTEND_URL: str = "http://localhost:5173"
+
     class Config:
         env_file = ".env"
 

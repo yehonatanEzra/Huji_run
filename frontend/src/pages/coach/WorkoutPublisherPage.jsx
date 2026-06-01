@@ -383,26 +383,27 @@ export default function WorkoutPublisherPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-xl font-bold flex-1">Coach Panel</h2>
-        <Link to="/coach/targets" className="text-sm text-blue-600 hover:underline">Targets</Link>
-        <Link to="/coach/dashboard" className="text-sm text-blue-600 hover:underline">Athletes Tracking</Link>
-        <Link to="/coach/race-wizard" className="text-sm text-blue-600 hover:underline">New Race</Link>
-        <Link to="/coach/settings" className="text-sm text-blue-600 hover:underline">Settings</Link>
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <h2 className="text-xl font-bold flex-1 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Coach Panel</h2>
+        <Link to="/coach/targets" className="text-sm text-blue-200 hover:text-white transition">Targets</Link>
+        <Link to="/coach/dashboard" className="text-sm text-blue-200 hover:text-white transition">Athletes Tracking</Link>
+        <Link to="/coach/race-wizard" className="text-sm text-blue-200 hover:text-white transition">New Race</Link>
+        <Link to="/coach/settings" className="text-sm text-blue-200 hover:text-white transition">Settings</Link>
       </div>
 
-      <h3 className="text-base font-semibold mb-3">Training Groups</h3>
+      <h3 className="text-base font-semibold mb-3 text-white/85">Training Groups</h3>
 
       {groups.length === 0 && !newGroupName ? (
         <div className="text-center py-8">
-          <p className="text-sm text-gray-500 mb-3">No training groups yet. Create your first one.</p>
+          <p className="text-sm text-white/55 mb-3">No training groups yet. Create your first one.</p>
         </div>
       ) : (
         <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
           {groups.map((g) => (
             <button key={g.id} onClick={() => setSelectedGroup(g)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                selectedGroup?.id === g.id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                selectedGroup?.id === g.id ? 'bg-blue-500 text-white' : 'bg-white/10 backdrop-blur-sm border border-white/20 text-white/80 hover:bg-white/20'
               }`}>
               {g.name} ({g.member_count})
             </button>
@@ -416,15 +417,15 @@ export default function WorkoutPublisherPage() {
           onChange={(e) => setNewGroupName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
           placeholder="New group name..."
-          className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
         />
         <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
-          className="bg-blue-600 text-white rounded-lg px-4 py-1.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+          className="bg-white text-black rounded-lg px-4 py-1.5 text-sm font-semibold hover:bg-white/85 disabled:opacity-50">
           Create
         </button>
         {selectedGroup && (
           <button onClick={() => { fetchGroupDetail(); setShowGroupManager(true); }}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
+            className="border border-white/25 rounded-lg px-3 py-1.5 text-sm text-white/80 hover:bg-white/10 transition">
             Manage
           </button>
         )}
@@ -432,20 +433,20 @@ export default function WorkoutPublisherPage() {
 
       {selectedGroup && (
         <>
-          <h3 className="text-base font-semibold mb-3">Workouts: {selectedGroup.name}</h3>
+          <h3 className="text-base font-semibold mb-3 text-white/85">Workouts: {selectedGroup.name}</h3>
 
           <div className="flex items-center justify-between mb-4">
-            <button onClick={goBack} className="text-blue-600 text-sm font-medium">&larr; Prev</button>
-            <span className="text-sm font-medium">{headerLabel}</span>
-            <button onClick={goForward} className="text-blue-600 text-sm font-medium">Next &rarr;</button>
+            <button onClick={goBack} className="text-blue-200 hover:text-white text-sm font-medium transition">&larr; Prev</button>
+            <span className="text-sm font-medium text-white/85">{headerLabel}</span>
+            <button onClick={goForward} className="text-blue-200 hover:text-white text-sm font-medium transition">Next &rarr;</button>
           </div>
 
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden mb-4">
+          <div className="flex rounded-lg border border-white/20 overflow-hidden mb-4">
             <button onClick={() => setView('weekly')}
-              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'weekly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>
+              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'weekly' ? 'bg-blue-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/15'}`}>
               Weekly</button>
             <button onClick={() => setView('monthly')}
-              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'monthly' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>
+              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'monthly' ? 'bg-blue-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/15'}`}>
               Monthly</button>
           </div>
 

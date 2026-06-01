@@ -16,6 +16,7 @@ const WORKOUT_TYPES = [
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
+import { getAthleteStravaActivities } from '../../api/strava';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
@@ -47,6 +48,31 @@ export default function TrackingDashboardPage() {
   const [editResultSec, setEditResultSec] = useState('');
   const [editResultName, setEditResultName] = useState('');
   const [editResultSaving, setEditResultSaving] = useState(false);
+
+  const [stravaActivities, setStravaActivities] = useState(null);
+  const [stravaLoading, setStravaLoading] = useState(false);
+  const [stravaError, setStravaError] = useState('');
+
+  // Reset Strava state whenever the selected day changes
+  useEffect(() => {
+    setStravaActivities(null);
+    setStravaLoading(false);
+    setStravaError('');
+  }, [selected]);
+
+  const handleLoadStrava = async () => {
+    if (!selected) return;
+    setStravaLoading(true);
+    setStravaError('');
+    try {
+      const { data } = await getAthleteStravaActivities(selected.athlete.id, selected.day.date);
+      setStravaActivities(data);
+    } catch (err) {
+      setStravaError(err?.response?.data?.detail || 'Could not load Strava data');
+    } finally {
+      setStravaLoading(false);
+    }
+  };
 
   const openEditResult = (item) => {
     setEditingResult(item);
@@ -252,39 +278,40 @@ export default function TrackingDashboardPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Athletes Tracking</h2>
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <h2 className="text-xl font-bold mb-4 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Athletes Tracking</h2>
 
       <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
-        <span className="text-sm font-medium">
+        <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-blue-300 hover:text-blue-200 text-sm transition">&larr; Prev</button>
+        <span className="text-sm font-medium text-white/85">
           {format(ws, 'MMM d')} - {format(addDays(ws, 6), 'MMM d')}
         </span>
-        <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+        <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-blue-300 hover:text-blue-200 text-sm transition">Next &rarr;</button>
       </div>
 
       {loading ? <Spinner /> : !data ? (
         <p className="text-gray-500">Failed to load</p>
       ) : (
-        <div className="bg-white border rounded-xl overflow-x-auto">
+        <div className="bg-blue-950/60 backdrop-blur-sm border border-white/15 rounded-xl overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-gray-50 border-b">
-                <th className="px-2 py-2 text-left text-gray-500 font-medium sticky left-0 z-20 bg-gray-50 min-w-[140px] shadow-[1px_0_0_0_#e5e7eb]">Athlete</th>
+              <tr className="bg-blue-900/70 border-b border-white/10">
+                <th className="px-2 py-2 text-left text-white/65 font-medium sticky left-0 z-20 bg-blue-900/95 min-w-[140px] shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">Athlete</th>
                 {weekDays.map((d) => (
-                  <th key={format(d, 'yyyy-MM-dd')} className="px-2 py-2 text-center text-gray-500 font-medium min-w-[48px]">
+                  <th key={format(d, 'yyyy-MM-dd')} className="px-2 py-2 text-center text-white/65 font-medium min-w-[48px]">
                     {format(d, 'EEE')}
                   </th>
                 ))}
-                <th className="px-2 py-2 text-center text-gray-500 font-medium min-w-[48px]">km</th>
+                <th className="px-2 py-2 text-center text-white/65 font-medium min-w-[48px]">km</th>
               </tr>
             </thead>
             <tbody>
               {data.athletes.map((athlete) => (
-                <tr key={athlete.id} className="border-t">
-                  <td className="px-2 py-2 sticky left-0 z-10 bg-white shadow-[1px_0_0_0_#e5e7eb]">
+                <tr key={athlete.id} className="border-t border-white/10">
+                  <td className="px-2 py-2 sticky left-0 z-10 bg-blue-950/95 shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">
                     <button onClick={() => openProfile(athlete.id)} className="text-left">
-                      <div className="font-medium truncate max-w-[140px] text-blue-600 hover:underline">{athlete.full_name}</div>
-                      <div className="text-[10px] text-gray-400">{athlete.group_name || 'No group'}</div>
+                      <div className="font-medium truncate max-w-[140px] text-white hover:underline">{athlete.full_name}</div>
+                      <div className="text-[10px] text-white/45">{athlete.group_name || 'No group'}</div>
                     </button>
                   </td>
                   {athlete.days.map((d) => {
@@ -293,7 +320,7 @@ export default function TrackingDashboardPage() {
                     const cellIsRace = d.target?.override_group
                       ? d.target?.workout_type === 'race'
                       : d.group_workout?.workout_type === 'race';
-                    let bg = 'bg-gray-100';
+                    let bg = 'bg-white/15';
                     let text = '-';
                     if (log) {
                       const st = log.status || (log.completed ? 'completed' : 'missed');
@@ -326,9 +353,9 @@ export default function TrackingDashboardPage() {
                     {(() => {
                       const total = athlete.days.reduce((s, d) => s + (d.log?.distance_km || 0), 0);
                       return total > 0 ? (
-                        <span className="text-xs font-bold text-blue-700">{total.toFixed(1)}</span>
+                        <span className="text-xs font-bold text-blue-200">{total.toFixed(1)}</span>
                       ) : (
-                        <span className="text-xs text-gray-300">-</span>
+                        <span className="text-xs text-white/30">-</span>
                       );
                     })()}
                   </td>
@@ -819,17 +846,27 @@ export default function TrackingDashboardPage() {
                         );
                       });
                     })()}
-                    <a
-                      href="https://www.strava.com/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200 transition"
-                      title="Strava integration coming soon"
+                    <button
+                      onClick={handleLoadStrava}
+                      disabled={stravaLoading}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-orange-100 text-orange-700 border border-orange-300 hover:bg-orange-200 transition disabled:opacity-50"
                     >
                       <span>🏃</span>
-                      <span>Open in Strava</span>
-                    </a>
+                      <span>{stravaLoading ? 'Loading…' : 'Strava activities'}</span>
+                    </button>
                   </div>
+                  {stravaError && (
+                    <p className="text-xs text-red-500 mt-2">{stravaError}</p>
+                  )}
+                  {stravaActivities !== null && (
+                    <div className="mt-2 space-y-1.5">
+                      {stravaActivities.length === 0 ? (
+                        <p className="text-xs text-gray-400 italic">No Strava activities this day</p>
+                      ) : stravaActivities.map(a => (
+                        <StravaActivityRow key={a.id} activity={a} />
+                      ))}
+                    </div>
+                  )}
                 </>
               ) : (
                 <p className="text-sm text-gray-400 italic">No report submitted</p>
@@ -1144,6 +1181,20 @@ export default function TrackingDashboardPage() {
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+function StravaActivityRow({ activity }) {
+  const km = (activity.distance_m / 1000).toFixed(2);
+  const mins = Math.floor(activity.moving_time_s / 60);
+  const secs = String(activity.moving_time_s % 60).padStart(2, '0');
+  return (
+    <div className="flex items-center gap-2 text-xs bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1.5">
+      <span className="font-semibold text-orange-700 truncate flex-1">{activity.name}</span>
+      <span className="bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-medium shrink-0">{activity.type}</span>
+      <span className="text-gray-600 font-mono shrink-0">{km} km</span>
+      <span className="text-gray-500 font-mono shrink-0">{mins}:{secs}</span>
     </div>
   );
 }

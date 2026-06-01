@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
         gender: data.gender,
         training_group_id: data.training_group_id,
         coach_id: data.coach_id ?? null,
+        strava_connected: data.strava_connected ?? false,
       };
       localStorage.setItem('user', JSON.stringify(merged));
       setUser(merged);

@@ -5,8 +5,9 @@ from .config import settings
 from .database import engine, Base
 from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, RaceRegistration, HallOfFame, HealthProfessional, HealthReview, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
 from .models.workout import WorkoutLogComment  # noqa: F401  (ensure table is registered with Base)
+from .models.notification import Notification  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, strava, notifications
 
 Base.metadata.create_all(bind=engine)
 
@@ -340,6 +341,32 @@ def _migrate_users_bio():
 _migrate_users_bio()
 
 
+def _migrate_users_strava():
+    """Add Strava OAuth columns to users if missing."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("users")}
+    to_add = [
+        ("strava_athlete_id", "INTEGER"),
+        ("strava_access_token", "VARCHAR(512)"),
+        ("strava_refresh_token", "VARCHAR(512)"),
+        ("strava_token_expires_at", "INTEGER"),
+    ]
+    with engine.connect() as conn:
+        added = False
+        for col, ddl in to_add:
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN {col} {ddl}"))
+                added = True
+        if added:
+            conn.commit()
+
+
+_migrate_users_strava()
+
+
 def _bootstrap_admin_and_coach_ids():
     """One-time data backfill: promote the original sole coach to admin and
     attach every athlete + training group to them. Idempotent — after the
@@ -424,6 +451,8 @@ app.include_router(workout_comments.router, prefix=API_PREFIX)
 app.include_router(home.router, prefix=API_PREFIX)
 app.include_router(coaching.router, prefix=API_PREFIX)
 app.include_router(admin_review.router, prefix=API_PREFIX)
+app.include_router(strava.router, prefix=API_PREFIX)
+app.include_router(notifications.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

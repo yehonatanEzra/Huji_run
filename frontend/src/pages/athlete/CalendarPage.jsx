@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getWeek, submitLog } from '../../api/calendar';
+import { getMyStravaActivities } from '../../api/strava';
 import { useAuth } from '../../contexts/AuthContext';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
@@ -24,6 +25,8 @@ export default function CalendarPage() {
   const [saving, setSaving] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [autoOpenedToday, setAutoOpenedToday] = useState(false);
+  const [stravaActivities, setStravaActivities] = useState(null);
+  const [stravaLoading, setStravaLoading] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -74,6 +77,15 @@ export default function CalendarPage() {
 
   const openDay = (day) => {
     setSelectedDay(day);
+    setStravaActivities(null);
+    setStravaLoading(false);
+    if (user?.strava_connected) {
+      setStravaLoading(true);
+      getMyStravaActivities(day.date)
+        .then(({ data }) => setStravaActivities(data))
+        .catch(() => setStravaActivities([]))
+        .finally(() => setStravaLoading(false));
+    }
     setLogForm({
       status: day.workout_log?.status || 'missed',
       distance_km: day.workout_log?.distance_km || '',
@@ -484,6 +496,20 @@ export default function CalendarPage() {
               </button>
             </div>
 
+            {user?.strava_connected && (
+              <div className="border-t border-white/15 pt-3">
+                <p className="text-[10px] uppercase tracking-widest text-white/45 font-semibold mb-2">Strava activities</p>
+                {stravaLoading ? (
+                  <p className="text-xs text-white/40 italic">Loading…</p>
+                ) : stravaActivities === null ? null
+                : stravaActivities.length === 0 ? (
+                  <p className="text-xs text-white/40 italic">No Strava activities this day</p>
+                ) : stravaActivities.map(a => (
+                  <StravaActivityRow key={a.id} activity={a} />
+                ))}
+              </div>
+            )}
+
             {selectedDay.workout_log?.id ? (
               <WorkoutCommentThread workoutLogId={selectedDay.workout_log.id} />
             ) : (
@@ -682,6 +708,20 @@ export default function CalendarPage() {
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+function StravaActivityRow({ activity }) {
+  const km = (activity.distance_m / 1000).toFixed(2);
+  const mins = Math.floor(activity.moving_time_s / 60);
+  const secs = String(activity.moving_time_s % 60).padStart(2, '0');
+  return (
+    <div className="flex items-center gap-2 text-xs bg-orange-400/15 border border-orange-400/25 rounded-lg px-2.5 py-1.5 mb-1.5">
+      <span className="font-semibold text-orange-200 truncate flex-1">{activity.name}</span>
+      <span className="bg-orange-400/20 text-orange-300 px-1.5 py-0.5 rounded font-medium shrink-0">{activity.type}</span>
+      <span className="text-white/70 font-mono shrink-0">{km} km</span>
+      <span className="text-white/50 font-mono shrink-0">{mins}:{secs}</span>
     </div>
   );
 }

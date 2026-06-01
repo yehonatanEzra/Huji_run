@@ -55,16 +55,55 @@ def get_hall_of_fame(
     current_user: User = Depends(get_current_user),
 ):
     if group_id is None:
-        return _get_overall_hof(db)
+        return _get_overall_hof(db, current_user)
     # Enforce visibility before exposing group results.
     group = db.get(TrainingGroup, group_id)
     if not _can_view_group(current_user, group):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Group not found")
-    return _get_group_hof(db, group_id)
+    return _get_group_hof(db, group_id, current_user)
 
 
-def _get_overall_hof(db: Session) -> HallOfFameResponse:
+def _compute_my_rank(db: Session, distance_m: int, current_user: User, user_id_filter: Optional[list[int]] = None) -> Optional[int]:
+    """Rank of current_user within their gender's full ranking for this
+    distance. Returns None if the user has no approved PB at this distance,
+    or if the user has no gender set.
+
+    Mirrors the same filters Hall-of-Fame uses: only approved races + approved
+    results count, and each athlete (whether linked by user_id or just
+    athlete_name on a manual entry) is counted once at their best time."""
+    if not current_user.gender:
+        return None
+    q = (
+        db.query(Result, Heat, Race)
+        .join(Heat, Result.heat_id == Heat.id)
+        .join(Race, Heat.race_id == Race.id)
+        .filter(
+            Heat.distance_m == distance_m,
+            Result.gender == current_user.gender,
+            Result.status == "approved",
+            Race.status == "approved",
+        )
+    )
+    if user_id_filter is not None:
+        # Manual entries with NULL user_id can't be tied to a group membership,
+        # so for group HoF only entries belonging to listed users count.
+        q = q.filter(Result.user_id.in_(user_id_filter))
+    rows = q.order_by(Result.time_seconds.asc()).all()
+    seen: set = set()
+    ranked_keys: list = []  # ordered, dedup by user_id OR athlete_name
+    for r, _h, _race in rows:
+        key = r.user_id if r.user_id is not None else r.athlete_name
+        if key in seen:
+            continue
+        seen.add(key)
+        ranked_keys.append(key)
+    if current_user.id in ranked_keys:
+        return ranked_keys.index(current_user.id) + 1
+    return None
+
+
+def _get_overall_hof(db: Session, current_user: User) -> HallOfFameResponse:
     distances = []
     for dist in CANONICAL_DISTANCES:
         entries = db.query(HallOfFame).filter(HallOfFame.distance_m == dist).all()
@@ -82,12 +121,13 @@ def _get_overall_hof(db: Session) -> HallOfFameResponse:
 
         men = sorted([to_entry(e) for e in entries if e.gender == "M"], key=lambda x: x.rank)
         women = sorted([to_entry(e) for e in entries if e.gender == "F"], key=lambda x: x.rank)
-        distances.append(HallOfFameDistance(distance_m=dist, men=men, women=women))
+        my_rank = _compute_my_rank(db, dist, current_user)
+        distances.append(HallOfFameDistance(distance_m=dist, men=men, women=women, my_rank=my_rank))
 
     return HallOfFameResponse(distances=distances)
 
 
-def _get_group_hof(db: Session, group_id: int) -> HallOfFameResponse:
+def _get_group_hof(db: Session, group_id: int, current_user: User) -> HallOfFameResponse:
     group_user_ids = [
         u.id for u in db.query(User).filter(User.training_group_id == group_id).all()
     ]
@@ -125,7 +165,8 @@ def _get_group_hof(db: Session, group_id: int) -> HallOfFameResponse:
                     break
             return top
 
-        distances.append(HallOfFameDistance(distance_m=dist, men=build_top3("M"), women=build_top3("F")))
+        my_rank = _compute_my_rank(db, dist, current_user, user_id_filter=group_user_ids) if current_user.id in group_user_ids else None
+        distances.append(HallOfFameDistance(distance_m=dist, men=build_top3("M"), women=build_top3("F"), my_rank=my_rank))
 
     return HallOfFameResponse(distances=distances)
 
@@ -165,41 +206,29 @@ def get_km_leaders(
     if group_id is not None or gender is not None:
         athlete_filter_ids = [u.id for u in user_q.all()]
 
-    week_q = (
-        db.query(
-            WorkoutLog.athlete_id,
-            sa_func.sum(WorkoutLog.distance_km).label("total_km"),
+    def full_ranking(date_filter):
+        q = (
+            db.query(
+                WorkoutLog.athlete_id,
+                sa_func.sum(WorkoutLog.distance_km).label("total_km"),
+            )
+            .filter(date_filter, WorkoutLog.distance_km.isnot(None))
         )
-        .filter(WorkoutLog.date.in_(week_dates), WorkoutLog.distance_km.isnot(None))
-    )
-    if athlete_filter_ids is not None:
-        week_q = week_q.filter(WorkoutLog.athlete_id.in_(athlete_filter_ids))
-    week_rows = (
-        week_q.group_by(WorkoutLog.athlete_id)
-        .order_by(sa_func.sum(WorkoutLog.distance_km).desc())
-        .limit(10)
-        .all()
+        if athlete_filter_ids is not None:
+            q = q.filter(WorkoutLog.athlete_id.in_(athlete_filter_ids))
+        return (
+            q.group_by(WorkoutLog.athlete_id)
+            .order_by(sa_func.sum(WorkoutLog.distance_km).desc())
+            .all()
+        )
+
+    week_rows_full = full_ranking(WorkoutLog.date.in_(week_dates))
+    month_rows_full = full_ranking(
+        (WorkoutLog.date >= month_start) & (WorkoutLog.date < next_month)
     )
 
-    month_q = (
-        db.query(
-            WorkoutLog.athlete_id,
-            sa_func.sum(WorkoutLog.distance_km).label("total_km"),
-        )
-        .filter(
-            WorkoutLog.date >= month_start,
-            WorkoutLog.date < next_month,
-            WorkoutLog.distance_km.isnot(None),
-        )
-    )
-    if athlete_filter_ids is not None:
-        month_q = month_q.filter(WorkoutLog.athlete_id.in_(athlete_filter_ids))
-    month_rows = (
-        month_q.group_by(WorkoutLog.athlete_id)
-        .order_by(sa_func.sum(WorkoutLog.distance_km).desc())
-        .limit(10)
-        .all()
-    )
+    week_rows = week_rows_full[:10]
+    month_rows = month_rows_full[:10]
 
     user_ids = set(r[0] for r in week_rows) | set(r[0] for r in month_rows)
     users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
@@ -217,9 +246,17 @@ def get_km_leaders(
             })
         return result
 
+    def my_rank(full_rows):
+        for rank, (athlete_id, _km) in enumerate(full_rows, 1):
+            if athlete_id == current_user.id:
+                return rank
+        return None
+
     return {
         "week_start": ws.isoformat(),
         "month": today.strftime("%B %Y"),
         "weekly": to_list(week_rows),
         "monthly": to_list(month_rows),
+        "my_weekly_rank": my_rank(week_rows_full),
+        "my_monthly_rank": my_rank(month_rows_full),
     }

@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { syncStrava } from '../api/strava';
+import { syncStrava, getStravaConnectUrl } from '../api/strava';
 
 export default function StravaSyncIconButton() {
   const { user } = useAuth();
-  const [syncing, setSyncing] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState(false);
 
-  if (!user?.strava_connected) return null;
+  if (!user) return null;
+  // Only athletes log workouts; coaches and admins don't need to connect/sync Strava.
+  if (user.role !== 'athlete') return null;
+  const connected = !!user.strava_connected;
 
   const handleSync = async () => {
-    setSyncing(true);
+    setBusy(true);
     setMsg('');
     setError(false);
     try {
@@ -20,28 +23,49 @@ export default function StravaSyncIconButton() {
       if (data.created > 0) parts.push(`${data.created} new`);
       if (data.updated > 0) parts.push(`${data.updated} updated`);
       setMsg(parts.length ? `✓ ${parts.join(', ')}` : '✓ Up to date');
-      // Notify any listening pages so they can refresh their data.
       window.dispatchEvent(new CustomEvent('strava-synced'));
     } catch (err) {
       setMsg(err?.response?.data?.detail || 'Sync failed');
       setError(true);
     } finally {
-      setSyncing(false);
+      setBusy(false);
       setTimeout(() => setMsg(''), 3500);
     }
   };
 
+  const handleConnect = async () => {
+    setBusy(true);
+    setMsg('');
+    setError(false);
+    try {
+      const { data } = await getStravaConnectUrl();
+      window.location.href = data.url;
+    } catch (err) {
+      setMsg(err?.response?.data?.detail || 'Could not connect');
+      setError(true);
+      setBusy(false);
+      setTimeout(() => setMsg(''), 3500);
+    }
+  };
+
+  const onClick = connected ? handleSync : handleConnect;
+  const label = connected
+    ? (busy ? 'Syncing' : 'Sync')
+    : (busy ? 'Redirecting' : 'Connect');
+  const spin = connected && busy;
+  const title = connected ? 'Sync with Strava' : 'Connect your Strava account';
+
   return (
     <div className="relative">
       <button
-        onClick={handleSync}
-        disabled={syncing}
-        title="Sync with Strava"
-        aria-label="Sync with Strava"
-        className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-400 text-white text-xs font-semibold rounded-full px-3 py-1 transition disabled:opacity-60 shadow-md"
+        onClick={onClick}
+        disabled={busy}
+        title={title}
+        aria-label={title}
+        className="flex items-center gap-1 bg-orange-500 hover:bg-orange-400 text-white text-[10px] font-semibold rounded-full px-2 py-0.5 transition disabled:opacity-60 shadow-md"
       >
-        <span className={`inline-block ${syncing ? 'animate-spin' : ''}`}>↻</span>
-        <span>{syncing ? 'Syncing' : 'Sync'}</span>
+        {connected && <span className={`inline-block ${spin ? 'animate-spin' : ''}`}>↻</span>}
+        <span>{label}</span>
       </button>
       {msg && (
         <div

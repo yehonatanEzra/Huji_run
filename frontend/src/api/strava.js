@@ -1,6 +1,7 @@
 import api from './client';
 
-export const getStravaConnectUrl = () => api.get('/strava/connect-url');
+export const getStravaConnectUrl = () =>
+  api.get('/strava/connect-url', { params: { origin: window.location.origin } });
 export const disconnectStrava = () => api.delete('/strava/disconnect');
 export const getAthleteStravaActivities = (athleteId, date) =>
   api.get(`/strava/activities/${athleteId}`, { params: { date } });

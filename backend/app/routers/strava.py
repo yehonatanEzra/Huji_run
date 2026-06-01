@@ -1,3 +1,4 @@
+import base64
 import time
 from datetime import datetime, timezone, timedelta, date as date_type
 from typing import Annotated, List, Optional
@@ -10,6 +11,33 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from ..models.workout import WorkoutLog
+
+
+def _encode_state(user_id: int, origin: Optional[str]) -> str:
+    """Encode user_id + frontend origin as a URL-safe state string."""
+    raw = f"{user_id}|{origin or ''}"
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip('=')
+
+
+def _decode_state(state: str) -> tuple[Optional[int], Optional[str]]:
+    """Decode a state string back into (user_id, origin). Falls back to
+    treating the whole string as a bare user_id integer for legacy callbacks."""
+    if not state:
+        return None, None
+    # Legacy: state might just be the user_id as an int
+    try:
+        return int(state), None
+    except ValueError:
+        pass
+    try:
+        padding = '=' * ((4 - len(state) % 4) % 4)
+        decoded = base64.urlsafe_b64decode((state + padding).encode()).decode()
+        parts = decoded.split('|', 1)
+        user_id = int(parts[0])
+        origin = parts[1] if len(parts) > 1 and parts[1] else None
+        return user_id, origin
+    except Exception:
+        return None, None
 
 router = APIRouter(prefix="/strava", tags=["strava"])
 
@@ -134,17 +162,26 @@ def _fetch_activity_detail(access_token: str, activity_id: int) -> dict:
 
 
 @router.get("/connect-url")
-def get_connect_url(current_user: Annotated[User, Depends(get_current_user)]):
-    """Return the Strava OAuth URL the frontend should redirect the user to."""
+def get_connect_url(
+    current_user: Annotated[User, Depends(get_current_user)],
+    origin: Optional[str] = Query(None, description="Frontend origin to redirect back to after OAuth"),
+):
+    """Return the Strava OAuth URL the frontend should redirect the user to.
+
+    The optional `origin` query param lets the frontend tell us where to
+    redirect after the OAuth dance — useful for local dev where the frontend
+    runs on multiple ports (5173 / 5174 / etc.).
+    """
     if not settings.STRAVA_CLIENT_ID:
         raise HTTPException(status_code=503, detail="Strava integration is not configured")
+    state = _encode_state(current_user.id, origin)
     url = (
         f"{STRAVA_AUTH_URL}"
         f"?client_id={settings.STRAVA_CLIENT_ID}"
         f"&redirect_uri={settings.STRAVA_REDIRECT_URI}"
         f"&response_type=code"
         f"&scope=read,activity:read_all"
-        f"&state={current_user.id}"
+        f"&state={state}"
         f"&approval_prompt=auto"
     )
     return {"url": url}
@@ -158,11 +195,13 @@ def strava_callback(
     db: Session = Depends(get_db),
 ):
     """Strava redirects here after the user authorizes the app."""
-    frontend_profile = f"{settings.FRONTEND_URL}/profile"
-    if error or not code or not state:
+    user_id, origin = _decode_state(state) if state else (None, None)
+    frontend_url = origin or settings.FRONTEND_URL
+    frontend_profile = f"{frontend_url}/profile"
+
+    if error or not code or not user_id:
         return RedirectResponse(url=f"{frontend_profile}?strava=error")
     try:
-        user_id = int(state)
         user = db.get(User, user_id)
         if not user:
             return RedirectResponse(url=f"{frontend_profile}?strava=error")

@@ -38,7 +38,7 @@ function CloseIcon() {
       width="24" height="24" viewBox="0 0 24 24"
       fill="none" stroke="currentColor" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round"
-      className="h-4 w-4 text-gray-700"
+      className="h-4 w-4 text-white"
     >
       <path stroke="none" d="M0 0h24v24H0z" fill="none" />
       <path d="M18 6l-12 12" />
@@ -129,21 +129,21 @@ export default function FindCoachPage() {
     <div className="pb-8">
       <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
       <div className="mb-5 px-1">
-        <p className="text-sm font-semibold uppercase tracking-widest text-blue-700">Welcome, {user?.full_name}</p>
-        <h2 className="text-2xl font-extrabold text-gray-900 mt-1">Find your coach</h2>
-        <p className="text-sm text-gray-600 mt-2">
+        <p className="text-sm font-semibold uppercase tracking-widest text-blue-200">Welcome, {user?.full_name}</p>
+        <h2 className="text-2xl font-extrabold text-white mt-1 [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Find your coach</h2>
+        <p className="text-sm text-white/65 mt-2">
           Tap a coach to learn more, then send a join request.
         </p>
       </div>
 
       {pending && (
-        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 mb-4">
-          <p className="text-xs uppercase tracking-wider text-amber-800 font-semibold mb-1">Request pending</p>
-          <p className="text-sm text-gray-900">Waiting for <span className="font-semibold">{pending.coach_name}</span> to accept.</p>
+        <div className="bg-amber-400/15 border border-amber-400/30 backdrop-blur-sm rounded-xl p-4 mb-4">
+          <p className="text-xs uppercase tracking-wider text-amber-200 font-semibold mb-1">Request pending</p>
+          <p className="text-sm text-white">Waiting for <span className="font-semibold text-amber-100">{pending.coach_name}</span> to accept.</p>
           <button
             onClick={handleWithdraw}
             disabled={acting}
-            className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-amber-300 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+            className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-amber-300/50 text-amber-200 hover:bg-amber-400/10 disabled:opacity-50 transition"
           >
             Withdraw request
           </button>
@@ -165,24 +165,24 @@ export default function FindCoachPage() {
       <AnimatePresence>
         {active && (
           <div className="fixed inset-0 grid place-items-center z-[100] p-4">
-            {/* Close button (mobile top-right) */}
-            <motion.button
-              key={`close-${active.id}-${id}`}
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.05 } }}
-              className="absolute top-4 right-4 flex items-center justify-center bg-white rounded-full h-8 w-8 shadow-md z-[110]"
-              onClick={() => setActive(null)}
-            >
-              <CloseIcon />
-            </motion.button>
-
             <motion.div
               layoutId={`coach-card-${active.id}-${id}`}
               ref={cardRef}
-              className="w-full max-w-[480px] max-h-[90vh] flex flex-col bg-white rounded-3xl overflow-hidden shadow-2xl"
+              className="relative w-full max-w-[480px] max-h-[90vh] flex flex-col bg-gradient-to-b from-blue-950 to-indigo-950 border border-white/15 rounded-3xl overflow-hidden shadow-2xl"
             >
+              {/* Close button — pinned inside the card's top-right */}
+              <motion.button
+                key={`close-${active.id}-${id}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.05 } }}
+                className="absolute top-3 right-3 flex items-center justify-center bg-black/45 backdrop-blur-md border border-white/25 rounded-full h-8 w-8 shadow-md z-10 hover:bg-black/65 transition"
+                onClick={() => setActive(null)}
+                aria-label="Close"
+              >
+                <CloseIcon />
+              </motion.button>
+
               {/* Photo or initials hero */}
               <motion.div
                 layoutId={`coach-hero-${active.id}-${id}`}
@@ -208,13 +208,13 @@ export default function FindCoachPage() {
                 <div className="px-5 pt-4 pb-2">
                   <motion.h3
                     layoutId={`coach-name-${active.id}-${id}`}
-                    className="text-xl font-extrabold text-gray-900"
+                    className="text-xl font-extrabold text-white"
                   >
                     {active.full_name}
                   </motion.h3>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="text-sm text-gray-500">@{active.username}</span>
-                    <span className="text-xs bg-blue-100 text-blue-700 font-semibold rounded-full px-2 py-0.5">
+                    <span className="text-sm text-white/55">@{active.username}</span>
+                    <span className="text-xs bg-blue-400/20 text-blue-200 border border-blue-400/30 font-semibold rounded-full px-2 py-0.5">
                       {active.athlete_count} athlete{active.athlete_count === 1 ? '' : 's'}
                     </span>
                   </div>
@@ -228,7 +228,7 @@ export default function FindCoachPage() {
                     exit={{ opacity: 0 }}
                     className="px-5 pt-2 pb-3 flex-1 overflow-y-auto [mask-image:linear-gradient(to_bottom,white_80%,transparent)]"
                   >
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{active.bio}</p>
+                    <p className="text-sm text-white/80 leading-relaxed whitespace-pre-wrap">{active.bio}</p>
                   </motion.div>
                 )}
 
@@ -243,10 +243,10 @@ export default function FindCoachPage() {
                         disabled={isDisabled}
                         className={`w-full py-3 rounded-2xl text-sm font-bold transition ${
                           isPendingThis
-                            ? 'bg-amber-100 text-amber-800 cursor-default'
+                            ? 'bg-amber-400/20 text-amber-200 border border-amber-300/30 cursor-default'
                             : isDisabled
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-green-500 hover:bg-green-600 text-white shadow-sm'
+                            ? 'bg-white/10 text-white/35 cursor-not-allowed'
+                            : 'bg-green-500 hover:bg-green-400 text-white shadow-md'
                         }`}
                       >
                         {isPendingThis ? 'Request sent — waiting for approval' : 'Request to join'}
@@ -262,7 +262,7 @@ export default function FindCoachPage() {
 
       {/* Coach list */}
       {coaches.length === 0 ? (
-        <div className="text-center py-12 text-sm text-gray-500">
+        <div className="text-center py-12 text-sm text-white/55">
           No coaches available yet. Check back soon.
         </div>
       ) : (
@@ -274,7 +274,7 @@ export default function FindCoachPage() {
                 layoutId={`coach-card-${c.id}-${id}`}
                 key={`coach-card-${c.id}-${id}`}
                 onClick={() => setActive(c)}
-                className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4 cursor-pointer hover:shadow-md hover:border-blue-200 transition"
+                className="bg-black/40 backdrop-blur-sm rounded-2xl border border-white/15 p-4 flex items-center gap-4 cursor-pointer hover:bg-black/55 hover:border-white/30 transition"
               >
                 {/* Avatar */}
                 <motion.div
@@ -285,7 +285,7 @@ export default function FindCoachPage() {
                     <img
                       src={`${API_BASE}/profile/photo/${c.id}`}
                       alt={c.full_name}
-                      className="w-14 h-14 rounded-full object-cover object-top border-2 border-blue-100"
+                      className="w-14 h-14 rounded-full object-cover object-top border-2 border-white/30"
                     />
                   ) : (
                     <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${avatarGradient(c.id)} flex items-center justify-center`}>
@@ -298,11 +298,11 @@ export default function FindCoachPage() {
                 <div className="flex-1 min-w-0">
                   <motion.p
                     layoutId={`coach-name-${c.id}-${id}`}
-                    className="font-bold text-gray-900 truncate"
+                    className="font-bold text-white truncate"
                   >
                     {c.full_name}
                   </motion.p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-white/55 mt-0.5">
                     {c.athlete_count} athlete{c.athlete_count === 1 ? '' : 's'} · @{c.username}
                   </p>
                 </div>
@@ -310,9 +310,9 @@ export default function FindCoachPage() {
                 {/* Status indicator */}
                 <div className="shrink-0 text-right">
                   {isPendingThis ? (
-                    <span className="text-xs bg-amber-100 text-amber-700 font-semibold rounded-full px-2.5 py-1">Pending</span>
+                    <span className="text-xs bg-amber-400/20 text-amber-200 border border-amber-300/30 font-semibold rounded-full px-2.5 py-1">Pending</span>
                   ) : (
-                    <span className="text-gray-300 text-lg">›</span>
+                    <span className="text-white/35 text-lg">›</span>
                   )}
                 </div>
               </motion.li>
@@ -321,9 +321,9 @@ export default function FindCoachPage() {
         </ul>
       )}
 
-      <div className="mt-8 bg-gray-50 rounded-xl border border-gray-200 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">What you can do meanwhile</p>
-        <ul className="text-sm text-gray-700 space-y-1 list-disc pl-5">
+      <div className="mt-8 bg-white/8 backdrop-blur-sm rounded-xl border border-white/15 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-white/55 mb-2">What you can do meanwhile</p>
+        <ul className="text-sm text-white/80 space-y-1 list-disc pl-5 marker:text-white/40">
           <li>Log your own workouts in the Training tab</li>
           <li>Browse races and the Hall of Fame</li>
           <li>See health &amp; wellness contacts</li>

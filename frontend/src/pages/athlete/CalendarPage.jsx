@@ -709,13 +709,14 @@ export default function CalendarPage() {
                       const dayDate = new Date(d.date + 'T00:00');
                       const inMonth = isSameMonth(dayDate, currentDate);
                       const status = d.workout_log ? (d.workout_log.status || (d.workout_log.completed ? 'completed' : 'missed')) : null;
-                      const bg = !inMonth ? 'bg-transparent border-transparent' :
+                      // Days from the previous/next month are dimmed so the eye still
+                      // anchors to the current month, but they remain visible & tappable.
+                      const bg = !inMonth ? 'bg-white/5 border-white/10 hover:bg-white/10 opacity-60' :
                         status === 'completed' ? 'bg-green-500/40 border-green-400/50 hover:bg-green-500/50' :
                         status === 'partial' ? 'bg-yellow-500/35 border-yellow-400/45 hover:bg-yellow-500/45' :
                         status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
                         'bg-white/20 border-white/30 hover:bg-white/30';
                       const cellHeight = 150;
-                      if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
                       const personalOverride = d.individual_target?.override_group;
                       const it = d.individual_target;
                       const workoutTitle = personalOverride

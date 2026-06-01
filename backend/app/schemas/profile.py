@@ -49,6 +49,9 @@ class HallOfFameDistance(BaseModel):
     distance_m: int
     men: list[HallOfFameEntry]
     women: list[HallOfFameEntry]
+    # Rank of the current user within their gender's full ranking for this
+    # distance (1-based). null when the user has no result for this distance.
+    my_rank: Optional[int] = None
 
 
 class HallOfFameResponse(BaseModel):

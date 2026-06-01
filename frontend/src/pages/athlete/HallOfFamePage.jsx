@@ -56,6 +56,7 @@ function MedalRow({ children }) {
 }
 
 function RecordsView() {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [gender, setGender] = useState('men');
   const [loading, setLoading] = useState(true);
@@ -111,20 +112,32 @@ function RecordsView() {
         ))}
       </div>
 
-      {kmLeaders && (kmLeaders.weekly.length > 0 || kmLeaders.monthly.length > 0) && (
+      {kmLeaders && (kmLeaders.weekly.length > 0 || kmLeaders.monthly.length > 0) && (() => {
+        const tabMatchesUserGender = user?.gender && (
+          (user.gender === 'M' && gender === 'men') ||
+          (user.gender === 'F' && gender === 'women')
+        );
+        return (
         <div className="mb-6">
           <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
             {[
-              { title: `Weekly km`, sub: kmLeaders.week_start, entries: kmLeaders.weekly },
-              { title: `Monthly km`, sub: kmLeaders.month, entries: kmLeaders.monthly },
-            ].filter(({ entries }) => entries.length > 0).map(({ title, sub, entries }) => (
+              { title: `Weekly km`, sub: kmLeaders.week_start, entries: kmLeaders.weekly, myRank: kmLeaders.my_weekly_rank },
+              { title: `Monthly km`, sub: kmLeaders.month, entries: kmLeaders.monthly, myRank: kmLeaders.my_monthly_rank },
+            ].filter(({ entries }) => entries.length > 0).map(({ title, sub, entries, myRank }) => (
               <div
                 key={title}
                 className="min-w-[85%] snap-start bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4 flex-shrink-0"
               >
-                <div className="mb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">{title}</h3>
-                  <p className="text-[11px] text-white/50 mt-0.5">{sub}</p>
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-white">{title}</h3>
+                    <p className="text-[11px] text-white/50 mt-0.5">{sub}</p>
+                  </div>
+                  {tabMatchesUserGender && (
+                    <span className="text-xs font-bold text-amber-300 [text-shadow:0_1px_4px_rgba(0,0,0,0.5)] shrink-0">
+                      Your rank: {myRank ? `#${myRank}` : '--'}
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-2">
                   {entries.map((e) => (
@@ -141,22 +154,36 @@ function RecordsView() {
             ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {loading ? <Spinner /> : !data ? (
         <p className="text-center text-white/50 py-6">Failed to load</p>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide">
           {data.map((dist) => {
-            const entries = gender === 'men' ? dist.men : dist.women;
+            const entries = (gender === 'men' ? dist.men : dist.women).slice(0, 3);
+            // The "Your rank" line appears in the tab matching the user's own
+            // gender — a man has no rank in the women's list, and vice versa.
+            const tabMatchesGender = user?.gender && (
+              (user.gender === 'M' && gender === 'men') ||
+              (user.gender === 'F' && gender === 'women')
+            );
             return (
               <div
                 key={dist.distance_m}
                 className="min-w-[85%] snap-start flex-shrink-0 bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4"
               >
-                <h3 className="text-xs font-bold uppercase tracking-wider text-white mb-3">
-                  {DISTANCE_LABELS[dist.distance_m] || `${dist.distance_m}m`}
-                </h3>
+                <div className="flex items-center justify-between mb-3 gap-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                    {DISTANCE_LABELS[dist.distance_m] || `${dist.distance_m}m`}
+                  </h3>
+                  {tabMatchesGender && (
+                    <span className="text-xs font-bold text-amber-300 [text-shadow:0_1px_4px_rgba(0,0,0,0.5)]">
+                      Your rank: {dist.my_rank ? `#${dist.my_rank}` : '--'}
+                    </span>
+                  )}
+                </div>
                 {entries.length === 0 ? (
                   <p className="text-sm text-white/40 italic">No records yet</p>
                 ) : (

@@ -277,6 +277,8 @@ def _migrate_race_moderation_columns():
     propose race-side changes that admins approve."""
     from sqlalchemy import inspect
     inspector = inspect(engine)
+    # Postgres doesn't know `DATETIME` — it uses `TIMESTAMP`. SQLite accepts both.
+    dt_type = "DATETIME" if engine.dialect.name == "sqlite" else "TIMESTAMP"
     if "races" in inspector.get_table_names():
         existing = {c["name"] for c in inspector.get_columns("races")}
         to_add = []
@@ -285,7 +287,7 @@ def _migrate_race_moderation_columns():
         if "decline_note" not in existing:
             to_add.append(("decline_note", "TEXT"))
         if "decided_at" not in existing:
-            to_add.append(("decided_at", "DATETIME"))
+            to_add.append(("decided_at", dt_type))
         if "decided_by" not in existing:
             to_add.append(("decided_by", "INTEGER REFERENCES users(id)"))
         if to_add:
@@ -307,7 +309,7 @@ def _migrate_race_moderation_columns():
         if "decline_note" not in existing:
             to_add.append(("decline_note", "TEXT"))
         if "decided_at" not in existing:
-            to_add.append(("decided_at", "DATETIME"))
+            to_add.append(("decided_at", dt_type))
         if "decided_by" not in existing:
             to_add.append(("decided_by", "INTEGER REFERENCES users(id)"))
         if to_add:

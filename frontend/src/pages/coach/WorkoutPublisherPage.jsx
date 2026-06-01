@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths } from 'date-fns';
+import { useState, useEffect, useRef } from 'react';
+import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getCoachGroupWeek, createGroupWorkout, updateGroupWorkoutById, deleteGroupWorkoutById } from '../../api/calendar';
 import { listGroups, createGroup, getGroup, renameGroup, deleteGroup, addMemberToGroup, removeMemberFromGroup, listAthletes } from '../../api/coach';
 import Modal from '../../components/ui/Modal';
+import { NoiseBackground } from '../../components/ui/NoiseBackground';
 import Spinner from '../../components/ui/Spinner';
 import { Link } from 'react-router-dom';
 
@@ -65,7 +66,60 @@ export default function WorkoutPublisherPage() {
   const [transferPrompt, setTransferPrompt] = useState(null);
   const [saving, setSaving] = useState(false);
   const [monthExpanded, setMonthExpanded] = useState(false);
-  const [expandedZoom, setExpandedZoom] = useState(1);
+  const [expandedZoom, setExpandedZoom] = useState(0.75);
+  const expandedScrollRef = useRef(null);
+  const pinchRef = useRef({ startDist: 0, startZoom: 1 });
+
+  useEffect(() => {
+    if (!monthExpanded) return;
+    const el = expandedScrollRef.current;
+    if (!el) return;
+
+    const clamp = (v) => +Math.max(0.3, Math.min(1.8, v)).toFixed(2);
+
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.05 : 0.05;
+      setExpandedZoom((z) => clamp(z + delta));
+    };
+
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 2) return;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current.startDist = Math.hypot(dx, dy);
+      setExpandedZoom((z) => {
+        pinchRef.current.startZoom = z;
+        return z;
+      });
+    };
+
+    const onTouchMove = (e) => {
+      if (e.touches.length !== 2 || !pinchRef.current.startDist) return;
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const ratio = newDist / pinchRef.current.startDist;
+      setExpandedZoom(clamp(pinchRef.current.startZoom * ratio));
+    };
+
+    const onTouchEnd = () => {
+      pinchRef.current.startDist = 0;
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [monthExpanded]);
 
   const fetchGroups = async () => {
     try {
@@ -244,10 +298,11 @@ export default function WorkoutPublisherPage() {
   };
 
   const handleCreateGroup = async () => {
-    if (!newGroupName.trim()) return;
+    const name = newGroupName.trim().slice(0, 20);
+    if (!name) return;
     setCreatingGroup(true);
     try {
-      const { data } = await createGroup(newGroupName.trim());
+      const { data } = await createGroup(name);
       setNewGroupName('');
       await fetchGroups();
       setSelectedGroup(data);
@@ -312,20 +367,31 @@ export default function WorkoutPublisherPage() {
   const renderMonthGrid = () => {
     const weeks = [];
     for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
     return (
       <div>
-        <div className="flex items-center justify-end mb-2">
-          <button onClick={() => setMonthExpanded(true)} className="text-xs text-blue-600 hover:underline font-medium">⛶ Expand</button>
-        </div>
+        <NoiseBackground
+          containerClassName="mb-4 w-full rounded-xl p-[2px]"
+          gradientColors={['rgb(37,99,235)', 'rgb(99,102,241)', 'rgb(139,92,246)']}
+        >
+          <button
+            onClick={() => setMonthExpanded(true)}
+            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
+          >
+            ⛶ Expand monthly view
+          </button>
+        </NoiseBackground>
         <div className="space-y-4">
         {weeks.map((week, wi) => (
           <div key={wi}>
-            <p className="text-xs text-gray-400 mb-1 font-medium">
+            <p className="text-xs text-white/45 mb-1 font-medium">
               {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
             </p>
             <div className="grid grid-cols-7 gap-1">
               {week.map((day) => {
-                const inMonth = new Date(day.date + 'T00:00').getMonth() === currentDate.getMonth();
+                const dayDate = new Date(day.date + 'T00:00');
+                const inMonth = dayDate.getMonth() === currentDate.getMonth();
+                const isToday = day.date === todayStr;
                 const list = day.group_workouts || [];
                 const published = list.filter(g => g.content || g.warmup || g.main_session || g.cooldown);
                 const hasPublished = published.length > 0;
@@ -333,31 +399,26 @@ export default function WorkoutPublisherPage() {
                 const tMeta = firstPub ? typeMeta(firstPub.workout_type) : null;
                 const cellIsRace = list.some(g => g.workout_type === 'race');
                 const hasDraft = list.some(g => g.draft_content);
-                const titleForCell = firstPub?.title;
                 return (
                   <button key={day.date} onClick={() => openDay(day)}
                     className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
                       !inMonth ? 'opacity-40' : ''
                     } ${cellIsRace ? 'border-2 border-indigo-500 bg-indigo-50' :
-                       hasPublished ? 'border border-green-300 bg-green-50' :
-                       hasDraft ? 'border border-yellow-300 bg-yellow-50' :
+                       isToday ? 'border border-blue-400 bg-blue-50' :
                        'border border-gray-200 bg-white'}`}>
                     {cellIsRace && (
-                      <span className="absolute top-0 left-0 text-[10px] leading-none">🏁</span>
+                      <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
                     )}
                     {tMeta && !cellIsRace && (
-                      <span className={`absolute top-0 left-0 text-[7px] px-0.5 rounded-br font-bold leading-none ${tMeta.color}`}>
+                      <span className={`absolute top-0.5 right-0.5 text-[8px] px-1 py-px rounded font-semibold leading-none ${tMeta.color}`}>
                         {tMeta.abbr}
                       </span>
                     )}
                     {list.length > 1 && (
-                      <span className="absolute top-0 right-0 text-[8px] px-1 leading-tight bg-blue-600 text-white rounded-bl font-bold">{list.length}</span>
+                      <span className="absolute bottom-0.5 right-0.5 text-[8px] px-1 leading-tight bg-blue-600 text-white rounded font-bold">+{list.length - 1}</span>
                     )}
-                    <span className="font-semibold">{format(new Date(day.date + 'T00:00'), 'd')}</span>
-                    <span className="text-[10px] text-gray-400">{format(new Date(day.date + 'T00:00'), 'EEE')}</span>
-                    {titleForCell && (
-                      <span className="text-[9px] text-gray-700 mt-0.5 truncate w-full text-center font-medium">{titleForCell}</span>
-                    )}
+                    <span className="font-semibold text-gray-900">{format(dayDate, 'd')}</span>
+                    <span className="text-[10px] text-gray-400">{format(dayDate, 'EEE')}</span>
                     <div className="flex gap-0.5 mt-1">
                       {hasPublished && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
                       {hasDraft && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
@@ -384,8 +445,8 @@ export default function WorkoutPublisherPage() {
   return (
     <div>
       <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <h2 className="text-xl font-bold mb-3 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Coach Panel</h2>
       <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <h2 className="text-xl font-bold flex-1 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Coach Panel</h2>
         <Link to="/coach/targets" className="text-sm text-blue-200 hover:text-white transition">Targets</Link>
         <Link to="/coach/dashboard" className="text-sm text-blue-200 hover:text-white transition">Athletes Tracking</Link>
         <Link to="/coach/race-wizard" className="text-sm text-blue-200 hover:text-white transition">New Race</Link>
@@ -411,29 +472,33 @@ export default function WorkoutPublisherPage() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         <input
           value={newGroupName}
-          onChange={(e) => setNewGroupName(e.target.value)}
+          onChange={(e) => setNewGroupName(e.target.value.slice(0, 20))}
           onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
           placeholder="New group name..."
-          className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
+          maxLength={20}
+          className="flex-1 min-w-[10rem] bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
         />
         <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
-          className="bg-white text-black rounded-lg px-4 py-1.5 text-sm font-semibold hover:bg-white/85 disabled:opacity-50">
+          className="shrink-0 bg-white text-black rounded-lg px-4 py-1.5 text-sm font-semibold hover:bg-white/85 disabled:opacity-50">
           Create
         </button>
-        {selectedGroup && (
-          <button onClick={() => { fetchGroupDetail(); setShowGroupManager(true); }}
-            className="border border-white/25 rounded-lg px-3 py-1.5 text-sm text-white/80 hover:bg-white/10 transition">
-            Manage
-          </button>
-        )}
       </div>
 
       {selectedGroup && (
         <>
-          <h3 className="text-base font-semibold mb-3 text-white/85">Workouts: {selectedGroup.name}</h3>
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-base font-semibold text-white/85">Workouts: {selectedGroup.name}</h3>
+            <button
+              onClick={() => { fetchGroupDetail(); setShowGroupManager(true); }}
+              className="text-xs text-blue-200 hover:text-white hover:underline transition"
+              title="Edit group members and name"
+            >
+              Edit group
+            </button>
+          </div>
 
           <div className="flex items-center justify-between mb-4">
             <button onClick={goBack} className="text-blue-200 hover:text-white text-sm font-medium transition">&larr; Prev</button>
@@ -453,38 +518,45 @@ export default function WorkoutPublisherPage() {
           {loading ? <Spinner /> : view === 'weekly' ? (
             <div className="space-y-2">
               {days.map((day) => {
+                const dayDate = new Date(day.date + 'T00:00');
+                const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
                 const list = day.group_workouts || [];
                 const isRace = list.some(g => g.workout_type === 'race');
-                const firstPub = list.find(g => g.content || g.warmup || g.main_session || g.cooldown);
-                const draftOnly = !firstPub && list.find(g => g.draft_content);
                 return (
                 <button key={day.date} onClick={() => openDay(day)}
-                  className={`w-full text-left p-3 rounded-xl hover:shadow-sm transition ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' : 'border border-gray-200 bg-white'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">{isRace && '🏁 '}{format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}</span>
+                  className={`w-full text-left p-3 rounded-xl transition hover:shadow-sm backdrop-blur-sm ${
+                    isRace ? 'border-2 border-indigo-400/70 bg-indigo-200/25' :
+                    isToday ? 'border border-blue-300/60 bg-blue-200/25' :
+                    'border border-white/30 bg-white/20'
+                  }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">
+                      {isRace && <span className="mr-1">🏁</span>}
+                      {format(dayDate, 'EEE, MMM d')}
+                    </span>
                     {renderDayBadges(day)}
                   </div>
                   {list.length === 0 ? (
-                    <p className="text-sm text-gray-400 mt-1 italic">No workout set</p>
+                    <p className="text-sm text-white/55 mt-1 italic">No workout set</p>
                   ) : list.length === 1 ? (
                     (() => {
                       const gw = list[0];
                       const snippet = workoutSnippet(gw);
-                      if (snippet) return <p className="text-sm text-gray-700 mt-1 truncate font-medium">{snippet}</p>;
-                      if (gw.draft_content) return <p className="text-sm text-yellow-600 mt-1 truncate italic">{gw.draft_content}</p>;
+                      if (snippet) return <p className="text-sm text-white font-semibold truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{snippet}</p>;
+                      if (gw.draft_content) return <p className="text-sm text-yellow-200 truncate italic">{gw.draft_content}</p>;
                       return null;
                     })()
                   ) : (
                     <div className="mt-1 space-y-0.5">
                       {list.slice(0, 3).map((gw) => (
-                        <p key={gw.id} className="text-xs text-gray-600 truncate">
+                        <p key={gw.id} className="text-xs text-white/80 truncate">
                           • {workoutSnippet(gw) || gw.draft_content || typeMeta(gw.workout_type).label}
                           {gw.recipient_ids?.length > 0 && (
-                            <span className="text-gray-400"> · {gw.recipient_ids.length} athlete{gw.recipient_ids.length === 1 ? '' : 's'}</span>
+                            <span className="text-white/55"> · {gw.recipient_ids.length} athlete{gw.recipient_ids.length === 1 ? '' : 's'}</span>
                           )}
                         </p>
                       ))}
-                      {list.length > 3 && <p className="text-[11px] text-gray-400">+{list.length - 3} more…</p>}
+                      {list.length > 3 && <p className="text-[11px] text-white/50">+{list.length - 3} more…</p>}
                     </div>
                   )}
                 </button>
@@ -926,32 +998,61 @@ export default function WorkoutPublisherPage() {
       </Modal>
 
       {/* Expanded month view (publisher) */}
-      <Modal open={monthExpanded} onClose={() => setMonthExpanded(false)}
-        title={selectedGroup ? `${selectedGroup.name} — ${format(currentDate, 'MMMM yyyy')}` : 'Month view'}>
+      <Modal
+        open={monthExpanded}
+        onClose={() => setMonthExpanded(false)}
+        title="Training log"
+        fullScreen
+        panelClassName="bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950"
+      >
         {selectedGroup && (
           <div>
+            <p className="text-xs text-white/60 -mt-2 mb-3">{selectedGroup.name}</p>
+
+            {/* Zoom controls */}
             <div className="flex items-center justify-end gap-2 mb-2">
-              <span className="text-xs text-gray-500">Zoom</span>
-              <button onClick={() => setExpandedZoom(z => Math.max(0.3, +(z - 0.05).toFixed(2)))}
+              <span className="text-xs text-white/60">Zoom</span>
+              <button
+                onClick={() => setExpandedZoom(z => Math.max(0.3, +(z - 0.05).toFixed(2)))}
                 disabled={expandedZoom <= 0.3}
-                className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30">−</button>
-              <span className="text-xs font-mono w-10 text-center">{Math.round(expandedZoom * 100)}%</span>
-              <button onClick={() => setExpandedZoom(z => Math.min(1.8, +(z + 0.05).toFixed(2)))}
+                className="w-7 h-7 rounded border border-white/20 bg-white/5 text-white text-sm font-bold hover:bg-white/15 disabled:opacity-30 transition"
+              >−</button>
+              <span className="text-xs font-mono w-10 text-center text-white/85">{Math.round(expandedZoom * 100)}%</span>
+              <button
+                onClick={() => setExpandedZoom(z => Math.min(1.8, +(z + 0.05).toFixed(2)))}
                 disabled={expandedZoom >= 1.8}
-                className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30">+</button>
-              <button onClick={() => setExpandedZoom(1)} className="text-xs text-blue-600 hover:underline ml-1">Reset</button>
+                className="w-7 h-7 rounded border border-white/20 bg-white/5 text-white text-sm font-bold hover:bg-white/15 disabled:opacity-30 transition"
+              >+</button>
+              <button
+                onClick={() => setExpandedZoom(1)}
+                className="text-xs text-blue-300 hover:text-blue-200 hover:underline ml-1 transition"
+              >Reset</button>
             </div>
 
-            {/* Month navigation at the top */}
+            {/* Month + year navigation at the top */}
             <div className="flex items-center justify-between mb-3">
-              <button onClick={() => setCurrentDate(subMonths(currentDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
-              <span className="text-sm font-semibold">{format(currentDate, 'MMMM yyyy')}</span>
-              <button onClick={() => setCurrentDate(addMonths(currentDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+              <button
+                onClick={() => setCurrentDate(subMonths(currentDate, 1))}
+                className="text-blue-300 hover:text-blue-200 text-sm transition"
+              >&larr; Prev</button>
+              <YearMonthLabel
+                currentDate={currentDate}
+                onYearChange={(y) => setCurrentDate(new Date(y, currentDate.getMonth(), 1))}
+                className="text-sm font-semibold text-white"
+              />
+              <button
+                onClick={() => setCurrentDate(addMonths(currentDate, 1))}
+                className="text-blue-300 hover:text-blue-200 text-sm transition"
+              >Next &rarr;</button>
             </div>
 
-            <div className="overflow-x-auto -mx-2">
-              <div className="px-2" style={{ minWidth: `${Math.round(840 * expandedZoom)}px` }}>
-                <div className="grid grid-cols-7 gap-1 mb-1 text-xs text-gray-500 text-center font-medium">
+            <div
+              ref={expandedScrollRef}
+              className="overflow-x-auto -mx-2"
+              style={{ touchAction: 'pan-x pan-y' }}
+            >
+              <div className="px-2" style={{ minWidth: '840px', zoom: expandedZoom }}>
+                <div className="grid grid-cols-7 gap-1 mb-1 text-xs text-white/60 text-center font-medium">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => <div key={i}>{d}</div>)}
                 </div>
                 <div className="space-y-1">
@@ -963,25 +1064,31 @@ export default function WorkoutPublisherPage() {
                     <div key={wi} className="grid grid-cols-7 gap-1">
                       {week.map(d => {
                         const dayDate = new Date(d.date + 'T00:00');
-                        const inMonth = dayDate.getMonth() === currentDate.getMonth();
-                        const gw = d.group_workout;
-                        const hasPublished = gw && (gw.content || gw.warmup || gw.main_session || gw.cooldown);
-                        const cellHeight = Math.round(150 * expandedZoom);
-                        if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
-                        const tMeta = hasPublished ? typeMeta(gw.workout_type) : null;
-                        const body = hasPublished
-                          ? (gw.content || gw.main_session || gw.warmup || '')
-                          : (gw?.draft_content || '');
-                        const cellIsRace = gw?.workout_type === 'race';
+                        const inMonth = isSameMonth(dayDate, currentDate);
+                        const list = d.group_workouts || [];
+                        const published = list.filter(g => g.content || g.warmup || g.main_session || g.cooldown);
+                        const firstPub = published[0];
+                        const hasPublished = !!firstPub;
+                        const draftOnly = !hasPublished && list.find(g => g.draft_content);
+                        const tMeta = firstPub ? typeMeta(firstPub.workout_type) : (draftOnly ? typeMeta(draftOnly.workout_type) : null);
+                        const body = firstPub
+                          ? (firstPub.content || firstPub.main_session || firstPub.warmup || '')
+                          : (draftOnly?.draft_content || '');
+                        const cellIsRace = list.some(g => g.workout_type === 'race');
+                        const cellHeight = 150;
+                        const bg = !inMonth ? 'bg-white/5 border-white/10 opacity-60' :
+                          hasPublished ? 'bg-green-500/30 border-green-400/40 hover:bg-green-500/40' :
+                          draftOnly ? 'bg-yellow-500/25 border-yellow-400/40 hover:bg-yellow-500/35' :
+                          'bg-white/20 border-white/30 hover:bg-white/30';
                         return (
                           <button
                             key={d.date}
                             onClick={() => { setMonthExpanded(false); openDay(d); }}
-                            className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${hasPublished ? (cellIsRace ? 'bg-indigo-50' : 'border-green-300 bg-green-50') : gw?.draft_content ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'} relative flex flex-col text-left transition overflow-hidden`}
+                            className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                             style={{ minHeight: `${cellHeight}px` }}
                           >
                             <div className="flex items-start justify-between px-2 pt-1.5">
-                              <span className="text-[11px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
+                              <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}</span>
                               {tMeta && (
                                 <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${tMeta.color}`}>
                                   {tMeta.label}
@@ -989,17 +1096,24 @@ export default function WorkoutPublisherPage() {
                               )}
                             </div>
                             <div className="flex-1 px-2 py-1 min-h-0">
-                              {gw?.title && (
-                                <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-2">{cellIsRace && '🏁 '}{gw.title}</p>
+                              {firstPub?.title && (
+                                <p className="text-xs font-semibold text-white leading-tight line-clamp-2 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+                                  {cellIsRace && '🏁 '}{firstPub.title}
+                                </p>
                               )}
-                              {!gw?.title && cellIsRace && (
-                                <p className="text-xs font-semibold text-indigo-700 leading-tight">🏁 Race</p>
+                              {!firstPub?.title && cellIsRace && (
+                                <p className="text-xs font-semibold text-indigo-200 leading-tight">🏁 Race</p>
                               )}
                               {body && (
-                                <p className={`text-[10px] leading-tight line-clamp-3 mt-0.5 whitespace-pre-wrap ${hasPublished ? 'text-gray-600' : 'text-yellow-700 italic'}`}>{body}</p>
+                                <p className={`text-[10px] leading-tight line-clamp-3 mt-0.5 whitespace-pre-wrap ${hasPublished ? 'text-white/75' : 'text-yellow-200 italic'}`}>
+                                  {body}
+                                </p>
                               )}
-                              {!hasPublished && !gw?.draft_content && (
-                                <p className="text-[10px] text-gray-300 italic">No workout set</p>
+                              {!hasPublished && !draftOnly && (
+                                <p className="text-[10px] text-white/40 italic">No workout set</p>
+                              )}
+                              {list.length > 1 && (
+                                <p className="text-[9px] text-white/60 mt-1">+{list.length - 1} more</p>
                               )}
                             </div>
                           </button>
@@ -1059,6 +1173,56 @@ export default function WorkoutPublisherPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function YearMonthLabel({ currentDate, onYearChange, className = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const currentYear = currentDate.getFullYear();
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: 13 }, (_, i) => thisYear - 8 + i);
+
+  return (
+    <div className="relative" ref={ref}>
+      <h2 className={className}>
+        {format(currentDate, 'MMMM')}{' '}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="hover:underline focus:outline-none focus:underline transition"
+          title="Switch year"
+        >
+          {format(currentDate, 'yyyy')}
+        </button>
+      </h2>
+      {open && (
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-blue-950 border border-white/20 rounded-lg shadow-2xl py-1 w-24 max-h-72 overflow-y-auto">
+          {years.map((y) => (
+            <button
+              key={y}
+              onClick={() => { onYearChange(y); setOpen(false); }}
+              className={`block w-full px-3 py-1.5 text-sm text-center transition ${
+                y === currentYear
+                  ? 'bg-blue-500 text-white font-semibold'
+                  : 'text-white/75 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
         </div>
       )}
     </div>

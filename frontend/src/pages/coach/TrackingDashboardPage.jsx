@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format, addDays, startOfWeek, subWeeks, addWeeks, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
 import { listRaces, getRace, updateResult, deleteResult, updateRace } from '../../api/races';
@@ -18,6 +18,7 @@ import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
 import Modal from '../../components/ui/Modal';
+import { NoiseBackground } from '../../components/ui/NoiseBackground';
 import StravaActivityDetail from '../../components/StravaActivityDetail';
 import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
@@ -41,7 +42,60 @@ export default function TrackingDashboardPage() {
   const [profileMonthDate, setProfileMonthDate] = useState(new Date());
   const [profileMonth, setProfileMonth] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
-  const [expandedZoom, setExpandedZoom] = useState(1);
+  const [expandedZoom, setExpandedZoom] = useState(0.75);
+  const expandedScrollRef = useRef(null);
+  const pinchRef = useRef({ startDist: 0, startZoom: 1 });
+
+  useEffect(() => {
+    if (!monthExpanded) return;
+    const el = expandedScrollRef.current;
+    if (!el) return;
+
+    const clamp = (v) => +Math.max(0.3, Math.min(1.8, v)).toFixed(2);
+
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.05 : 0.05;
+      setExpandedZoom((z) => clamp(z + delta));
+    };
+
+    const onTouchStart = (e) => {
+      if (e.touches.length !== 2) return;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchRef.current.startDist = Math.hypot(dx, dy);
+      setExpandedZoom((z) => {
+        pinchRef.current.startZoom = z;
+        return z;
+      });
+    };
+
+    const onTouchMove = (e) => {
+      if (e.touches.length !== 2 || !pinchRef.current.startDist) return;
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const newDist = Math.hypot(dx, dy);
+      const ratio = newDist / pinchRef.current.startDist;
+      setExpandedZoom(clamp(pinchRef.current.startZoom * ratio));
+    };
+
+    const onTouchEnd = () => {
+      pinchRef.current.startDist = 0;
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [monthExpanded]);
 
   // Editing a PB / manual race history result
   const [editingResult, setEditingResult] = useState(null);
@@ -359,42 +413,43 @@ export default function TrackingDashboardPage() {
       )}
 
       <Modal open={profileLoading || !!profile} onClose={() => { setProfile(null); setProfileLoading(false); }}
-        title={profile ? profile.full_name : 'Loading...'}>
+        title={profile ? profile.full_name : 'Loading...'}
+        panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
         {profileLoading ? <Spinner /> : profile && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-lg">
+              <div className="w-12 h-12 rounded-full bg-blue-500/25 border border-blue-300/40 flex items-center justify-center text-blue-100 font-bold text-lg">
                 {profile.full_name.charAt(0)}
               </div>
               <div>
-                <p className="font-semibold text-lg">{profile.full_name}</p>
-                <p className="text-sm text-gray-500">@{profile.username}</p>
+                <p className="font-semibold text-lg text-white">{profile.full_name}</p>
+                <p className="text-sm text-white/55">@{profile.username}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-gray-500 text-xs">Gender</p>
-                <p className="font-medium">{profile.gender === 'M' ? 'Male' : 'Female'}</p>
+              <div className="bg-white/10 border border-white/15 rounded-lg p-3">
+                <p className="text-white/50 text-xs">Gender</p>
+                <p className="font-medium text-white">{profile.gender === 'M' ? 'Male' : 'Female'}</p>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-gray-500 text-xs">Group</p>
-                <p className="font-medium">{profile.group_name || 'No group'}</p>
+              <div className="bg-white/10 border border-white/15 rounded-lg p-3">
+                <p className="text-white/50 text-xs">Group</p>
+                <p className="font-medium text-white">{profile.group_name || 'No group'}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="bg-green-50 rounded-lg p-3">
-                <p className="text-2xl font-bold text-green-700">{profile.stats.completed}</p>
-                <p className="text-xs text-green-600">Completed</p>
+              <div className="bg-green-500/15 border border-green-400/30 rounded-lg p-3">
+                <p className="text-2xl font-bold text-green-200">{profile.stats.completed}</p>
+                <p className="text-xs text-green-300/80">Completed</p>
               </div>
-              <div className="bg-red-50 rounded-lg p-3">
-                <p className="text-2xl font-bold text-red-700">{profile.stats.missed}</p>
-                <p className="text-xs text-red-600">Missed</p>
+              <div className="bg-red-500/15 border border-red-400/30 rounded-lg p-3">
+                <p className="text-2xl font-bold text-red-200">{profile.stats.missed}</p>
+                <p className="text-xs text-red-300/80">Missed</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-3">
-                <p className="text-2xl font-bold text-blue-700">{profile.stats.completion_rate}%</p>
-                <p className="text-xs text-blue-600">Rate</p>
+              <div className="bg-blue-500/15 border border-blue-400/30 rounded-lg p-3">
+                <p className="text-2xl font-bold text-blue-200">{profile.stats.completion_rate}%</p>
+                <p className="text-xs text-blue-300/80">Rate</p>
               </div>
             </div>
 
@@ -428,28 +483,36 @@ export default function TrackingDashboardPage() {
                 const cellIsRace = d.target?.override_group
                   ? d.target?.workout_type === 'race'
                   : d.group_workout?.workout_type === 'race';
+                const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
+                const cellBg = cellIsRace
+                  ? 'bg-indigo-500/15 border-indigo-400/40'
+                  : status === 'completed' ? 'bg-green-500/15 border-green-400/30'
+                  : status === 'partial' ? 'bg-yellow-500/15 border-yellow-400/30'
+                  : status === 'missed' ? 'bg-red-500/15 border-red-400/30'
+                  : 'bg-white/5 border-white/15';
+                const iconColor = status === 'completed' ? 'text-green-200'
+                  : status === 'partial' ? 'text-yellow-200'
+                  : status === 'missed' ? 'text-red-200'
+                  : 'text-white/35';
+                const titleColor = w?.color === 'text-blue-700' ? 'text-blue-200' : 'text-white/85';
                 return (
                   <button
                     key={d.date}
                     onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                    className={`w-full text-left rounded-lg px-3 py-2 text-sm hover:ring-2 hover:ring-blue-300 transition ${cellIsRace ? 'border-2 border-indigo-500' : ''} ${d.log ? (
-                      d.log.completed ? 'bg-green-50' : d.log.status === 'partial' ? 'bg-yellow-50' : 'bg-red-50'
-                    ) : 'bg-gray-50'}`}>
+                    className={`w-full text-left rounded-lg px-3 py-2 text-sm border hover:bg-white/10 transition ${cellBg} ${cellIsRace ? 'border-2' : ''}`}>
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-700 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}</span>
-                      <span className={`text-xs font-bold ${d.log ? (
-                        d.log.completed ? 'text-green-700' : d.log.status === 'partial' ? 'text-yellow-700' : 'text-red-700'
-                      ) : 'text-gray-400'}`}>
+                      <span className="font-medium text-white/80 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}</span>
+                      <span className={`text-xs font-bold ${iconColor}`}>
                         {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
                       </span>
                     </div>
                     {w && (w.title || w.snippet) && (
                       <div className="mt-1">
-                        {w.title && <p className={`text-xs font-semibold ${w.color}`}>{w.title}</p>}
-                        {w.snippet && <p className="text-xs text-gray-600 whitespace-pre-wrap truncate">{w.snippet}</p>}
+                        {w.title && <p className={`text-xs font-semibold ${titleColor}`}>{w.title}</p>}
+                        {w.snippet && <p className="text-xs text-white/65 whitespace-pre-wrap truncate">{w.snippet}</p>}
                       </div>
                     )}
-                    {d.log?.notes && <p className="text-xs text-gray-500 mt-1 italic">{d.log.notes}</p>}
+                    {d.log?.notes && <p className="text-xs text-white/55 mt-1 italic">{d.log.notes}</p>}
                   </button>
                 );
               };
@@ -462,23 +525,23 @@ export default function TrackingDashboardPage() {
               return (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-500">Training</p>
-                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                    <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50">Training</p>
+                    <div className="flex rounded-lg border border-white/15 overflow-hidden">
                       <button
                         onClick={() => setProfileViewMode('week')}
-                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'week' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>
+                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'week' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/15'}`}>
                         Week
                       </button>
                       <button
                         onClick={() => setProfileViewMode('month')}
-                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'month' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600'}`}>
+                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'month' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/15'}`}>
                         Month
                       </button>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-end mb-2">
-                    <span className="text-xs font-bold text-blue-700 bg-blue-50 rounded-full px-2.5 py-0.5">
+                    <span className="text-xs font-bold text-blue-200 bg-blue-500/20 border border-blue-400/30 rounded-full px-2.5 py-0.5">
                       {volume > 0 ? `${volume.toFixed(1)} km ${volumeLabel}` : 'No km logged'}
                     </span>
                   </div>
@@ -486,11 +549,11 @@ export default function TrackingDashboardPage() {
                   {profileViewMode === 'week' ? (
                     <>
                       <div className="flex items-center justify-between mb-2">
-                        <button onClick={() => setProfileWeekDate(subWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&larr;</button>
-                        <span className="text-xs font-medium">
+                        <button onClick={() => setProfileWeekDate(subWeeks(profileWeekDate, 1))} className="text-blue-300 hover:text-blue-200 text-xs">&larr;</button>
+                        <span className="text-xs font-medium text-white/80">
                           {format(startOfWeek(profileWeekDate, { weekStartsOn: 0 }), 'MMM d')} - {format(addDays(startOfWeek(profileWeekDate, { weekStartsOn: 0 }), 6), 'MMM d')}
                         </span>
-                        <button onClick={() => setProfileWeekDate(addWeeks(profileWeekDate, 1))} className="text-blue-600 text-xs">&rarr;</button>
+                        <button onClick={() => setProfileWeekDate(addWeeks(profileWeekDate, 1))} className="text-blue-300 hover:text-blue-200 text-xs">&rarr;</button>
                       </div>
                       {profileWeek ? (
                         <div className="space-y-1.5">{profileWeek.days.map(renderDay)}</div>
@@ -499,88 +562,91 @@ export default function TrackingDashboardPage() {
                   ) : (
                     <>
                       <div className="flex items-center justify-between mb-2">
-                        <button onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))} className="text-blue-600 text-xs">&larr;</button>
-                        <span className="text-xs font-medium">{format(profileMonthDate, 'MMMM yyyy')}</span>
-                        <button onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))} className="text-blue-600 text-xs">&rarr;</button>
+                        <button onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))} className="text-blue-300 hover:text-blue-200 text-xs">&larr;</button>
+                        <span className="text-xs font-medium text-white/80">{format(profileMonthDate, 'MMMM yyyy')}</span>
+                        <button onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))} className="text-blue-300 hover:text-blue-200 text-xs">&rarr;</button>
                       </div>
-                      {profileMonth ? (
-                        <div className="max-h-[60vh] overflow-y-auto">
-                          <div className="flex items-center justify-end mb-1">
-                            <button
-                              onClick={() => setMonthExpanded(true)}
-                              className="text-xs text-blue-600 hover:underline font-medium"
-                              title="Open larger view"
+                      {profileMonth ? (() => {
+                        const TYPE_ABBR = {
+                          simple:    { abbr: 'Oth',  color: 'bg-gray-100 text-gray-700' },
+                          easy:      { abbr: 'Easy', color: 'bg-emerald-100 text-emerald-700' },
+                          rest:      { abbr: 'Rest', color: 'bg-slate-100 text-slate-700' },
+                          tempo:     { abbr: 'Tem',  color: 'bg-orange-100 text-orange-700' },
+                          long:      { abbr: 'Long', color: 'bg-purple-100 text-purple-700' },
+                          intervals: { abbr: 'Int',  color: 'bg-red-100 text-red-700' },
+                          fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
+                          race:      { abbr: 'Race', color: 'bg-indigo-100 text-indigo-700' },
+                        };
+                        const todayStr = format(new Date(), 'yyyy-MM-dd');
+                        return (
+                          <div>
+                            <NoiseBackground
+                              containerClassName="mb-4 w-full rounded-xl p-[2px]"
+                              gradientColors={['rgb(37,99,235)', 'rgb(99,102,241)', 'rgb(139,92,246)']}
                             >
-                              ⛶ Expand
-                            </button>
+                              <button
+                                onClick={() => setMonthExpanded(true)}
+                                className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
+                              >
+                                ⛶ Expand monthly view
+                              </button>
+                            </NoiseBackground>
+                            <div className="space-y-4">
+                              {profileMonth.weeks.map((week, wi) => (
+                                <div key={wi}>
+                                  <p className="text-xs text-white/45 mb-1 font-medium">
+                                    {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
+                                  </p>
+                                  <div className="grid grid-cols-7 gap-1">
+                                    {week.map((d) => {
+                                      const dayDate = new Date(d.date + 'T00:00');
+                                      const inMonth = isSameMonth(dayDate, profileMonthDate);
+                                      const isToday = d.date === todayStr;
+                                      const hasLog = d.log;
+                                      const hasWorkout = d.group_workout || d.target;
+                                      const activeType = d.target?.override_group
+                                        ? d.target?.workout_type
+                                        : d.group_workout?.workout_type;
+                                      const typeBadge = activeType ? TYPE_ABBR[activeType] : null;
+                                      const isRace = activeType === 'race';
+                                      return (
+                                        <button
+                                          key={d.date}
+                                          onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
+                                          className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
+                                            !inMonth ? 'opacity-40' : ''
+                                          } ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' :
+                                             isToday ? 'border border-blue-400 bg-blue-50' : 'border border-gray-200 bg-white'}`}
+                                        >
+                                          {isRace && (
+                                            <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
+                                          )}
+                                          {typeBadge && !isRace && (
+                                            <span className={`absolute top-0.5 right-0.5 text-[8px] px-1 py-px rounded font-semibold leading-none ${typeBadge.color}`}>
+                                              {typeBadge.abbr}
+                                            </span>
+                                          )}
+                                          <span className="font-semibold text-gray-900">{format(dayDate, 'd')}</span>
+                                          <span className="text-[10px] text-gray-400">{format(dayDate, 'EEE')}</span>
+                                          <div className="flex gap-0.5 mt-1">
+                                            {hasWorkout && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
+                                            {hasLog && (
+                                              <span className={`w-1.5 h-1.5 rounded-full ${
+                                                (hasLog.status || (hasLog.completed ? 'completed' : 'missed')) === 'completed' ? 'bg-green-400' :
+                                                (hasLog.status || (hasLog.completed ? 'completed' : 'missed')) === 'partial' ? 'bg-yellow-400' : 'bg-red-400'
+                                              }`} />
+                                            )}
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div className="grid grid-cols-7 gap-0.5 mb-1 text-[10px] text-gray-400 text-center font-medium">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
-                          </div>
-                          <div className="space-y-0.5">
-                            {profileMonth.weeks.map((week, wi) => (
-                              <div key={wi} className="grid grid-cols-7 gap-0.5">
-                                {week.map(d => {
-                                  const dayDate = new Date(d.date + 'T00:00');
-                                  const inMonth = isSameMonth(dayDate, profileMonthDate);
-                                  const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
-                                  const bg = !inMonth ? 'bg-transparent' :
-                                    status === 'completed' ? 'bg-green-100 hover:bg-green-200' :
-                                    status === 'partial' ? 'bg-yellow-100 hover:bg-yellow-200' :
-                                    status === 'missed' ? 'bg-red-100 hover:bg-red-200' :
-                                    'bg-gray-50 hover:bg-gray-100';
-                                  const icon = status === 'completed' ? 'V' : status === 'partial' ? '~' : status === 'missed' ? 'X' : '';
-                                  const hasPersonal = d.target?.note;
-                                  if (!inMonth) {
-                                    return <div key={d.date} className="aspect-square" />;
-                                  }
-                                  const tooltipText = d.target?.override_group
-                                    ? d.target?.note
-                                    : (d.group_workout?.title || d.group_workout?.content || d.group_workout?.main_session || '');
-                                  const TYPE_ABBR = {
-                                    simple:    { abbr: 'Oth',  color: 'bg-gray-200 text-gray-700' },
-                                    easy:      { abbr: 'Easy', color: 'bg-emerald-200 text-emerald-800' },
-                                    rest:      { abbr: 'Rest', color: 'bg-slate-200 text-slate-800' },
-                                    tempo:     { abbr: 'Tem',  color: 'bg-orange-200 text-orange-800' },
-                                    long:      { abbr: 'Long', color: 'bg-purple-200 text-purple-800' },
-                                    intervals: { abbr: 'Int',  color: 'bg-red-200 text-red-800' },
-                                    fartlek:   { abbr: 'Fart', color: 'bg-pink-200 text-pink-800' },
-                                    race:      { abbr: 'Race', color: 'bg-indigo-200 text-indigo-800' },
-                                  };
-                                  const activeType = d.target?.override_group
-                                    ? d.target?.workout_type
-                                    : d.group_workout?.workout_type;
-                                  const typeBadge = activeType ? TYPE_ABBR[activeType] : null;
-                                  const cellIsRace = activeType === 'race';
-                                  return (
-                                    <button
-                                      key={d.date}
-                                      onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                                      className={`aspect-square rounded-md ${bg} relative flex flex-col items-center justify-center transition ${cellIsRace ? 'ring-2 ring-indigo-500' : ''}`}
-                                      title={tooltipText || ''}
-                                    >
-                                      {cellIsRace && (
-                                        <span className="absolute top-0 left-0 text-[10px] leading-none">🏁</span>
-                                      )}
-                                      {typeBadge && !cellIsRace && (
-                                        <span className={`absolute top-0 left-0 text-[7px] px-0.5 rounded-br font-bold leading-none ${typeBadge.color}`}>
-                                          {typeBadge.abbr}
-                                        </span>
-                                      )}
-                                      <span className="text-[10px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
-                                      {icon && <span className="text-xs font-bold leading-none mt-0.5">{icon}</span>}
-                                      {hasPersonal && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />}
-                                      {d.log?.distance_km > 0 && (
-                                        <span className="text-[9px] text-blue-700 font-semibold leading-none mt-0.5">{d.log.distance_km.toFixed(1)}k</span>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : <Spinner />}
+                        );
+                      })() : <Spinner />}
                     </>
                   )}
                 </div>
@@ -589,18 +655,20 @@ export default function TrackingDashboardPage() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-500">Personal Bests</p>
-                <button onClick={openPBForm} className="text-xs text-blue-600 hover:underline font-medium">+ Add PB</button>
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50">Personal Bests</p>
+                <button onClick={openPBForm} className="text-xs text-blue-300 hover:text-blue-200 hover:underline font-medium">+ Add PB</button>
               </div>
-              {showPBForm && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-2 space-y-3">
-                  <div className="flex rounded-lg border border-yellow-300 overflow-hidden">
+              {showPBForm && (() => {
+                const inputCls = 'w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-yellow-400';
+                return (
+                <div className="bg-yellow-500/10 border border-yellow-400/30 rounded-lg p-3 mb-2 space-y-3">
+                  <div className="flex rounded-lg border border-yellow-400/40 overflow-hidden">
                     <button onClick={() => setPbMode('manual')}
-                      className={`flex-1 py-1.5 text-xs font-medium transition ${pbMode === 'manual' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600'}`}>
+                      className={`flex-1 py-1.5 text-xs font-medium transition ${pbMode === 'manual' ? 'bg-yellow-500 text-white' : 'bg-white/5 text-white/65 hover:bg-white/10'}`}>
                       Manual Entry
                     </button>
                     <button onClick={() => setPbMode('race')}
-                      className={`flex-1 py-1.5 text-xs font-medium transition ${pbMode === 'race' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600'}`}>
+                      className={`flex-1 py-1.5 text-xs font-medium transition ${pbMode === 'race' ? 'bg-yellow-500 text-white' : 'bg-white/5 text-white/65 hover:bg-white/10'}`}>
                       From Race
                     </button>
                   </div>
@@ -608,31 +676,31 @@ export default function TrackingDashboardPage() {
                   {pbMode === 'manual' ? (
                     <>
                       <select value={pbForm.distance_m} onChange={(e) => setPbForm({ ...pbForm, distance_m: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select distance</option>
-                        <option value="1500">1,500m</option>
-                        <option value="3000">3,000m</option>
-                        <option value="5000">5,000m</option>
-                        <option value="10000">10,000m</option>
-                        <option value="21100">Half Marathon</option>
-                        <option value="42200">Marathon</option>
+                        className={inputCls}>
+                        <option value="" className="bg-blue-950">Select distance</option>
+                        <option value="1500" className="bg-blue-950">1,500m</option>
+                        <option value="3000" className="bg-blue-950">3,000m</option>
+                        <option value="5000" className="bg-blue-950">5,000m</option>
+                        <option value="10000" className="bg-blue-950">10,000m</option>
+                        <option value="21100" className="bg-blue-950">Half Marathon</option>
+                        <option value="42200" className="bg-blue-950">Marathon</option>
                       </select>
                       <input placeholder="Competition name (optional)" value={pbForm.competition_name}
                         onChange={(e) => setPbForm({ ...pbForm, competition_name: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                        className={inputCls} />
                     </>
                   ) : (
                     <>
                       <select onChange={(e) => handleSelectRace(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-2 text-sm">
-                        <option value="">Select race</option>
-                        {pbRaces.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.race_date})</option>)}
+                        className={inputCls}>
+                        <option value="" className="bg-blue-950">Select race</option>
+                        {pbRaces.map((r) => <option key={r.id} value={r.id} className="bg-blue-950">{r.name} ({r.race_date})</option>)}
                       </select>
                       {pbHeats.length > 0 && (
                         <select onChange={(e) => setPbSelectedHeat(pbHeats.find(h => h.id === parseInt(e.target.value)) || null)}
-                          className="w-full border rounded-lg px-3 py-2 text-sm">
-                          <option value="">Select heat</option>
-                          {pbHeats.map((h) => <option key={h.id} value={h.id}>{h.label} ({h.distance_m}m)</option>)}
+                          className={inputCls}>
+                          <option value="" className="bg-blue-950">Select heat</option>
+                          {pbHeats.map((h) => <option key={h.id} value={h.id} className="bg-blue-950">{h.label} ({h.distance_m}m)</option>)}
                         </select>
                       )}
                     </>
@@ -640,45 +708,46 @@ export default function TrackingDashboardPage() {
 
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <label className="text-xs text-gray-500">Min</label>
+                      <label className="text-xs text-white/55">Min</label>
                       <input type="number" min="0" placeholder="mm" value={pbForm.time_min}
                         onChange={(e) => setPbForm({ ...pbForm, time_min: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                        className={inputCls} />
                     </div>
                     <div className="flex-1">
-                      <label className="text-xs text-gray-500">Sec</label>
+                      <label className="text-xs text-white/55">Sec</label>
                       <input type="number" min="0" max="59" placeholder="ss" value={pbForm.time_sec}
                         onChange={(e) => setPbForm({ ...pbForm, time_sec: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2 text-sm" />
+                        className={inputCls} />
                     </div>
                   </div>
 
                   <div className="flex gap-2">
                     <button onClick={handleSavePB} disabled={pbSaving}
-                      className="flex-1 bg-yellow-500 text-white rounded-lg py-2 text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
+                      className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50 transition">
                       {pbSaving ? 'Saving...' : 'Save PB'}
                     </button>
                     <button onClick={() => setShowPBForm(false)}
-                      className="flex-1 border border-gray-200 rounded-lg py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                      className="flex-1 bg-white/10 hover:bg-white/15 border border-white/20 text-white/80 rounded-lg py-2 text-sm font-medium transition">
                       Cancel
                     </button>
                   </div>
                 </div>
-              )}
+                );
+              })()}
               {profile.personal_bests?.length > 0 ? (
                 <div className="space-y-1.5">
                   {profile.personal_bests.map((pb) => (
-                    <div key={pb.distance_m} className="flex items-center justify-between bg-yellow-50 rounded-lg px-3 py-2 text-sm">
-                      <span className="font-semibold text-yellow-800">{pb.distance_display}</span>
+                    <div key={pb.distance_m} className="flex items-center justify-between bg-yellow-500/15 border border-yellow-400/30 rounded-lg px-3 py-2 text-sm">
+                      <span className="font-semibold text-yellow-200">{pb.distance_display}</span>
                       <div className="flex items-center gap-2">
                         <div className="text-right">
-                          <span className="font-bold text-yellow-900">{pb.time_display}</span>
-                          {pb.race_name && <span className="text-xs text-gray-500 ml-2">{pb.race_name}</span>}
+                          <span className="font-bold text-yellow-100">{pb.time_display}</span>
+                          {pb.race_name && <span className="text-xs text-white/55 ml-2">{pb.race_name}</span>}
                         </div>
                         {pb.result_id && (
                           <div className="flex gap-1">
-                            <button onClick={() => openEditResult(pb)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                            <button onClick={() => handleDeleteResult(pb)} className="text-xs text-red-500 hover:underline">×</button>
+                            <button onClick={() => openEditResult(pb)} className="text-xs text-blue-300 hover:text-blue-200 hover:underline">Edit</button>
+                            <button onClick={() => handleDeleteResult(pb)} className="text-xs text-red-300 hover:text-red-200 hover:underline">×</button>
                           </div>
                         )}
                       </div>
@@ -686,26 +755,26 @@ export default function TrackingDashboardPage() {
                   ))}
                 </div>
               ) : !showPBForm && (
-                <p className="text-xs text-gray-400 text-center py-2">No personal bests yet</p>
+                <p className="text-xs text-white/40 text-center py-2">No personal bests yet</p>
               )}
             </div>
 
             {profile.race_history?.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Race History</p>
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50 mb-2">Race History</p>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
                   {profile.race_history.map((r, i) => (
-                    <div key={i} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                    <div key={i} className="flex items-center justify-between bg-white/10 border border-white/15 rounded-lg px-3 py-2 text-sm">
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-gray-800 truncate">{r.race_name || (r.is_manual ? '—' : 'Race')}</p>
-                        <p className="text-xs text-gray-500">{format(new Date(r.race_date + 'T00:00'), 'MMM d, yyyy')} · {r.distance_display}</p>
+                        <p className="font-medium text-white truncate">{r.race_name || (r.is_manual ? '—' : 'Race')}</p>
+                        <p className="text-xs text-white/55">{format(new Date(r.race_date + 'T00:00'), 'MMM d, yyyy')} · {r.distance_display}</p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-700">{r.time_display}</span>
+                        <span className="font-semibold text-white/85">{r.time_display}</span>
                         {r.is_manual && r.result_id && (
                           <div className="flex gap-1">
-                            <button onClick={() => openEditResult(r)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                            <button onClick={() => handleDeleteResult(r)} className="text-xs text-red-500 hover:underline">×</button>
+                            <button onClick={() => openEditResult(r)} className="text-xs text-blue-300 hover:text-blue-200 hover:underline">Edit</button>
+                            <button onClick={() => handleDeleteResult(r)} className="text-xs text-red-300 hover:text-red-200 hover:underline">×</button>
                           </div>
                         )}
                       </div>
@@ -717,14 +786,14 @@ export default function TrackingDashboardPage() {
 
             {profile.recent_logs?.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Recent Activity</p>
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50 mb-2">Recent Activity</p>
                 <div className="space-y-1.5 max-h-40 overflow-y-auto">
                   {profile.recent_logs.map((log) => (
-                    <div key={log.date} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm ${log.completed ? 'bg-green-50' : 'bg-red-50'}`}>
-                      <span className="text-gray-700">{format(new Date(log.date + 'T00:00'), 'EEE, MMM d')}</span>
+                    <div key={log.date} className={`flex items-center justify-between rounded-lg px-3 py-2 text-sm border ${log.completed ? 'bg-green-500/15 border-green-400/30' : 'bg-red-500/15 border-red-400/30'}`}>
+                      <span className="text-white/80">{format(new Date(log.date + 'T00:00'), 'EEE, MMM d')}</span>
                       <div className="flex items-center gap-2">
-                        {log.notes && <span className="text-xs text-gray-500 truncate max-w-[120px]">{log.notes}</span>}
-                        <span className={`font-medium ${log.completed ? 'text-green-700' : 'text-red-700'}`}>
+                        {log.notes && <span className="text-xs text-white/55 truncate max-w-[120px]">{log.notes}</span>}
+                        <span className={`font-medium ${log.completed ? 'text-green-200' : 'text-red-200'}`}>
                           {log.completed ? 'V' : 'X'}
                         </span>
                       </div>
@@ -744,10 +813,11 @@ export default function TrackingDashboardPage() {
       </Modal>
 
       <Modal open={!!selected} onClose={() => setSelected(null)}
-        title={selected ? `${selected.athlete.full_name} — ${format(new Date(selected.day.date + 'T00:00'), 'EEE, MMM d')}` : ''}
+        title={selected ? format(new Date(selected.day.date + 'T00:00'), 'EEEE, MMM d') : ''}
         panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
         {selected && (
           <div className="space-y-4">
+            <p className="text-xs text-white/60 -mt-2">{selected.athlete.full_name}</p>
             {/* Group workout section */}
             <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-lg p-3">
               <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50 mb-1.5">
@@ -946,40 +1016,61 @@ export default function TrackingDashboardPage() {
       </Modal>
 
       {/* Expanded month view */}
-      <Modal open={monthExpanded} onClose={() => setMonthExpanded(false)}
-        title={profile ? `${profile.full_name} — ${format(profileMonthDate, 'MMMM yyyy')}` : 'Month view'}>
+      <Modal
+        open={monthExpanded}
+        onClose={() => setMonthExpanded(false)}
+        title="Training log"
+        fullScreen
+        panelClassName="bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950"
+      >
         {profileMonth && profile && (
           <div>
+            <p className="text-xs text-white/60 -mt-2 mb-3">{profile.full_name}</p>
+
             {/* Zoom controls */}
             <div className="flex items-center justify-end gap-2 mb-2">
-              <span className="text-xs text-gray-500">Zoom</span>
+              <span className="text-xs text-white/60">Zoom</span>
               <button
                 onClick={() => setExpandedZoom(z => Math.max(0.3, +(z - 0.05).toFixed(2)))}
                 disabled={expandedZoom <= 0.3}
-                className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+                className="w-7 h-7 rounded border border-white/20 bg-white/5 text-white text-sm font-bold hover:bg-white/15 disabled:opacity-30 transition"
               >−</button>
-              <span className="text-xs font-mono w-10 text-center">{Math.round(expandedZoom * 100)}%</span>
+              <span className="text-xs font-mono w-10 text-center text-white/85">{Math.round(expandedZoom * 100)}%</span>
               <button
                 onClick={() => setExpandedZoom(z => Math.min(1.8, +(z + 0.05).toFixed(2)))}
                 disabled={expandedZoom >= 1.8}
-                className="w-7 h-7 rounded border border-gray-200 text-sm font-bold hover:bg-gray-50 disabled:opacity-30"
+                className="w-7 h-7 rounded border border-white/20 bg-white/5 text-white text-sm font-bold hover:bg-white/15 disabled:opacity-30 transition"
               >+</button>
               <button
                 onClick={() => setExpandedZoom(1)}
-                className="text-xs text-blue-600 hover:underline ml-1"
+                className="text-xs text-blue-300 hover:text-blue-200 hover:underline ml-1 transition"
               >Reset</button>
             </div>
 
-            {/* Month navigation at the top */}
+            {/* Month + year navigation at the top */}
             <div className="flex items-center justify-between mb-3">
-              <button onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">&larr; Prev</button>
-              <span className="text-sm font-semibold">{format(profileMonthDate, 'MMMM yyyy')}</span>
-              <button onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))} className="text-blue-600 text-sm">Next &rarr;</button>
+              <button
+                onClick={() => setProfileMonthDate(subMonths(profileMonthDate, 1))}
+                className="text-blue-300 hover:text-blue-200 text-sm transition"
+              >&larr; Prev</button>
+              <YearMonthLabel
+                currentDate={profileMonthDate}
+                onYearChange={(y) => setProfileMonthDate(new Date(y, profileMonthDate.getMonth(), 1))}
+                className="text-sm font-semibold text-white"
+              />
+              <button
+                onClick={() => setProfileMonthDate(addMonths(profileMonthDate, 1))}
+                className="text-blue-300 hover:text-blue-200 text-sm transition"
+              >Next &rarr;</button>
             </div>
 
-          <div className="overflow-x-auto -mx-2">
-            <div className="px-2" style={{ minWidth: `${Math.round(960 * expandedZoom)}px` }}>
-              <div className="grid gap-1 mb-1 text-xs text-gray-500 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
+          <div
+            ref={expandedScrollRef}
+            className="overflow-x-auto -mx-2"
+            style={{ touchAction: 'pan-x pan-y' }}
+          >
+            <div className="px-2" style={{ minWidth: '960px', zoom: expandedZoom }}>
+              <div className="grid gap-1 mb-1 text-xs text-white/60 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => <div key={i}>{d}</div>)}
                 <div className="text-right pr-1">Week</div>
               </div>
@@ -1002,13 +1093,12 @@ export default function TrackingDashboardPage() {
                       const dayDate = new Date(d.date + 'T00:00');
                       const inMonth = isSameMonth(dayDate, profileMonthDate);
                       const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
-                      const bg = !inMonth ? 'bg-transparent border-transparent' :
-                        status === 'completed' ? 'bg-green-50 border-green-300 hover:bg-green-100' :
-                        status === 'partial' ? 'bg-yellow-50 border-yellow-300 hover:bg-yellow-100' :
-                        status === 'missed' ? 'bg-red-50 border-red-300 hover:bg-red-100' :
-                        'bg-white border-gray-200 hover:bg-gray-50';
-                      const cellHeight = Math.round(150 * expandedZoom);
-                      if (!inMonth) return <div key={d.date} style={{ minHeight: `${cellHeight}px` }} />;
+                      const bg = !inMonth ? 'bg-white/5 border-white/10 hover:bg-white/10 opacity-60' :
+                        status === 'completed' ? 'bg-green-500/40 border-green-400/50 hover:bg-green-500/50' :
+                        status === 'partial' ? 'bg-yellow-500/35 border-yellow-400/45 hover:bg-yellow-500/45' :
+                        status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
+                        'bg-white/20 border-white/30 hover:bg-white/30';
+                      const cellHeight = 150;
                       const personalOverride = d.target?.override_group;
                       const t = d.target;
                       const workoutTitle = personalOverride
@@ -1043,7 +1133,7 @@ export default function TrackingDashboardPage() {
                         >
                           {/* Date row + type chip */}
                           <div className="flex items-start justify-between px-2 pt-1.5">
-                            <span className="text-[11px] text-gray-500 leading-none">{format(dayDate, 'd')}</span>
+                            <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}</span>
                             {typeChip && (
                               <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${typeChip.color}`}>
                                 {typeChip.label}
@@ -1054,37 +1144,39 @@ export default function TrackingDashboardPage() {
                           {/* Top half: planned workout */}
                           <div className="flex-1 px-2 py-1 min-h-0">
                             {workoutTitle ? (
-                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-700' : 'text-gray-800'}`}>
+                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-200' : 'text-white'} [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]`}>
                                 {cellIsRace && '🏁 '}{workoutTitle}
                               </p>
                             ) : cellIsRace ? (
-                              <p className="text-xs font-semibold leading-tight text-indigo-700">🏁 Race</p>
+                              <p className="text-xs font-semibold leading-tight text-indigo-200">🏁 Race</p>
                             ) : null}
                             {workoutBody && (
-                              <p className="text-[10px] text-gray-500 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">
+                              <p className="text-[10px] text-white/65 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">
                                 {workoutBody}
                               </p>
                             )}
                           </div>
 
                           {/* Divider */}
-                          <div className="border-t border-dashed border-gray-300/70 mx-1" />
+                          <div className="border-t border-dashed border-white/25 mx-1" />
 
                           {/* Bottom half: athlete report */}
-                          <div className="flex-1 px-2 py-1 min-h-0">
+                          <div className="flex-1 flex flex-col px-2 py-1 min-h-0">
                             {d.log ? (
                               <>
-                                {d.log.notes && (
-                                  <p className="text-[10px] text-gray-700 leading-tight line-clamp-2 whitespace-pre-wrap">
+                                {d.log.notes ? (
+                                  <p className="text-[10px] text-white/80 leading-tight line-clamp-2 whitespace-pre-wrap flex-1">
                                     {d.log.notes}
                                   </p>
-                                )}
+                                ) : !d.log.distance_km ? (
+                                  <p className="text-[10px] text-white/40 italic flex-1">No report</p>
+                                ) : <div className="flex-1" />}
                                 {d.log.distance_km > 0 && (
-                                  <p className="text-xs text-blue-700 font-bold mt-0.5">{d.log.distance_km.toFixed(1)}k</p>
+                                  <p className="text-xs text-blue-200 font-bold leading-none mt-1 self-end">{d.log.distance_km.toFixed(1)} km</p>
                                 )}
                               </>
                             ) : (
-                              <p className="text-[10px] text-gray-300 italic">No report</p>
+                              <p className="text-[10px] text-white/40 italic">No report</p>
                             )}
                           </div>
 
@@ -1094,11 +1186,11 @@ export default function TrackingDashboardPage() {
                     })}
                     {/* Week stats column */}
                     <div className="flex flex-col items-end justify-center text-right px-1 text-xs">
-                      <div className="font-bold text-blue-700">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      <div className="font-bold text-blue-200">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
                       <div className="flex gap-1.5 mt-1 text-[11px] font-mono">
-                        <span className="text-green-700">V{wkDone}</span>
-                        <span className="text-yellow-700">~{wkPart}</span>
-                        <span className="text-red-700">X{wkMiss}</span>
+                        <span className="text-green-300">V{wkDone}</span>
+                        <span className="text-yellow-300">~{wkPart}</span>
+                        <span className="text-red-300">X{wkMiss}</span>
                       </div>
                     </div>
                   </div>
@@ -1121,14 +1213,14 @@ export default function TrackingDashboardPage() {
                   }
                 }
                 return (
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-                    <span className="text-sm font-semibold text-gray-700">{format(profileMonthDate, 'MMMM')} totals</span>
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/15">
+                    <span className="text-sm font-semibold text-white/85">{format(profileMonthDate, 'MMMM')} totals</span>
                     <div className="flex items-center gap-4 text-sm">
-                      <span className="font-bold text-blue-700">{mKm.toFixed(1)} km</span>
+                      <span className="font-bold text-blue-200">{mKm.toFixed(1)} km</span>
                       <div className="flex gap-2 text-xs font-mono">
-                        <span className="text-green-700">V{mDone}</span>
-                        <span className="text-yellow-700">~{mPart}</span>
-                        <span className="text-red-700">X{mMiss}</span>
+                        <span className="text-green-300">V{mDone}</span>
+                        <span className="text-yellow-300">~{mPart}</span>
+                        <span className="text-red-300">X{mMiss}</span>
                       </div>
                     </div>
                   </div>
@@ -1200,6 +1292,56 @@ function StravaActivityRow({ activity }) {
       <span className="bg-orange-400/20 text-orange-300 px-1.5 py-0.5 rounded font-medium shrink-0">{activity.type}</span>
       <span className="text-white/70 font-mono shrink-0">{km} km</span>
       <span className="text-white/50 font-mono shrink-0">{mins}:{secs}</span>
+    </div>
+  );
+}
+
+function YearMonthLabel({ currentDate, onYearChange, className = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const currentYear = currentDate.getFullYear();
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: 13 }, (_, i) => thisYear - 8 + i);
+
+  return (
+    <div className="relative" ref={ref}>
+      <h2 className={className}>
+        {format(currentDate, 'MMMM')}{' '}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="hover:underline focus:outline-none focus:underline transition"
+          title="Switch year"
+        >
+          {format(currentDate, 'yyyy')}
+        </button>
+      </h2>
+      {open && (
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-blue-950 border border-white/20 rounded-lg shadow-2xl py-1 w-24 max-h-72 overflow-y-auto">
+          {years.map((y) => (
+            <button
+              key={y}
+              onClick={() => { onYearChange(y); setOpen(false); }}
+              className={`block w-full px-3 py-1.5 text-sm text-center transition ${
+                y === currentYear
+                  ? 'bg-blue-500 text-white font-semibold'
+                  : 'text-white/75 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -59,29 +59,30 @@ export default function AdminPendingPage() {
 
   return (
     <div className="pb-8">
-      <h2 className="text-xl font-bold mb-1">Pending review</h2>
-      <p className="text-xs text-gray-500 mb-5">
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <h2 className="text-xl font-bold mb-1 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Pending review</h2>
+      <p className="text-xs text-white/65 mb-5">
         Approve coach submissions before they go live in the race archive and Hall of Fame.
       </p>
 
       {empty ? (
-        <div className="text-center py-12 text-sm text-gray-500">
+        <div className="text-center py-12 text-sm text-white/60">
           No pending items right now.
         </div>
       ) : (
         <>
           {pending.races.length > 0 && (
             <section className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                Races <span className="text-gray-400">({pending.races.length})</span>
+              <h3 className="text-sm font-semibold text-white/85 mb-2">
+                Races <span className="text-white/50">({pending.races.length})</span>
               </h3>
               <div className="space-y-2">
                 {pending.races.map((r) => (
-                  <div key={r.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div key={r.id} className="bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{r.name}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <p className="font-semibold text-white truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{r.name}</p>
+                        <p className="text-xs text-white/65 mt-0.5">
                           {format(new Date(r.race_date + 'T00:00'), 'MMM d, yyyy')} · proposed by {r.proposer_name}
                         </p>
                       </div>
@@ -89,12 +90,12 @@ export default function AdminPendingPage() {
                         <button
                           onClick={() => setRejectTarget({ kind: 'race', item: r, note: '' })}
                           disabled={acting}
-                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          className="text-xs px-3 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 disabled:opacity-50 transition"
                         >Reject</button>
                         <button
                           onClick={() => handleApprove('race', r)}
                           disabled={acting}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                          className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-50 transition"
                         >Approve</button>
                       </div>
                     </div>
@@ -106,19 +107,19 @@ export default function AdminPendingPage() {
 
           {pending.results.length > 0 && (
             <section>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                Results <span className="text-gray-400">({pending.results.length})</span>
+              <h3 className="text-sm font-semibold text-white/85 mb-2">
+                Results <span className="text-white/50">({pending.results.length})</span>
               </h3>
               <div className="space-y-2">
                 {pending.results.map((res) => (
-                  <div key={res.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                  <div key={res.id} className="bg-white/20 backdrop-blur-sm rounded-xl border border-white/30 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{res.athlete_name}</p>
-                        <p className="text-sm text-gray-700 font-mono mt-0.5">
+                        <p className="font-semibold text-white truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{res.athlete_name}</p>
+                        <p className="text-sm text-white/90 font-mono mt-0.5">
                           {res.time_display} · {res.distance_m}m
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-white/65 mt-1">
                           {res.race_name} · {res.heat_label}
                           {res.proposer_name && <> · proposed by {res.proposer_name}</>}
                         </p>
@@ -127,12 +128,12 @@ export default function AdminPendingPage() {
                         <button
                           onClick={() => setRejectTarget({ kind: 'result', item: res, note: '' })}
                           disabled={acting}
-                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                          className="text-xs px-3 py-1.5 rounded-lg border border-white/25 text-white/80 hover:bg-white/10 disabled:opacity-50 transition"
                         >Reject</button>
                         <button
                           onClick={() => handleApprove('result', res)}
                           disabled={acting}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                          className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500 disabled:opacity-50 transition"
                         >Approve</button>
                       </div>
                     </div>

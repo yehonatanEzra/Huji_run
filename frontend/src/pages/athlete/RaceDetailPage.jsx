@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getRace, getRaceResults, getRaceLeaderboard, addHeat, addResult, updateResult, deleteResult, deleteHeat, deleteRace, updateRace } from '../../api/races';
+import { getRace, getRaceResults, getRaceLeaderboard, addHeat, addResult, updateResult, deleteResult, deleteHeat, renameHeat, deleteRace, updateRace } from '../../api/races';
 import { searchAthletes } from '../../api/coach';
 import Tabs from '../../components/ui/Tabs';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import PageBackground from '../../components/PageBackground';
 import UpcomingRaceView from './UpcomingRaceView';
 
 const DISTANCE_LABELS = {
@@ -46,6 +47,8 @@ export default function RaceDetailPage() {
   const [saving, setSaving] = useState(false);
 
   const [addingHeat, setAddingHeat] = useState(false);
+  // { id, label } when an admin is renaming a heat; null otherwise.
+  const [renamingHeat, setRenamingHeat] = useState(null);
   const [newHeatDist, setNewHeatDist] = useState(5000);
   const [newHeatLabel, setNewHeatLabel] = useState('');
 
@@ -112,6 +115,19 @@ export default function RaceDetailPage() {
       fetchResults();
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
+  };
+
+  const handleRenameHeat = async () => {
+    if (!renamingHeat || !renamingHeat.label.trim()) return;
+    setSaving(true);
+    try {
+      await renameHeat(raceId, renamingHeat.id, renamingHeat.label.trim());
+      setRenamingHeat(null);
+      fetchRace();
+      fetchResults();
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not rename heat');
+    } finally { setSaving(false); }
   };
 
   const handleDeleteHeat = async (heatId) => {
@@ -218,20 +234,21 @@ export default function RaceDetailPage() {
 
   return (
     <div>
+      <PageBackground src="/bg-races.jpg" />
       <div className="flex items-start justify-between mb-1">
         <div>
-          <h2 className="text-xl font-bold">{race.name}</h2>
-          <p className="text-sm text-gray-500 mb-4">{race.race_date}</p>
+          <h2 className="text-xl font-bold text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.7)]">{race.name}</h2>
+          <p className="text-sm text-white/75 mb-4 [text-shadow:0_1px_4px_rgba(0,0,0,0.6)]">{race.race_date}</p>
         </div>
         {canEditRace && (
           <div className="flex gap-2">
             <button
               onClick={() => { setEditName(race.name); setEditDate(race.race_date); setEditing(true); }}
-              className="text-blue-600 text-sm font-medium"
+              className="text-blue-200 hover:text-white text-sm font-medium transition [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]"
             >
               Edit
             </button>
-            <button onClick={handleDeleteRace} className="text-red-600 text-sm font-medium">
+            <button onClick={handleDeleteRace} className="text-red-300 hover:text-red-200 text-sm font-medium transition [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">
               Delete
             </button>
           </div>
@@ -240,8 +257,8 @@ export default function RaceDetailPage() {
 
       {/* Moderation banner */}
       {race.moderation_status === 'pending' && (
-        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mb-4">
-          <p className="text-xs text-amber-900">
+        <div className="bg-amber-500/20 backdrop-blur-sm border border-amber-400/40 rounded-lg p-3 mb-4">
+          <p className="text-xs text-amber-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
             <span className="font-semibold">Pending review.</span>{' '}
             {isAdmin
               ? 'This race was proposed by a coach. Approve or reject it from the Review tab.'
@@ -250,8 +267,8 @@ export default function RaceDetailPage() {
         </div>
       )}
       {race.moderation_status === 'rejected' && (
-        <div className="bg-red-50 border border-red-300 rounded-lg p-3 mb-4">
-          <p className="text-xs text-red-900">
+        <div className="bg-red-500/20 backdrop-blur-sm border border-red-400/40 rounded-lg p-3 mb-4">
+          <p className="text-xs text-red-100 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
             <span className="font-semibold">Rejected.</span> {race.decline_note || 'No note provided.'}
           </p>
         </div>
@@ -261,22 +278,7 @@ export default function RaceDetailPage() {
         <>
           {canEditRace && (
             <div className="mb-3">
-              {addingHeat ? (
-                <div className="flex gap-2 items-center">
-                  <select value={newHeatDist} onChange={(e) => setNewHeatDist(parseInt(e.target.value))}
-                    className="border rounded-lg px-2 py-1.5 text-sm">
-                    {DISTANCE_OPTIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
-                  </select>
-                  <input type="text" placeholder="Heat label" value={newHeatLabel}
-                    onChange={(e) => setNewHeatLabel(e.target.value)}
-                    className="flex-1 border rounded-lg px-2 py-1.5 text-sm" />
-                  <button onClick={handleAddHeat} disabled={saving || !newHeatLabel.trim()}
-                    className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm disabled:opacity-50">Add</button>
-                  <button onClick={() => setAddingHeat(false)} className="text-gray-500 text-sm">Cancel</button>
-                </div>
-              ) : (
-                <button onClick={() => setAddingHeat(true)} className="text-blue-600 text-sm font-medium">+ Add Heat</button>
-              )}
+              <button onClick={() => setAddingHeat(true)} className="text-blue-200 hover:text-white text-sm font-medium transition [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">+ Add Heat</button>
             </div>
           )}
           <UpcomingRaceView
@@ -303,60 +305,49 @@ export default function RaceDetailPage() {
 
       {canEditRace && tab === 'heats' && (
         <div className="mb-3">
-          {addingHeat ? (
-            <div className="flex gap-2 items-center">
-              <select value={newHeatDist} onChange={(e) => setNewHeatDist(parseInt(e.target.value))}
-                className="border rounded-lg px-2 py-1.5 text-sm">
-                {DISTANCE_OPTIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
-              </select>
-              <input type="text" placeholder="Heat label" value={newHeatLabel}
-                onChange={(e) => setNewHeatLabel(e.target.value)}
-                className="flex-1 border rounded-lg px-2 py-1.5 text-sm" />
-              <button onClick={handleAddHeat} disabled={saving || !newHeatLabel.trim()}
-                className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm disabled:opacity-50">Add</button>
-              <button onClick={() => setAddingHeat(false)} className="text-gray-500 text-sm">Cancel</button>
-            </div>
-          ) : (
-            <button onClick={() => setAddingHeat(true)} className="text-blue-600 text-sm font-medium">+ Add Heat</button>
-          )}
+          <button onClick={() => setAddingHeat(true)} className="text-blue-200 hover:text-white text-sm font-medium transition [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">+ Add Heat</button>
         </div>
       )}
 
       {tab === 'heats' ? (
         <div className="space-y-4">
           {heatResults.map((hw) => (
-            <div key={hw.heat.id} className="bg-white border rounded-xl overflow-hidden">
-              <div className="bg-gray-50 px-3 py-2 border-b flex items-center justify-between">
+            <div key={hw.heat.id} className="bg-black/35 backdrop-blur-md border border-white/20 rounded-xl overflow-hidden shadow-lg">
+              <div className="bg-black/25 px-3 py-2 border-b border-white/15 flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-semibold">{hw.heat.label}</p>
-                  <p className="text-xs text-gray-500">{DISTANCE_LABELS[hw.heat.distance_m]}</p>
+                  <p className="text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">{hw.heat.label}</p>
+                  <p className="text-xs text-white/60">{DISTANCE_LABELS[hw.heat.distance_m]}</p>
                 </div>
                 <div className="flex gap-2">
                   {/* Add Runner: any coach or admin can propose a result */}
                   {isCoachOrAdmin && (
                     <button onClick={() => { setAddingResult(hw.heat.id); setNewName(''); setNewTime(''); setNewGender(''); setResolvedGender(null); }}
-                      className="text-blue-600 text-xs font-medium">+ Runner</button>
+                      className="text-blue-200 hover:text-white text-xs font-medium transition">+ Runner</button>
+                  )}
+                  {isAdmin && (
+                    <button onClick={() => setRenamingHeat({ id: hw.heat.id, label: hw.heat.label })}
+                      className="text-amber-200 hover:text-white text-xs font-medium transition">Rename</button>
                   )}
                   {canEditRace && (
                     <button onClick={() => handleDeleteHeat(hw.heat.id)}
-                      className="text-red-500 text-xs font-medium">Delete</button>
+                      className="text-red-300 hover:text-red-200 text-xs font-medium transition">Delete</button>
                   )}
                 </div>
               </div>
 
               {addingResult === hw.heat.id && (
-                <div className="bg-blue-50 px-3 py-2 border-b space-y-2">
+                <div className="bg-black/30 px-3 py-2 border-b border-white/15 space-y-2">
                   <div className="relative">
                     <input type="text" placeholder="Athlete name" value={newName}
                       onChange={(e) => handleNameSearch(e.target.value)}
-                      className="w-full border rounded-lg px-2 py-1.5 text-sm" />
+                      className="w-full bg-white/10 border border-white/25 text-white placeholder-white/40 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     {suggestions.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg">
+                      <div className="absolute z-10 w-full mt-1 bg-blue-950 border border-white/20 rounded-lg shadow-lg overflow-hidden">
                         {suggestions.map((s) => (
                           <button key={s.id} onClick={() => selectSuggestion(s)}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex justify-between">
+                            className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/10 flex justify-between transition">
                             <span>{s.full_name}</span>
-                            <span className="text-xs text-gray-400">{s.gender === 'M' ? 'Male' : 'Female'}</span>
+                            <span className="text-xs text-white/55">{s.gender === 'M' ? 'Male' : 'Female'}</span>
                           </button>
                         ))}
                       </div>
@@ -365,34 +356,34 @@ export default function RaceDetailPage() {
                   <div className="flex gap-2">
                     <input type="text" placeholder="Time (MM:SS)" value={newTime}
                       onChange={(e) => setNewTime(e.target.value)}
-                      className="flex-1 border rounded-lg px-2 py-1.5 text-sm" />
+                      className="flex-1 bg-white/10 border border-white/25 text-white placeholder-white/40 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     {resolvedGender ? (
-                      <span className="border rounded-lg px-2 py-1.5 text-sm bg-green-50 text-green-700">
+                      <span className="border border-green-400/40 rounded-lg px-2 py-1.5 text-sm bg-green-500/20 text-green-200">
                         {resolvedGender === 'M' ? 'Male' : 'Female'}
                       </span>
                     ) : (
                       <select value={newGender} onChange={(e) => setNewGender(e.target.value)}
-                        className="border rounded-lg px-2 py-1.5 text-sm">
-                        <option value="">Gender</option>
-                        <option value="M">Male</option>
-                        <option value="F">Female</option>
+                        className="bg-white/10 border border-white/25 text-white rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                        <option value="" className="bg-blue-950">Gender</option>
+                        <option value="M" className="bg-blue-950">Male</option>
+                        <option value="F" className="bg-blue-950">Female</option>
                       </select>
                     )}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => handleAddResult(hw.heat.id)}
                       disabled={saving || !newName.trim() || !newTime.trim() || !(resolvedGender || newGender)}
-                      className="flex-1 bg-blue-600 text-white rounded-lg py-1.5 text-sm disabled:opacity-50">
+                      className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-1.5 text-sm font-semibold disabled:opacity-50 transition">
                       {saving ? 'Adding...' : 'Add'}
                     </button>
-                    <button onClick={() => setAddingResult(null)} className="text-gray-500 text-sm px-3">Cancel</button>
+                    <button onClick={() => setAddingResult(null)} className="text-white/70 hover:text-white text-sm px-3 transition">Cancel</button>
                   </div>
                 </div>
               )}
 
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-gray-500">
+                  <tr className="border-b border-white/15 text-white/55">
                     <th className="px-3 py-1.5 text-left w-8">#</th>
                     <th className="px-3 py-1.5 text-left">Name</th>
                     <th className="px-3 py-1.5 text-right">Time</th>
@@ -404,27 +395,42 @@ export default function RaceDetailPage() {
                   {hw.results.map((r) => {
                     const pending = r.moderation_status === 'pending';
                     const rejected = r.moderation_status === 'rejected';
+                    const medal = !pending && !rejected ? r.placement : null;
+                    const rowBg = pending ? 'bg-amber-500/15'
+                      : rejected ? 'bg-red-500/15'
+                      : medal === 1 ? 'bg-gradient-to-r from-amber-400/40 via-amber-400/25 to-transparent'
+                      : medal === 2 ? 'bg-gradient-to-r from-slate-200/35 via-slate-200/20 to-transparent'
+                      : medal === 3 ? 'bg-gradient-to-r from-orange-500/40 via-orange-500/25 to-transparent'
+                      : '';
+                    const placeColor = medal === 1 ? 'text-amber-200 font-extrabold [text-shadow:0_0_8px_rgba(251,191,36,0.6),0_1px_2px_rgba(0,0,0,0.7)]'
+                      : medal === 2 ? 'text-white font-extrabold [text-shadow:0_0_8px_rgba(226,232,240,0.6),0_1px_2px_rgba(0,0,0,0.7)]'
+                      : medal === 3 ? 'text-orange-200 font-extrabold [text-shadow:0_0_8px_rgba(251,146,60,0.6),0_1px_2px_rgba(0,0,0,0.7)]'
+                      : 'text-white/85';
+                    const medalEmoji = medal === 1 ? '🥇' : medal === 2 ? '🥈' : medal === 3 ? '🥉' : null;
                     return (
-                      <tr key={r.id} className={`border-t ${pending ? 'bg-amber-50' : rejected ? 'bg-red-50' : ''}`}>
-                        <td className="px-3 py-2 font-medium">{r.placement ?? '—'}</td>
-                        <td className="px-3 py-2">
+                      <tr key={r.id} className={`border-t border-white/10 ${rowBg}`}>
+                        <td className={`px-3 py-2 font-medium ${placeColor}`}>
+                          {medalEmoji ? <span className="mr-1">{medalEmoji}</span> : null}
+                          {r.placement ?? '—'}
+                        </td>
+                        <td className="px-3 py-2 text-white/90">
                           {r.athlete_name}
-                          {pending && <span className="ml-2 text-[10px] bg-amber-100 text-amber-800 font-semibold rounded-full px-1.5 py-0.5">Pending</span>}
-                          {rejected && <span className="ml-2 text-[10px] bg-red-100 text-red-800 font-semibold rounded-full px-1.5 py-0.5">Rejected</span>}
+                          {pending && <span className="ml-2 text-[10px] bg-amber-400/25 text-amber-100 border border-amber-400/40 font-semibold rounded-full px-1.5 py-0.5">Pending</span>}
+                          {rejected && <span className="ml-2 text-[10px] bg-red-400/25 text-red-100 border border-red-400/40 font-semibold rounded-full px-1.5 py-0.5">Rejected</span>}
                           {rejected && r.decline_note && (
-                            <p className="text-[11px] text-red-700 italic mt-0.5">"{r.decline_note}"</p>
+                            <p className="text-[11px] text-red-200 italic mt-0.5">"{r.decline_note}"</p>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right font-mono">{r.time_display}</td>
-                        <td className="px-3 py-2 text-right text-gray-500">{r.pace_display}</td>
+                        <td className="px-3 py-2 text-right font-mono text-white">{r.time_display}</td>
+                        <td className="px-3 py-2 text-right text-white/55">{r.pace_display}</td>
                         {isCoachOrAdmin && (
                           <td className="px-3 py-2 text-right">
                             {canModifyResult(r) && (
                               <>
                                 <button onClick={() => openEditResult(r, hw.heat.id)}
-                                  className="text-blue-600 text-xs mr-2">Edit</button>
+                                  className="text-blue-200 hover:text-white text-xs mr-2 transition">Edit</button>
                                 <button onClick={() => handleDeleteResult(hw.heat.id, r.id)}
-                                  className="text-red-500 text-xs">X</button>
+                                  className="text-red-300 hover:text-red-200 text-xs transition">X</button>
                               </>
                             )}
                           </td>
@@ -440,16 +446,16 @@ export default function RaceDetailPage() {
       ) : leaderboard ? (
         <div className="space-y-4">
           {[{ label: 'Men', data: leaderboard.men }, { label: 'Women', data: leaderboard.women }].map(({ label, data }) => (
-            <div key={label} className="bg-white border rounded-xl overflow-hidden">
-              <div className="bg-gray-50 px-3 py-2 border-b">
-                <p className="text-sm font-semibold">{label}</p>
+            <div key={label} className="bg-black/35 backdrop-blur-md border border-white/20 rounded-xl overflow-hidden shadow-lg">
+              <div className="bg-black/25 px-3 py-2 border-b border-white/15">
+                <p className="text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">{label}</p>
               </div>
               {data.length === 0 ? (
-                <p className="text-sm text-gray-400 p-3">No results</p>
+                <p className="text-sm text-white/45 italic p-3">No results</p>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b text-gray-500">
+                    <tr className="border-b border-white/15 text-white/55">
                       <th className="px-3 py-1.5 text-left w-8">#</th>
                       <th className="px-3 py-1.5 text-left">Name</th>
                       <th className="px-3 py-1.5 text-right">Time</th>
@@ -457,14 +463,29 @@ export default function RaceDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.map((r, i) => (
-                      <tr key={i} className="border-t">
-                        <td className="px-3 py-2 font-medium">{r.placement}</td>
-                        <td className="px-3 py-2">{r.athlete_name}</td>
-                        <td className="px-3 py-2 text-right font-mono">{r.time_display}</td>
-                        <td className="px-3 py-2 text-right text-gray-500">{r.pace_display}</td>
-                      </tr>
-                    ))}
+                    {data.map((r, i) => {
+                      const medal = r.placement;
+                      const rowBg = medal === 1 ? 'bg-gradient-to-r from-amber-400/40 via-amber-400/25 to-transparent'
+                        : medal === 2 ? 'bg-gradient-to-r from-slate-200/35 via-slate-200/20 to-transparent'
+                        : medal === 3 ? 'bg-gradient-to-r from-orange-500/40 via-orange-500/25 to-transparent'
+                        : '';
+                      const placeColor = medal === 1 ? 'text-amber-200 font-extrabold [text-shadow:0_0_8px_rgba(251,191,36,0.6),0_1px_2px_rgba(0,0,0,0.7)]'
+                        : medal === 2 ? 'text-white font-extrabold [text-shadow:0_0_8px_rgba(226,232,240,0.6),0_1px_2px_rgba(0,0,0,0.7)]'
+                        : medal === 3 ? 'text-orange-200 font-extrabold [text-shadow:0_0_8px_rgba(251,146,60,0.6),0_1px_2px_rgba(0,0,0,0.7)]'
+                        : 'text-white/85';
+                      const medalEmoji = medal === 1 ? '🥇' : medal === 2 ? '🥈' : medal === 3 ? '🥉' : null;
+                      return (
+                        <tr key={i} className={`border-t border-white/10 ${rowBg}`}>
+                          <td className={`px-3 py-2 font-medium ${placeColor}`}>
+                            {medalEmoji ? <span className="mr-1">{medalEmoji}</span> : null}
+                            {r.placement}
+                          </td>
+                          <td className="px-3 py-2 text-white/90">{r.athlete_name}</td>
+                          <td className="px-3 py-2 text-right font-mono text-white">{r.time_display}</td>
+                          <td className="px-3 py-2 text-right text-white/55">{r.pace_display}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -474,6 +495,72 @@ export default function RaceDetailPage() {
       ) : <Spinner />}
         </>
       )}
+
+      {/* Add Heat Modal */}
+      <Modal
+        open={addingHeat}
+        onClose={() => setAddingHeat(false)}
+        title="Add Heat"
+        panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10"
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-white/70 block mb-1">Distance</label>
+            <select value={newHeatDist} onChange={(e) => setNewHeatDist(parseInt(e.target.value))}
+              className="w-full bg-white/10 border border-white/25 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              {DISTANCE_OPTIONS.map((d) => <option key={d.value} value={d.value} className="bg-blue-950 text-white">{d.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-white/70 block mb-1">Heat label</label>
+            <input type="text" placeholder="e.g. Heat 1, Mens A" value={newHeatLabel}
+              onChange={(e) => setNewHeatLabel(e.target.value)}
+              autoFocus
+              className="w-full bg-white/10 border border-white/25 text-white placeholder-white/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setAddingHeat(false)}
+              className="flex-1 border border-white/25 text-white/80 hover:bg-white/10 hover:text-white rounded-lg py-2 text-sm font-medium transition">
+              Cancel
+            </button>
+            <button onClick={handleAddHeat} disabled={saving || !newHeatLabel.trim()}
+              className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50 transition">
+              {saving ? 'Adding…' : 'Add Heat'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Rename Heat Modal (admin only) */}
+      <Modal
+        open={!!renamingHeat}
+        onClose={() => setRenamingHeat(null)}
+        title="Rename heat"
+        panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10"
+      >
+        {renamingHeat && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-white/70 block mb-1">Heat label</label>
+              <input type="text" value={renamingHeat.label}
+                onChange={(e) => setRenamingHeat({ ...renamingHeat, label: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && handleRenameHeat()}
+                autoFocus
+                className="w-full bg-white/10 border border-white/25 text-white placeholder-white/40 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setRenamingHeat(null)}
+                className="flex-1 border border-white/25 text-white/80 hover:bg-white/10 hover:text-white rounded-lg py-2 text-sm font-medium transition">
+                Cancel
+              </button>
+              <button onClick={handleRenameHeat} disabled={saving || !renamingHeat.label.trim()}
+                className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50 transition">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Edit Race Modal */}
       <Modal open={editing} onClose={() => setEditing(false)} title="Edit Race">

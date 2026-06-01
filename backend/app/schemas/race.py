@@ -25,6 +25,10 @@ class RaceOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class HeatRename(BaseModel):
+    label: str
+
+
 class HeatCreate(BaseModel):
     distance_m: int
     label: str

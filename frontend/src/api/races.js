@@ -33,6 +33,9 @@ export const deleteRace = (raceId) =>
 export const deleteHeat = (raceId, heatId) =>
   client.delete(`/races/${raceId}/heats/${heatId}`);
 
+export const renameHeat = (raceId, heatId, label) =>
+  client.patch(`/races/${raceId}/heats/${heatId}`, { label });
+
 export const updateResult = (raceId, heatId, resultId, data) =>
   client.patch(`/races/${raceId}/heats/${heatId}/results/${resultId}`, data);
 

@@ -2,6 +2,7 @@ import base64
 import time
 from datetime import datetime, timezone, timedelta, date as date_type
 from typing import Annotated, List, Optional
+from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 import httpx
@@ -175,16 +176,17 @@ def get_connect_url(
     if not settings.STRAVA_CLIENT_ID:
         raise HTTPException(status_code=503, detail="Strava integration is not configured")
     state = _encode_state(current_user.id, origin)
-    url = (
-        f"{STRAVA_AUTH_URL}"
-        f"?client_id={settings.STRAVA_CLIENT_ID}"
-        f"&redirect_uri={settings.STRAVA_REDIRECT_URI}"
-        f"&response_type=code"
-        f"&scope=read,activity:read_all"
-        f"&state={state}"
-        f"&approval_prompt=auto"
-    )
-    return {"url": url}
+    # Strava requires the redirect_uri to be URL-encoded. Use urlencode for all
+    # params so colons, slashes, commas, and base64 padding are encoded safely.
+    params = urlencode({
+        "client_id": settings.STRAVA_CLIENT_ID,
+        "redirect_uri": settings.STRAVA_REDIRECT_URI,
+        "response_type": "code",
+        "approval_prompt": "auto",
+        "scope": "read,activity:read_all",
+        "state": state,
+    })
+    return {"url": f"{STRAVA_AUTH_URL}?{params}"}
 
 
 @router.get("/callback")

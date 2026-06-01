@@ -255,6 +255,8 @@ def get_athlete_activities(
         token = _ensure_fresh_token(athlete, db)
         return _fetch_activities_for_date(token, date)
     except httpx.HTTPStatusError as e:
+        if e.response.status_code in (400, 401):
+            raise HTTPException(status_code=409, detail="Athlete's Strava connection expired")
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception as e:
         raise HTTPException(status_code=502, detail="Could not fetch Strava activities")
@@ -273,6 +275,11 @@ def get_my_activities(
         token = _ensure_fresh_token(current_user, db)
         return _fetch_activities_for_date(token, date)
     except httpx.HTTPStatusError as e:
+        if e.response.status_code in (400, 401):
+            raise HTTPException(
+                status_code=409,
+                detail="Strava connection expired — please reconnect from your Profile.",
+            )
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception:
         raise HTTPException(status_code=502, detail="Could not fetch Strava activities")
@@ -337,14 +344,13 @@ def sync_strava(
     if not current_user.strava_access_token:
         raise HTTPException(status_code=409, detail="Strava is not connected")
 
-    token = _ensure_fresh_token(current_user, db)
-
     today = date_type.today()
     start_day = today - timedelta(days=days - 1)
     after = int(datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc).timestamp())
     before = int(datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc).timestamp())
 
     try:
+        token = _ensure_fresh_token(current_user, db)
         r = httpx.get(
             STRAVA_ACTIVITIES_URL,
             headers={"Authorization": f"Bearer {token}"},
@@ -353,6 +359,13 @@ def sync_strava(
         r.raise_for_status()
         activities = r.json()
     except httpx.HTTPStatusError as e:
+        # 401/400 on token refresh means the refresh token is bad — user needs
+        # to reconnect from the Profile page.
+        if e.response.status_code in (400, 401):
+            raise HTTPException(
+                status_code=409,
+                detail="Strava connection expired — please reconnect from your Profile.",
+            )
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception:
         raise HTTPException(status_code=502, detail="Could not reach Strava")

@@ -1,4 +1,5 @@
 import base64
+import logging
 import time
 from datetime import datetime, timezone, timedelta, date as date_type
 from typing import Annotated, List, Optional
@@ -12,6 +13,10 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from ..models.workout import WorkoutLog
+
+logger = logging.getLogger(__name__)
+
+STRAVA_HTTP_TIMEOUT = 15.0
 
 
 def _encode_state(user_id: int, origin: Optional[str]) -> str:
@@ -63,12 +68,16 @@ def _ensure_fresh_token(user: User, db: Session) -> str:
     """Return a valid access token, refreshing it first if it's about to expire."""
     if user.strava_token_expires_at and user.strava_token_expires_at > time.time() + 60:
         return user.strava_access_token
-    r = httpx.post(STRAVA_TOKEN_URL, data={
-        "client_id": settings.STRAVA_CLIENT_ID,
-        "client_secret": settings.STRAVA_CLIENT_SECRET,
-        "grant_type": "refresh_token",
-        "refresh_token": user.strava_refresh_token,
-    })
+    r = httpx.post(
+        STRAVA_TOKEN_URL,
+        data={
+            "client_id": settings.STRAVA_CLIENT_ID,
+            "client_secret": settings.STRAVA_CLIENT_SECRET,
+            "grant_type": "refresh_token",
+            "refresh_token": user.strava_refresh_token,
+        },
+        timeout=STRAVA_HTTP_TIMEOUT,
+    )
     r.raise_for_status()
     d = r.json()
     user.strava_access_token = d["access_token"]
@@ -83,8 +92,12 @@ def _fetch_activities_for_date(access_token: str, date_str: str) -> list:
     day = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     after = int(day.timestamp())
     before = after + 86400
-    r = httpx.get(STRAVA_ACTIVITIES_URL, headers={"Authorization": f"Bearer {access_token}"},
-                  params={"after": after, "before": before, "per_page": 20})
+    r = httpx.get(
+        STRAVA_ACTIVITIES_URL,
+        headers={"Authorization": f"Bearer {access_token}"},
+        params={"after": after, "before": before, "per_page": 20},
+        timeout=STRAVA_HTTP_TIMEOUT,
+    )
     r.raise_for_status()
     results = []
     for a in r.json():
@@ -105,6 +118,7 @@ def _fetch_activity_detail(access_token: str, activity_id: int) -> dict:
         f"https://www.strava.com/api/v3/activities/{activity_id}",
         headers={"Authorization": f"Bearer {access_token}"},
         params={"include_all_efforts": "true"},
+        timeout=STRAVA_HTTP_TIMEOUT,
     )
     r.raise_for_status()
     a = r.json()
@@ -207,12 +221,16 @@ def strava_callback(
         user = db.get(User, user_id)
         if not user:
             return RedirectResponse(url=f"{frontend_profile}?strava=error")
-        r = httpx.post(STRAVA_TOKEN_URL, data={
-            "client_id": settings.STRAVA_CLIENT_ID,
-            "client_secret": settings.STRAVA_CLIENT_SECRET,
-            "code": code,
-            "grant_type": "authorization_code",
-        })
+        r = httpx.post(
+            STRAVA_TOKEN_URL,
+            data={
+                "client_id": settings.STRAVA_CLIENT_ID,
+                "client_secret": settings.STRAVA_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+            },
+            timeout=STRAVA_HTTP_TIMEOUT,
+        )
         r.raise_for_status()
         d = r.json()
         user.strava_athlete_id = d["athlete"]["id"]
@@ -258,7 +276,8 @@ def get_athlete_activities(
         if e.response.status_code in (400, 401):
             raise HTTPException(status_code=409, detail="Athlete's Strava connection expired")
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
-    except Exception as e:
+    except Exception:
+        logger.exception("Coach Strava activities fetch failed (athlete %s)", athlete_id)
         raise HTTPException(status_code=502, detail="Could not fetch Strava activities")
 
 
@@ -282,6 +301,7 @@ def get_my_activities(
             )
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception:
+        logger.exception("My Strava activities fetch failed (user %s)", current_user.id)
         raise HTTPException(status_code=502, detail="Could not fetch Strava activities")
 
 
@@ -302,6 +322,7 @@ def get_my_activity_detail(
             raise HTTPException(status_code=404, detail="Activity not found on Strava")
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception:
+        logger.exception("My Strava activity detail failed (user %s, activity %s)", current_user.id, activity_id)
         raise HTTPException(status_code=502, detail="Could not fetch Strava activity")
 
 
@@ -326,10 +347,9 @@ def get_athlete_activity_detail(
             raise HTTPException(status_code=404, detail="Activity not found on Strava")
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception:
+        logger.exception("Coach Strava activity detail failed (athlete %s, activity %s)", athlete_id, activity_id)
         raise HTTPException(status_code=502, detail="Could not fetch Strava activity")
 
-
-@router.post("/sync")
 
 @router.post("/sync")
 def sync_strava(
@@ -345,7 +365,7 @@ def sync_strava(
     if not current_user.strava_access_token:
         raise HTTPException(status_code=409, detail="Strava is not connected")
 
-    # 2. Securely calculate UTC timestamps based on system time.
+    # Securely calculate UTC timestamps based on system time.
     # Using time.time() prevents 500 errors caused by server-side timezone differences.
     now_ts = int(time.time())
     seconds_back = days * 86400  # 86400 seconds in a day
@@ -353,29 +373,29 @@ def sync_strava(
     after = now_ts - seconds_back
     before = now_ts + 86400  # 1-day safety buffer forward to avoid missing today's activities
 
-    # 3. Request activities from Strava API within the calculated timestamp range
     try:
         token = _ensure_fresh_token(current_user, db)
         r = httpx.get(
             STRAVA_ACTIVITIES_URL,
             headers={"Authorization": f"Bearer {token}"},
             params={"after": after, "before": before, "per_page": 100},
+            timeout=STRAVA_HTTP_TIMEOUT,
         )
         r.raise_for_status()
         activities = r.json()
     except httpx.HTTPStatusError as e:
-        # 400/401 on token refresh means the refresh token is bad — user needs to reconnect
+        logger.warning("Strava sync HTTP error for user %s: %s %s", current_user.id, e.response.status_code, e.response.text[:300])
         if e.response.status_code in (400, 401):
             raise HTTPException(
                 status_code=409,
                 detail="Strava connection expired — please reconnect from your Profile.",
             )
-        # Raise 502 if Strava returns any other error (e.g., the previous 500 Internal Error)
         raise HTTPException(status_code=502, detail=f"Strava API error: {e.response.status_code}")
     except Exception:
+        logger.exception("Strava sync failed for user %s", current_user.id)
         raise HTTPException(status_code=502, detail="Could not reach Strava")
 
-    # 4. Group activities by local date (the first 10 characters represent yyyy-MM-dd)
+    # Group activities by local date (the first 10 characters represent yyyy-MM-dd)
     by_date: dict[str, list] = {}
     for a in activities:
         local = a.get("start_date_local", "")
@@ -383,7 +403,7 @@ def sync_strava(
             continue
         by_date.setdefault(local[:10], []).append(a)
 
-    # 5. Process data and update the database
+    # Process data and update the database
     created = 0
     updated = 0
     skipped = 0

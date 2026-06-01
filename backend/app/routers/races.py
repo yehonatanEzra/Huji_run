@@ -13,6 +13,7 @@ from ..schemas.race import (
 )
 from ..services.time_utils import parse_time, seconds_to_display, format_pace
 from ..services.hall_of_fame import refresh_hall_of_fame
+from ..services.notifications import notify_many
 
 router = APIRouter(prefix="/races", tags=["races"])
 
@@ -379,6 +380,17 @@ def create_race(
         status="approved" if coach.role == "admin" else "pending",
     )
     db.add(race)
+    db.flush()
+
+    # Notify all athletes once the race is publicly visible (approved races only).
+    if race.status == "approved":
+        athlete_ids = [r[0] for r in db.query(User.id).filter(User.role == "athlete").all()]
+        notify_many(
+            db, athlete_ids, "new_race",
+            f"New race: {race.name} on {race.race_date.strftime('%b %d, %Y')}",
+            f"/races/{race.id}",
+        )
+
     db.commit()
     db.refresh(race)
     return race

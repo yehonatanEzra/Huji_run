@@ -23,7 +23,15 @@ class User(Base):
     coach_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     photo_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    strava_athlete_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, unique=True)
+    strava_access_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    strava_refresh_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    strava_token_expires_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    @property
+    def strava_connected(self) -> bool:
+        return bool(self.strava_access_token)
 
     training_group = relationship("TrainingGroup", back_populates="members", foreign_keys=[training_group_id])
     workout_logs = relationship("WorkoutLog", back_populates="athlete", cascade="all, delete-orphan")

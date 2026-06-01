@@ -8,6 +8,7 @@ from ..database import get_db
 from ..dependencies import get_current_user
 from ..models.user import User
 from ..models.workout import WorkoutLog, WorkoutLogComment
+from ..services.notifications import notify
 
 router = APIRouter(prefix="/workout-logs", tags=["workout-comments"])
 
@@ -89,6 +90,16 @@ def create_comment(
 
     c = WorkoutLogComment(workout_log_id=log_id, author_id=current_user.id, body=text)
     db.add(c)
+
+    # Notify the log's owner (unless it's their own comment)
+    if log.athlete_id != current_user.id:
+        snippet = text[:60] + ("…" if len(text) > 60 else "")
+        notify(
+            db, log.athlete_id, "workout_comment",
+            f"{current_user.full_name} commented: \"{snippet}\"",
+            f"/calendar?date={log.date.isoformat()}",
+        )
+
     db.commit()
     db.refresh(c)
     return CommentOut(

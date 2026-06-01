@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMyProfile, uploadPhoto, updateMyProfile } from '../../api/profile';
 import { getMyPairing, leaveCoach } from '../../api/coaching';
+import { getStravaConnectUrl, disconnectStrava } from '../../api/strava';
 import Spinner from '../../components/ui/Spinner';
 import PageBackground from '../../components/PageBackground';
 
@@ -19,6 +20,9 @@ export default function ProfilePage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
+  const [stravaConnecting, setStravaConnecting] = useState(false);
+  const [stravaDisconnecting, setStravaDisconnecting] = useState(false);
+  const [stravaMsg, setStravaMsg] = useState('');
   const [pairing, setPairing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -103,6 +107,51 @@ export default function ProfilePage() {
       console.error(err);
     } finally {
       setSavingName(false);
+    }
+  };
+
+  // Detect return from Strava OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('strava');
+    if (status === 'connected') {
+      setStravaMsg('✓ Strava connected successfully!');
+      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      stored.strava_connected = true;
+      localStorage.setItem('user', JSON.stringify(stored));
+      login({ access_token: localStorage.getItem('token'), ...stored });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (status === 'error') {
+      setStravaMsg('Could not connect Strava. Please try again.');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  const handleConnectStrava = async () => {
+    setStravaConnecting(true);
+    try {
+      const { data } = await getStravaConnectUrl();
+      window.location.href = data.url;
+    } catch (err) {
+      setStravaMsg(err?.response?.data?.detail || 'Could not start Strava connection');
+      setStravaConnecting(false);
+    }
+  };
+
+  const handleDisconnectStrava = async () => {
+    if (!confirm('Disconnect Strava? Your activity history in the app will no longer update.')) return;
+    setStravaDisconnecting(true);
+    try {
+      await disconnectStrava();
+      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      stored.strava_connected = false;
+      localStorage.setItem('user', JSON.stringify(stored));
+      login({ access_token: localStorage.getItem('token'), ...stored });
+      setStravaMsg('');
+    } catch (err) {
+      setStravaMsg(err?.response?.data?.detail || 'Could not disconnect Strava');
+    } finally {
+      setStravaDisconnecting(false);
     }
   };
 
@@ -222,6 +271,42 @@ export default function ProfilePage() {
             {isCoach ? 'No bio yet. Add one so athletes can learn about you.' : 'No bio yet.'}
           </p>
         )}
+      </div>
+
+      {/* Strava connection */}
+      <div className={`${GLASS_CARD} mb-4`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className={SECTION_LABEL}>Strava</p>
+            {stravaMsg && (
+              <p className={`text-xs mt-1 ${stravaMsg.startsWith('✓') ? 'text-green-300' : 'text-red-300'}`}>
+                {stravaMsg}
+              </p>
+            )}
+          </div>
+          {user?.strava_connected ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-orange-300 bg-orange-400/20 border border-orange-400/30 px-2.5 py-1 rounded-full">
+                🏃 Connected
+              </span>
+              <button
+                onClick={handleDisconnectStrava}
+                disabled={stravaDisconnecting}
+                className="text-xs text-red-300 hover:text-red-200 border border-red-400/30 px-2.5 py-1 rounded-full transition disabled:opacity-50"
+              >
+                {stravaDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleConnectStrava}
+              disabled={stravaConnecting}
+              className="text-xs font-semibold bg-orange-500/80 hover:bg-orange-500 text-white px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+            >
+              {stravaConnecting ? 'Redirecting…' : '🏃 Connect Strava'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* My coach */}

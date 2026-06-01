@@ -8,3 +8,4 @@ from .kudos import Kudos
 from .feed import Announcement, AnnouncementReaction, AnnouncementComment
 from .challenge import Challenge
 from .coach_request import CoachRequest
+from .notification import Notification

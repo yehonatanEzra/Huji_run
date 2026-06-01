@@ -9,6 +9,7 @@ from ..dependencies import require_admin
 from ..models.user import User
 from ..models.race import Race, Heat, Result
 from ..services.hall_of_fame import refresh_hall_of_fame
+from ..services.notifications import notify_many
 
 router = APIRouter(prefix="/admin", tags=["admin-review"])
 
@@ -129,6 +130,14 @@ def approve_race(
     race.status = "approved"
     race.decided_at = datetime.utcnow()
     race.decided_by = admin.id
+
+    athlete_ids = [r[0] for r in db.query(User.id).filter(User.role == "athlete").all()]
+    notify_many(
+        db, athlete_ids, "new_race",
+        f"New race: {race.name} on {race.race_date.strftime('%b %d, %Y')}",
+        f"/races/{race.id}",
+    )
+
     db.commit()
     return {"ok": True}
 

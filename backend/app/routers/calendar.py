@@ -9,6 +9,7 @@ from sqlalchemy import func as sa_func
 from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog, WorkoutLogComment
 from ..models.kudos import Kudos
 from ..models.training_group import TrainingGroup
+from ..services.notifications import notify, notify_many
 
 
 def _coach_owns_group(coach: User, db: Session, group_id: int) -> bool:
@@ -298,6 +299,23 @@ def create_group_workout(
     db.add(gw)
     db.flush()
     _replace_recipients(db, gw.id, body.recipient_ids)
+
+    # Notify athletes — either the recipient subset or every member of the group.
+    if body.recipient_ids:
+        athlete_ids = list(body.recipient_ids)
+    else:
+        athlete_ids = [
+            r[0] for r in db.query(User.id)
+            .filter(User.training_group_id == group_id, User.role == "athlete")
+            .all()
+        ]
+    title = gw.title or wt.capitalize()
+    notify_many(
+        db, athlete_ids, "new_workout",
+        f"New workout from coach: {title} ({day.strftime('%a %b %d')})",
+        f"/calendar?date={day.isoformat()}",
+    )
+
     db.commit()
     db.refresh(gw)
     return _serialize_gw(db, gw)
@@ -386,6 +404,12 @@ def upsert_individual_target(
             created_by=coach.id,
         )
         db.add(it)
+        title = _clean(body.title) or wt.capitalize()
+        notify(
+            db, athlete_id, "personal_workout",
+            f"Coach assigned you a personal workout: {title} ({day.strftime('%a %b %d')})",
+            f"/calendar?date={day.isoformat()}",
+        )
     db.commit()
     db.refresh(it)
     return it

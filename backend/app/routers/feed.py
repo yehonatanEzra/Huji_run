@@ -8,6 +8,7 @@ from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from ..models.feed import Announcement, AnnouncementReaction, AnnouncementComment
 from ..schemas.feed import AnnouncementCreate, AnnouncementOut, ReactionSummary, ReactionToggle, CommentOut, CommentCreate
+from ..services.notifications import notify
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -201,6 +202,16 @@ def add_comment(
         body=body.body.strip(),
     )
     db.add(comment)
+
+    # Notify the post author (skip self-comments)
+    if ann.author_id != current_user.id:
+        snippet = body.body.strip()[:60]
+        notify(
+            db, ann.author_id, "post_comment",
+            f"{current_user.full_name} commented on your post: \"{snippet}\"",
+            "/feed",
+        )
+
     db.commit()
     db.refresh(comment)
     return CommentOut(

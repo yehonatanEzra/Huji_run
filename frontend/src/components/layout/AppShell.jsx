@@ -1,5 +1,6 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import BottomNav from './BottomNav';
+import NotificationBell from '../NotificationBell';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ROOT_PATHS = new Set([
@@ -35,7 +36,8 @@ export default function AppShell() {
           </button>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span className="opacity-80">{user?.full_name}</span>
+          <NotificationBell />
+          <span className="opacity-80 hidden sm:inline">{user?.full_name}</span>
           <button onClick={logout} className="underline opacity-70 hover:opacity-100">
             Logout
           </button>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, subYears, addYears, isSameMonth } from 'date-fns';
 import { getWeek, submitLog } from '../../api/calendar';
 import { getMyStravaActivities } from '../../api/strava';
@@ -392,15 +392,24 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      <div className="flex rounded-xl overflow-hidden mb-4 bg-white/10 backdrop-blur-sm border border-white/20">
-        <button
-          onClick={() => setView('weekly')}
-          className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'weekly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
-        >Weekly</button>
-        <button
-          onClick={() => setView('monthly')}
-          className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'monthly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
-        >Monthly</button>
+      <div className="flex gap-2 mb-4">
+        <div className="flex rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 flex-1">
+          <button
+            onClick={() => setView('weekly')}
+            className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'weekly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
+          >Weekly</button>
+          <button
+            onClick={() => setView('monthly')}
+            className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'monthly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
+          >Monthly</button>
+        </div>
+        <Link
+          to="/progress"
+          className="shrink-0 flex items-center bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white text-sm font-semibold px-3 rounded-xl transition active:scale-95"
+          title="See your trends, pace, and PBs"
+        >
+          My progress
+        </Link>
       </div>
 
 
@@ -515,6 +524,11 @@ export default function CalendarPage() {
 
             <div className="border-t border-white/15 pt-4">
               <p className="text-sm font-medium text-white mb-2">Workout Report</p>
+              {selectedDay.workout_log?.is_auto_marked && (
+                <p className="text-[11px] text-white/60 italic mb-2 bg-white/5 border border-white/10 rounded-md px-2 py-1">
+                  Auto-marked missed — tap a status to update it.
+                </p>
+              )}
               <div className="flex gap-2 mb-3">
                 {[
                   { value: 'completed', label: 'Completed', bg: 'bg-green-100 text-green-700 border-green-300', active: 'bg-green-600 text-white border-green-600' },

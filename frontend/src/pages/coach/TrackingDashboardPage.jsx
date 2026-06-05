@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, addDays, startOfWeek, subWeeks, addWeeks, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
 import { listRaces, getRace, updateResult, deleteResult, updateRace } from '../../api/races';
@@ -19,11 +20,13 @@ import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
 import Modal from '../../components/ui/Modal';
 import { NoiseBackground } from '../../components/ui/NoiseBackground';
+
 import StravaActivityDetail from '../../components/StravaActivityDetail';
 import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 
 export default function TrackingDashboardPage() {
+  const navigate = useNavigate();
   const [weekDate, setWeekDate] = useState(new Date());
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -524,19 +527,28 @@ export default function TrackingDashboardPage() {
 
               return (
                 <div>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2 gap-2">
                     <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50">Training</p>
-                    <div className="flex rounded-lg border border-white/15 overflow-hidden">
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setProfileViewMode('week')}
-                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'week' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/15'}`}>
-                        Week
+                        onClick={() => navigate(`/coach/athletes/${profile.id}/progress`, { state: { athleteName: profile.full_name } })}
+                        className="flex items-center gap-1 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold px-2.5 py-0.5 rounded-lg transition active:scale-95"
+                        title="View volume, consistency, race history"
+                      >
+                        Progress <span className="leading-none">›</span>
                       </button>
-                      <button
-                        onClick={() => setProfileViewMode('month')}
-                        className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'month' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/15'}`}>
-                        Month
-                      </button>
+                      <div className="flex rounded-lg border border-white/15 overflow-hidden">
+                        <button
+                          onClick={() => setProfileViewMode('week')}
+                          className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'week' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/15'}`}>
+                          Week
+                        </button>
+                        <button
+                          onClick={() => setProfileViewMode('month')}
+                          className={`px-2.5 py-0.5 text-xs font-medium transition ${profileViewMode === 'month' ? 'bg-blue-600 text-white' : 'bg-white/10 text-white/60 hover:bg-white/15'}`}>
+                          Month
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -880,6 +892,7 @@ export default function TrackingDashboardPage() {
                         { key: 'clap', icon: '👏', activeBg: 'bg-pink-400/25', activeText: 'text-pink-200', activeBorder: 'border-pink-400/40', hoverBg: 'hover:bg-white/15' },
                         { key: 'heart', icon: '❤️', activeBg: 'bg-red-400/25', activeText: 'text-red-200', activeBorder: 'border-red-400/40', hoverBg: 'hover:bg-white/15' },
                         { key: 'dislike', icon: '👎', activeBg: 'bg-white/20', activeText: 'text-white', activeBorder: 'border-white/40', hoverBg: 'hover:bg-white/15' },
+                        { key: 'unlike', icon: '💔', activeBg: 'bg-purple-400/25', activeText: 'text-purple-200', activeBorder: 'border-purple-400/40', hoverBg: 'hover:bg-white/15' },
                       ];
                       const reactions = selected.day.log.reactions || [];
                       const find = (key) => reactions.find(r => r.emoji === key);

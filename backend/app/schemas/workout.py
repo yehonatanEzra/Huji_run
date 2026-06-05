@@ -77,6 +77,7 @@ class WorkoutLogOut(BaseModel):
     distance_km: Optional[float] = None
     notes: Optional[str]
     manual_override: bool = False
+    is_auto_marked: bool = False
     kudos_count: int = 0
     has_kudos: bool = False
     reactions: List[ReactionItem] = []

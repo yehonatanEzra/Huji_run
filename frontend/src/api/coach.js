@@ -9,12 +9,6 @@ export const searchAthletes = (q) =>
 export const getDashboardWeek = (date) =>
   client.get('/coach/dashboard/week', { params: { day: date } });
 
-export const updateAthlete = (athleteId, fullName) =>
-  client.patch(`/coach/athletes/${athleteId}`, { full_name: fullName });
-
-export const deleteAthlete = (athleteId) =>
-  client.delete(`/coach/athletes/${athleteId}`);
-
 export const listGroups = () =>
   client.get('/coach/groups');
 

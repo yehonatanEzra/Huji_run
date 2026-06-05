@@ -41,6 +41,7 @@ const adminItems = [
   { to: '/coach/workouts',  label: 'Coach',     icon: '📋', image: '/icons/coach.jpg' },
   { to: '/coach/requests',  label: 'Requests',  icon: '📥', image: '/icons/requests.jpg', isRequests: true },
   { to: '/admin/pending',   label: 'Review',    icon: '⚖️', image: '/icons/review.jpg', isPending: true },
+  { to: '/admin/users',     label: 'Users',     icon: '👥', image: '/icons/users.jpg' },
   { to: '/feed',            label: 'Feed',      icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',           label: 'Races',     icon: '🏆', image: '/icons/races.jpg' },
   { to: '/hall-of-fame',    label: 'Hall of Fame', icon: '🥇', image: '/icons/hall-of-fame.jpg' },

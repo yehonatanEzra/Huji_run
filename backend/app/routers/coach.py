@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import require_coach, require_admin
+from ..dependencies import require_coach
 from ..models.user import User
 from ..models.training_group import TrainingGroup
 from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
@@ -45,10 +45,6 @@ def _groups_query(coach: User, db: Session):
     if coach.role != "admin":
         q = q.filter(TrainingGroup.coach_id == coach.id)
     return q
-
-
-class UpdateAthleteName(BaseModel):
-    full_name: str
 
 
 class TrainingGroupCreate(BaseModel):
@@ -323,86 +319,6 @@ def dashboard_week(
         ))
 
     return CoachDashboardResponse(week_start=ws, athletes=rows)
-
-
-@router.patch("/athletes/{athlete_id}", response_model=UserOut)
-def update_athlete(
-    athlete_id: int,
-    body: UpdateAthleteName,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
-):
-    """Admin-only: rename any athlete."""
-    athlete = db.get(User, athlete_id)
-    if not athlete or athlete.role != "athlete":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
-    athlete.full_name = body.full_name.strip()
-    db.commit()
-    db.refresh(athlete)
-    return athlete
-
-
-@router.delete("/athletes/{athlete_id}", status_code=204)
-def delete_athlete(
-    athlete_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """Admin-only: hard-delete an athlete + cascade their data."""
-    athlete = db.get(User, athlete_id)
-    if not athlete or athlete.role != "athlete":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Athlete not found")
-    from ..models.hall_of_fame import HallOfFame
-    from ..models.kudos import Kudos
-    from ..models.feed import Announcement, AnnouncementReaction, AnnouncementComment
-    from ..models.race import RaceRegistration
-    from ..models.health_wellness import HealthProfessional, HealthReview
-    from ..services.hall_of_fame import refresh_hall_of_fame
-
-    # Workout-related
-    workout_log_ids = [l.id for l in db.query(WorkoutLog).filter(WorkoutLog.athlete_id == athlete_id).all()]
-    if workout_log_ids:
-        db.query(Kudos).filter(Kudos.workout_log_id.in_(workout_log_ids)).delete(synchronize_session=False)
-    db.query(WorkoutLog).filter(WorkoutLog.athlete_id == athlete_id).delete()
-    db.query(IndividualTarget).filter(IndividualTarget.athlete_id == athlete_id).delete()
-
-    # Kudos this user gave to others
-    db.query(Kudos).filter(Kudos.giver_id == athlete_id).delete()
-
-    # Feed activity
-    db.query(AnnouncementReaction).filter(AnnouncementReaction.user_id == athlete_id).delete()
-    db.query(AnnouncementComment).filter(AnnouncementComment.user_id == athlete_id).delete()
-    # If the athlete authored any announcements, delete them (cascades reactions/comments via FK)
-    for ann in db.query(Announcement).filter(Announcement.author_id == athlete_id).all():
-        db.query(AnnouncementReaction).filter(AnnouncementReaction.announcement_id == ann.id).delete()
-        db.query(AnnouncementComment).filter(AnnouncementComment.announcement_id == ann.id).delete()
-        db.delete(ann)
-
-    # Race registrations (both as athlete and as the one who registered someone)
-    db.query(RaceRegistration).filter(RaceRegistration.user_id == athlete_id).delete()
-    db.query(RaceRegistration).filter(RaceRegistration.registered_by == athlete_id).delete()
-
-    # Health & Wellness reviews and professionals they created
-    db.query(HealthReview).filter(HealthReview.user_id == athlete_id).delete()
-    # Re-assign professionals they created to the deleting coach so listings stay intact
-    db.query(HealthProfessional).filter(HealthProfessional.created_by_id == athlete_id).update(
-        {HealthProfessional.created_by_id: admin.id}, synchronize_session=False
-    )
-
-    # Race results — track Hall of Fame distances to refresh
-    athlete_results = db.query(Result).filter(Result.user_id == athlete_id).all()
-    hof_refresh = set()
-    for r in athlete_results:
-        heat = db.get(Heat, r.heat_id)
-        if heat:
-            hof_refresh.add((heat.distance_m, r.gender))
-        db.delete(r)
-    db.query(HallOfFame).filter(HallOfFame.user_id == athlete_id).delete()
-
-    db.delete(athlete)
-    db.commit()
-    for distance_m, gender in hof_refresh:
-        refresh_hall_of_fame(db, distance_m, gender)
 
 
 @router.get("/athletes/{athlete_id}/profile")

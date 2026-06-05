@@ -7,7 +7,7 @@ from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, Workout
 from .models.workout import WorkoutLogComment  # noqa: F401  (ensure table is registered with Base)
 from .models.notification import Notification  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, strava, notifications, stats
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats
 
 Base.metadata.create_all(bind=engine)
 
@@ -511,6 +511,7 @@ app.include_router(workout_comments.router, prefix=API_PREFIX)
 app.include_router(home.router, prefix=API_PREFIX)
 app.include_router(coaching.router, prefix=API_PREFIX)
 app.include_router(admin_review.router, prefix=API_PREFIX)
+app.include_router(admin_users.router, prefix=API_PREFIX)
 app.include_router(strava.router, prefix=API_PREFIX)
 app.include_router(notifications.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)

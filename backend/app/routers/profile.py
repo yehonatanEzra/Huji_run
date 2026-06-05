@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -14,6 +14,8 @@ from ..config import settings
 from ..models.race import Result, Heat, Race, CANONICAL_DISTANCES
 from ..schemas.profile import ProfileResponse, PBEntry, RaceHistoryEntry
 from ..services.time_utils import seconds_to_display, format_pace
+
+MAX_PHOTO_BYTES = 2_000_000
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -138,21 +140,19 @@ async def upload_photo(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if settings.DISABLE_PHOTO_UPLOADS:
-        raise HTTPException(status_code=503, detail="Photo uploads are disabled in this environment")
     if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
         raise HTTPException(status_code=400, detail="Only JPEG, PNG or WebP allowed")
+    content = await file.read()
+    if len(content) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=413, detail="Photo must be 2 MB or smaller")
     ext = file.content_type.split("/")[1]
     if ext == "jpeg":
         ext = "jpg"
-    filename = f"{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
-    if current_user.photo_filename:
-        old = UPLOAD_DIR / current_user.photo_filename
-        if old.exists():
-            old.unlink()
-    content = await file.read()
-    (UPLOAD_DIR / filename).write_bytes(content)
-    current_user.photo_filename = filename
+    current_user.photo_data = content
+    current_user.photo_content_type = file.content_type
+    # Sentinel filename keeps `if user.photo_filename` truthy across the
+    # codebase. It no longer points to an on-disk file.
+    current_user.photo_filename = f"user_{current_user.id}.{ext}"
     db.commit()
     return {"photo_url": f"/api/v1/profile/photo/{current_user.id}"}
 
@@ -162,6 +162,13 @@ def get_photo(user_id: int, db: Session = Depends(get_db)):
     user = db.get(User, user_id)
     if not user or not user.photo_filename:
         raise HTTPException(status_code=404, detail="No photo")
+    if user.photo_data:
+        return Response(
+            content=user.photo_data,
+            media_type=user.photo_content_type or "image/jpeg",
+            headers={"Cache-Control": "public, max-age=300"},
+        )
+    # Legacy on-disk fallback for local dev files predating the DB column.
     path = UPLOAD_DIR / user.photo_filename
     if not path.exists():
         raise HTTPException(status_code=404, detail="No photo")

@@ -343,6 +343,28 @@ def _migrate_users_bio():
 _migrate_users_bio()
 
 
+def _migrate_users_photo_blob():
+    """Add User.photo_data + photo_content_type columns so profile photos
+    survive Render redeploys (free tier has no persistent disk). BYTEA on
+    Postgres, BLOB on SQLite."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("users")}
+    is_pg = engine.dialect.name == "postgresql"
+    blob_type = "BYTEA" if is_pg else "BLOB"
+    with engine.connect() as conn:
+        if "photo_data" not in existing:
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN photo_data {blob_type}"))
+        if "photo_content_type" not in existing:
+            conn.execute(text("ALTER TABLE users ADD COLUMN photo_content_type VARCHAR(50)"))
+        conn.commit()
+
+
+_migrate_users_photo_blob()
+
+
 def _migrate_users_strava():
     """Add Strava OAuth columns to users if missing."""
     from sqlalchemy import inspect

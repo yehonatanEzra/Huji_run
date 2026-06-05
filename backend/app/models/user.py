@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Integer, String, Enum, DateTime, ForeignKey, Text, func
+from sqlalchemy import Integer, String, Enum, DateTime, ForeignKey, Text, LargeBinary, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 
@@ -22,6 +22,8 @@ class User(Base):
     # leave-coach. Coaches/admins leave this null.
     coach_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     photo_filename: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    photo_data: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    photo_content_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     strava_athlete_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, unique=True)
     strava_access_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)

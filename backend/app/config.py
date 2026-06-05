@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed origins. Set in prod to your Vercel URL.
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
-    # When true, photo uploads return 503 (use this on hosts without persistent storage).
+    # When true, photo uploads return 503 (use this on hosts without persistent storage).e
     DISABLE_PHOTO_UPLOADS: bool = False
 
     STRAVA_CLIENT_ID: str = ""

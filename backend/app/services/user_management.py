@@ -20,6 +20,9 @@ from ..models.kudos import Kudos
 from ..models.feed import Announcement, AnnouncementReaction, AnnouncementComment
 from ..models.hall_of_fame import HallOfFame
 from ..models.health_wellness import HealthProfessional, HealthReview
+from ..models.notification import Notification
+from ..models.challenge import Challenge
+from ..models.workout import GroupWorkout
 from ..services.hall_of_fame import refresh_hall_of_fame
 
 
@@ -111,6 +114,37 @@ def _purge_user_owned_data(db: Session, user_id: int, deleter_id: int) -> Iterab
     db.query(HealthReview).filter(HealthReview.user_id == user_id).delete()
     db.query(HealthProfessional).filter(HealthProfessional.created_by_id == user_id).update(
         {HealthProfessional.created_by_id: deleter_id}, synchronize_session=False
+    )
+
+    # Notifications received by this user — they're meaningless to anyone
+    # else, so just delete them.
+    db.query(Notification).filter(Notification.recipient_id == user_id).delete()
+
+    # Audit-trail FKs pointing at this user on rows that we are NOT
+    # deleting. For nullable columns we null them out; for non-nullable
+    # columns we reassign to the deleting admin so the row survives.
+    db.query(Result).filter(Result.created_by == user_id).update(
+        {Result.created_by: None}, synchronize_session=False
+    )
+    db.query(Result).filter(Result.decided_by == user_id).update(
+        {Result.decided_by: None}, synchronize_session=False
+    )
+    db.query(Race).filter(Race.decided_by == user_id).update(
+        {Race.decided_by: None}, synchronize_session=False
+    )
+    # Race.created_by is NOT NULL — reassign instead.
+    db.query(Race).filter(Race.created_by == user_id).update(
+        {Race.created_by: deleter_id}, synchronize_session=False
+    )
+    db.query(Challenge).filter(Challenge.created_by == user_id).update(
+        {Challenge.created_by: deleter_id}, synchronize_session=False
+    )
+    # Coach-authored workouts: reassign to deleter so they still display.
+    db.query(GroupWorkout).filter(GroupWorkout.created_by == user_id).update(
+        {GroupWorkout.created_by: deleter_id}, synchronize_session=False
+    )
+    db.query(IndividualTarget).filter(IndividualTarget.created_by == user_id).update(
+        {IndividualTarget.created_by: deleter_id}, synchronize_session=False
     )
 
     hof_refresh: set[tuple[int, str]] = set()

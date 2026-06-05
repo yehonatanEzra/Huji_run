@@ -17,7 +17,7 @@ const SECTION_LABEL = 'text-[10px] uppercase tracking-widest text-white/55 font-
 const GLASS_INPUT = 'w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40';
 
 export default function ProfilePage() {
-  const { user, login } = useAuth();
+  const { user, login, refreshUser, photoVersion, bumpPhotoVersion } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [stravaConnecting, setStravaConnecting] = useState(false);
@@ -71,9 +71,11 @@ export default function ProfilePage() {
     setUploading(true);
     try {
       await uploadPhoto(file);
-      fetchProfile();
+      bumpPhotoVersion();
+      await Promise.all([fetchProfile(), refreshUser()]);
     } catch (err) {
       console.error(err);
+      alert(err?.response?.data?.detail || 'Photo upload failed');
     } finally {
       setUploading(false);
     }
@@ -158,7 +160,7 @@ export default function ProfilePage() {
   if (loading) return <Spinner />;
   if (!profile) return <p className="text-center text-white/60">Failed to load profile</p>;
 
-  const photoSrc = profile.photo_url ? profile.photo_url + '?t=' + Date.now() : null;
+  const photoSrc = profile.photo_url ? profile.photo_url + '?v=' + photoVersion : null;
   const roleLabel = isCoach ? 'Coach' : profile.gender === 'M' ? 'Male athlete' : 'Female athlete';
 
   return (

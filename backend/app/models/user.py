@@ -35,6 +35,10 @@ class User(Base):
     def strava_connected(self) -> bool:
         return bool(self.strava_access_token)
 
+    @property
+    def has_photo(self) -> bool:
+        return bool(self.photo_filename)
+
     training_group = relationship("TrainingGroup", back_populates="members", foreign_keys=[training_group_id])
     workout_logs = relationship("WorkoutLog", back_populates="athlete", cascade="all, delete-orphan")
     individual_targets = relationship("IndividualTarget", foreign_keys="IndividualTarget.athlete_id", back_populates="athlete")

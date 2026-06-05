@@ -35,5 +35,6 @@ class UserOut(BaseModel):
     training_group_id: Optional[int] = None
     coach_id: Optional[int] = None
     strava_connected: bool = False
+    has_photo: bool = False
 
     model_config = {"from_attributes": True}

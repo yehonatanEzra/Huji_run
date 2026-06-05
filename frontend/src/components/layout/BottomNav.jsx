@@ -50,11 +50,15 @@ const adminItems = [
 ];
 
 export default function BottomNav() {
-  const { user } = useAuth();
+  const { user, photoVersion } = useAuth();
   const isCoachOrAdmin = user?.role === 'coach' || user?.role === 'admin';
   const isAdmin = user?.role === 'admin';
   const [pendingCount, setPendingCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
+
+  const profilePhotoUrl = user?.id && user?.has_photo
+    ? `/api/v1/profile/photo/${user.id}?v=${photoVersion}`
+    : null;
 
   useEffect(() => {
     if (!isCoachOrAdmin) return;
@@ -86,6 +90,7 @@ export default function BottomNav() {
 
   const items = baseItems.map((item) => ({
     ...item,
+    image: item.to === '/profile' && profilePhotoUrl ? profilePhotoUrl : item.image,
     badge: item.isRequests ? pendingCount : item.isPending ? reviewCount : 0,
   }));
 

@@ -136,7 +136,7 @@ export default function RegisterPage() {
               <div>
                 <p className="text-[11px] uppercase tracking-wider text-white/45 font-semibold mb-2">I want to join as</p>
                 <div className="flex rounded-xl overflow-hidden border border-white/20 bg-white/5">
-                  {[{ value: 'athlete', label: '🏃 Athlete' }, { value: 'coach', label: '📋 Coach' }].map(({ value, label }) => (
+                  {[{ value: 'athlete', label: 'Athlete' }, { value: 'coach', label: 'Coach' }].map(({ value, label }) => (
                     <button
                       key={value}
                       type="button"

@@ -15,7 +15,7 @@ from ..models.race import Result, Heat, Race, CANONICAL_DISTANCES
 from ..schemas.profile import ProfileResponse, PBEntry, RaceHistoryEntry
 from ..services.time_utils import seconds_to_display, format_pace
 
-MAX_PHOTO_BYTES = 2_000_000
+MAX_PHOTO_BYTES = 5_000_000
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -144,7 +144,7 @@ async def upload_photo(
         raise HTTPException(status_code=400, detail="Only JPEG, PNG or WebP allowed")
     content = await file.read()
     if len(content) > MAX_PHOTO_BYTES:
-        raise HTTPException(status_code=413, detail="Photo must be 2 MB or smaller")
+        raise HTTPException(status_code=413, detail="Photo must be 5 MB or smaller")
     ext = file.content_type.split("/")[1]
     if ext == "jpeg":
         ext = "jpg"

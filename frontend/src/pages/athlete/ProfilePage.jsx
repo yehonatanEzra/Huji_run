@@ -367,30 +367,28 @@ export default function ProfilePage() {
           {profile.race_history.length === 0 ? (
             <p className="text-sm text-white/40 italic">No races yet</p>
           ) : (
-            <div className="bg-white/15 backdrop-blur-sm border border-white/20 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-white/10">
-                    <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">Race</th>
-                    <th className="text-left px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">Dist</th>
-                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">Time</th>
-                    <th className="text-right px-3 py-2 text-[10px] uppercase tracking-wider font-semibold text-white/50">#</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profile.race_history.map((r, i) => (
-                    <tr key={i} className="border-t border-white/10">
-                      <td className="px-3 py-2">
-                        <p className="font-medium text-white truncate max-w-[110px]">{r.race_name}</p>
-                        <p className="text-xs text-white/45">{r.race_date}</p>
-                      </td>
-                      <td className="px-3 py-2 text-white/65 text-xs">{DISTANCE_LABELS[r.distance_m] || `${r.distance_m}m`}</td>
-                      <td className="px-3 py-2 text-right font-mono text-white/85">{r.time_display}</td>
-                      <td className="px-3 py-2 text-right text-white/65">{r.placement}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+              {profile.race_history.map((r, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-2 bg-white/10 border border-white/15 rounded-lg px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-white truncate">{r.race_name}</p>
+                    <p className="text-[11px] text-white/55">
+                      {r.race_date} · {DISTANCE_LABELS[r.distance_m] || `${r.distance_m}m`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {r.placement != null && (
+                      <span className="text-[11px] font-semibold text-yellow-200 bg-yellow-500/15 border border-yellow-400/30 rounded-full px-2 py-0.5">
+                        #{r.placement}
+                      </span>
+                    )}
+                    <span className="font-mono font-semibold text-white/90">{r.time_display}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </>

@@ -12,7 +12,7 @@ from ..models.workout import WorkoutLog
 
 router = APIRouter(prefix="/kudos", tags=["kudos"])
 
-ALLOWED_EMOJI = {"clap", "heart", "dislike"}
+ALLOWED_EMOJI = {"clap", "heart", "dislike", "unlike"}
 
 
 class KudosToggle(BaseModel):

@@ -7,7 +7,7 @@ from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, Workout
 from .models.workout import WorkoutLogComment  # noqa: F401  (ensure table is registered with Base)
 from .models.notification import Notification  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, strava, notifications
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, strava, notifications, stats
 
 Base.metadata.create_all(bind=engine)
 
@@ -387,6 +387,24 @@ def _migrate_workout_logs_manual_override():
 _migrate_workout_logs_manual_override()
 
 
+def _migrate_workout_logs_is_auto_marked():
+    """Add is_auto_marked column to workout_logs if missing."""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "workout_logs" not in inspector.get_table_names():
+        return
+    existing = {c["name"] for c in inspector.get_columns("workout_logs")}
+    if "is_auto_marked" in existing:
+        return
+    default_clause = "FALSE" if engine.dialect.name != "sqlite" else "0"
+    with engine.connect() as conn:
+        conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN is_auto_marked BOOLEAN NOT NULL DEFAULT {default_clause}"))
+        conn.commit()
+
+
+_migrate_workout_logs_is_auto_marked()
+
+
 def _bootstrap_admin_and_coach_ids():
     """One-time data backfill: promote the original sole coach to admin and
     attach every athlete + training group to them. Idempotent — after the
@@ -473,6 +491,7 @@ app.include_router(coaching.router, prefix=API_PREFIX)
 app.include_router(admin_review.router, prefix=API_PREFIX)
 app.include_router(strava.router, prefix=API_PREFIX)
 app.include_router(notifications.router, prefix=API_PREFIX)
+app.include_router(stats.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

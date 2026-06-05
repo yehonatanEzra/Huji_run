@@ -10,6 +10,7 @@ from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarg
 from ..models.kudos import Kudos
 from ..models.training_group import TrainingGroup
 from ..services.notifications import notify, notify_many
+from ..services.prescribed_workouts import backfill_missed
 
 
 def _coach_owns_group(coach: User, db: Session, group_id: int) -> bool:
@@ -79,6 +80,11 @@ def _pick_workout_for_athlete(
 
 def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = False, group_id: Optional[int] = None, viewer_id: Optional[int] = None) -> WeekResponse:
     gid = group_id or athlete.training_group_id
+    # Auto-mark any prescribed-but-unreported past day in this week as missed
+    # before we walk the days. Coach views don't trigger this — coaches read
+    # other athletes' calendars and we don't want a side effect from that.
+    if not is_coach:
+        backfill_missed(db, athlete, week_start, week_start + timedelta(days=7), date.today())
     days = []
     logs = []
     for i in range(7):
@@ -183,6 +189,9 @@ def submit_log(
         log.distance_km = body.distance_km
         log.notes = body.notes
         log.manual_override = body.manual_override
+        # Athlete edited an auto-marked row — it's their call now, not the
+        # backfill's. Drop the flag so the UI hint goes away on next read.
+        log.is_auto_marked = False
     else:
         log = WorkoutLog(
             athlete_id=current_user.id,

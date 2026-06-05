@@ -77,7 +77,8 @@ export function FloatingDock({ items, className = '' }) {
   );
 }
 
-function DockItem({ mouseX, to, label, icon, badge = 0 }) {
+function DockItem({ mouseX, to, label, icon, image, badge = 0 }) {
+  const [imgFailed, setImgFailed] = useState(false);
   const ref = useRef(null);
 
   const distance = useTransform(mouseX, (val) => {
@@ -128,17 +129,30 @@ function DockItem({ mouseX, to, label, icon, badge = 0 }) {
             </AnimatePresence>
 
             {badge > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full px-1 min-w-[14px] text-center leading-tight z-10">
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full px-1 min-w-[14px] text-center leading-tight z-20">
                 {badge}
               </span>
             )}
 
-            <motion.div
-              style={{ width: wIcon, height: hIcon }}
-              className="flex items-center justify-center leading-none"
-            >
-              <span className="text-xl">{icon}</span>
-            </motion.div>
+            {image && !imgFailed ? (
+              // Image icons fill the full outer circle (the emoji-sized inner
+              // wrapper made them look tiny). overflow-hidden + rounded-full
+              // clip the image to the button's circular shape.
+              <img
+                src={image}
+                alt=""
+                onError={() => setImgFailed(true)}
+                className="absolute inset-0 w-full h-full object-cover rounded-full"
+                draggable={false}
+              />
+            ) : (
+              <motion.div
+                style={{ width: wIcon, height: hIcon }}
+                className="relative flex items-center justify-center leading-none"
+              >
+                <span className="text-xl">{icon}</span>
+              </motion.div>
+            )}
           </motion.div>
 
           <span className={`text-[9px] mt-0.5 font-medium leading-none ${isActive ? 'text-white' : 'text-white/45'}`}>

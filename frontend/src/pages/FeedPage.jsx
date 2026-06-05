@@ -208,7 +208,7 @@ export default function FeedPage() {
     <div>
       <PageBackground src="/bg-feed.jpg" />
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold">Team Feed</h2>
+        <h2 className="text-lg font-bold text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.7)]">Feed</h2>
         {canPost && (
           <button
             onClick={openCreate}

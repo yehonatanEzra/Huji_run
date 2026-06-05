@@ -5,6 +5,7 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CalendarPage from './pages/athlete/CalendarPage';
+import ProgressPage from './pages/athlete/ProgressPage';
 import HomePage from './pages/athlete/HomePage';
 import FindCoachPage from './pages/athlete/FindCoachPage';
 import CoachRequestsPage from './pages/coach/CoachRequestsPage';
@@ -16,6 +17,7 @@ import ProfilePage from './pages/athlete/ProfilePage';
 import WorkoutPublisherPage from './pages/coach/WorkoutPublisherPage';
 import IndividualTargetsPage from './pages/coach/IndividualTargetsPage';
 import TrackingDashboardPage from './pages/coach/TrackingDashboardPage';
+import AthleteProgressPage from './pages/coach/AthleteProgressPage';
 import RaceWizardPage from './pages/coach/RaceWizardPage';
 import SettingsPage from './pages/coach/SettingsPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
@@ -41,6 +43,7 @@ export default function App() {
         <Route path="/find-coach" element={<FindCoachPage />} />
         <Route path="/coach/requests" element={<ProtectedRoute requireCoach><CoachRequestsPage /></ProtectedRoute>} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/progress" element={<ProgressPage />} />
         <Route path="/feed" element={<FeedPage />} />
         <Route path="/races" element={<RaceArchivePage />} />
         <Route path="/races/:raceId" element={<RaceDetailPage />} />
@@ -52,6 +55,7 @@ export default function App() {
         <Route path="/coach/workouts" element={<ProtectedRoute requireCoach><WorkoutPublisherPage /></ProtectedRoute>} />
         <Route path="/coach/targets" element={<ProtectedRoute requireCoach><IndividualTargetsPage /></ProtectedRoute>} />
         <Route path="/coach/dashboard" element={<ProtectedRoute requireCoach><TrackingDashboardPage /></ProtectedRoute>} />
+        <Route path="/coach/athletes/:athleteId/progress" element={<ProtectedRoute requireCoach><AthleteProgressPage /></ProtectedRoute>} />
         <Route path="/coach/race-wizard" element={<ProtectedRoute requireCoach><RaceWizardPage /></ProtectedRoute>} />
         <Route path="/admin/pending" element={<ProtectedRoute requireAdmin><AdminPendingPage /></ProtectedRoute>} />
         <Route path="/coach/settings" element={<ProtectedRoute requireCoach><SettingsPage /></ProtectedRoute>} />

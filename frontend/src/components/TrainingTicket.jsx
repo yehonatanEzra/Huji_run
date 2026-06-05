@@ -104,7 +104,6 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
             {/* Logo + type pill */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-lg">🎟️</span>
                 <span className={`text-xs font-extrabold tracking-tight ${logoText}`}>HUJI RUN</span>
               </div>
               {workout && (

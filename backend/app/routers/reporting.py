@@ -10,6 +10,7 @@ from ..models.user import User
 from ..models.workout import WorkoutLog
 from ..models.training_group import TrainingGroup
 from ..services.notifications import notify_many
+from ..services.coach_scope import visible_group_ids as _visible_group_ids
 
 router = APIRouter(prefix="/reporting", tags=["reporting"])
 
@@ -65,21 +66,6 @@ def _week_bounds(week_str: Optional[str]) -> tuple[date, date]:
         today = date.today()
         monday = today - timedelta(days=today.weekday())
     return monday, monday + timedelta(days=6)
-
-
-def _visible_group_ids(coach: User, db: Session, active_team_id: Optional[int]) -> set[int]:
-    """Groups this coach can report on: all team groups for admins, else the
-    groups they're a GroupCoach of."""
-    from ..models.group_coach import GroupCoach
-    if coach.role == "admin":
-        q = db.query(TrainingGroup.id)
-        if active_team_id:
-            q = q.filter(TrainingGroup.team_id == active_team_id)
-        return {row[0] for row in q.all()}
-    return {
-        row[0] for row in db.query(GroupCoach.group_id)
-        .filter(GroupCoach.user_id == coach.id).all()
-    }
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

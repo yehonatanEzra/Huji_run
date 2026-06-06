@@ -27,7 +27,7 @@ from .models.notification import Notification  # noqa: F401
 from .models.team import Team, TeamMembership  # noqa: F401
 from .models.group_coach import GroupCoach  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams
 
 Base.metadata.create_all(bind=engine)
 
@@ -104,6 +104,7 @@ app.include_router(admin_users.router, prefix=API_PREFIX)
 app.include_router(strava.router, prefix=API_PREFIX)
 app.include_router(notifications.router, prefix=API_PREFIX)
 app.include_router(stats.router, prefix=API_PREFIX)
+app.include_router(teams.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

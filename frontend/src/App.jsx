@@ -21,6 +21,7 @@ import TrackingDashboardPage from './pages/coach/TrackingDashboardPage';
 import AthleteProgressPage from './pages/coach/AthleteProgressPage';
 import RaceWizardPage from './pages/coach/RaceWizardPage';
 import SettingsPage from './pages/coach/SettingsPage';
+import TeamSetupPage from './pages/coach/TeamSetupPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
 import AboutPage from './pages/AboutPage';
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/admin/pending" element={<ProtectedRoute requireAdmin><AdminPendingPage /></ProtectedRoute>} />
         <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UsersPage /></ProtectedRoute>} />
         <Route path="/coach/settings" element={<ProtectedRoute requireCoach><SettingsPage /></ProtectedRoute>} />
+        <Route path="/team/setup" element={<ProtectedRoute requireCoach><TeamSetupPage /></ProtectedRoute>} />
       </Route>
 
       <Route path="*" element={<Navigate to={user ? landingFor(user) : "/login"} replace />} />

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
+import { switchTeam as apiSwitchTeam } from '../api/teams';
 
 const AuthContext = createContext(null);
 
@@ -13,6 +14,8 @@ const mergeUser = (data) => ({
   coach_id: data.coach_id ?? null,
   strava_connected: data.strava_connected ?? false,
   has_photo: data.has_photo ?? false,
+  active_team_id: data.active_team_id ?? null,
+  active_team_name: data.active_team_name ?? null,
 });
 
 export function AuthProvider({ children }) {
@@ -47,6 +50,7 @@ export function AuthProvider({ children }) {
       full_name: tokenData.full_name,
       training_group_id: tokenData.training_group_id ?? null,
       coach_id: tokenData.coach_id ?? null,
+      active_team_id: tokenData.active_team_id ?? null,
     };
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
@@ -58,12 +62,18 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const switchTeam = useCallback(async (teamId) => {
+    const { data } = await apiSwitchTeam(teamId);
+    localStorage.setItem('token', data.access_token);
+    await refreshUser();
+  }, [refreshUser]);
+
   const bumpPhotoVersion = useCallback(() => {
     setPhotoVersion(Date.now());
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, refreshUser, photoVersion, bumpPhotoVersion }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser, switchTeam, photoVersion, bumpPhotoVersion }}>
       {children}
     </AuthContext.Provider>
   );

@@ -24,6 +24,7 @@ class TokenResponse(BaseModel):
     user_id: int
     training_group_id: Optional[int] = None
     coach_id: Optional[int] = None
+    active_team_id: Optional[int] = None
 
 
 class UserOut(BaseModel):
@@ -36,5 +37,7 @@ class UserOut(BaseModel):
     coach_id: Optional[int] = None
     strava_connected: bool = False
     has_photo: bool = False
+    active_team_id: Optional[int] = None
+    active_team_name: Optional[str] = None
 
     model_config = {"from_attributes": True}

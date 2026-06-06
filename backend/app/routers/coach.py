@@ -586,16 +586,23 @@ def add_athlete_pb(
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
 ):
-    from ..services.hall_of_fame import refresh_hall_of_fame
+    from ..services.hall_of_fame import refresh_team_hall_of_fame
+    from ..models.team import TeamMembership
 
     athlete = db.get(User, athlete_id)
     if not _athlete_in_scope(coach, athlete):
         raise HTTPException(status_code=404, detail="Athlete not found")
 
+    # Resolve the coach's primary team for scoping new rows.
+    membership = db.query(TeamMembership).filter(TeamMembership.user_id == coach.id).first()
+    coach_team_id = membership.team_id if membership else None
+
     if body.race_id and body.heat_id:
         heat = db.get(Heat, body.heat_id)
         if not heat or heat.race_id != body.race_id:
             raise HTTPException(status_code=404, detail="Heat not found")
+        real_race = db.get(Race, body.race_id)
+        team_id = (real_race.team_id if real_race else None) or coach_team_id
         # Manual PB linked to a real race — auto-approved (admin-visible
         # context: it's a record for this coach's own athlete that flows into HoF).
         result = Result(
@@ -606,10 +613,12 @@ def add_athlete_pb(
             time_seconds=body.time_seconds,
             status="approved",
             created_by=coach.id,
+            team_id=team_id,
         )
         db.add(result)
         db.commit()
-        refresh_hall_of_fame(db, heat.distance_m, result.gender)
+        if team_id is not None:
+            refresh_team_hall_of_fame(db, team_id)
         return {"ok": True, "linked_to_race": True}
 
     # Manual PBs (hidden race): also auto-approved, since they don't pollute
@@ -621,6 +630,7 @@ def add_athlete_pb(
         created_by=coach.id,
         is_manual=True,
         status="approved",
+        team_id=coach_team_id,
     )
     db.add(race)
     db.flush()
@@ -628,6 +638,7 @@ def add_athlete_pb(
         race_id=race.id,
         distance_m=body.distance_m,
         label=f"{body.distance_m}m",
+        team_id=coach_team_id,
     )
     db.add(heat)
     db.flush()
@@ -639,8 +650,10 @@ def add_athlete_pb(
         time_seconds=body.time_seconds,
         status="approved",
         created_by=coach.id,
+        team_id=coach_team_id,
     )
     db.add(result)
     db.commit()
-    refresh_hall_of_fame(db, body.distance_m, result.gender)
+    if coach_team_id is not None:
+        refresh_team_hall_of_fame(db, coach_team_id)
     return {"ok": True, "linked_to_race": False, "race_id": race.id}

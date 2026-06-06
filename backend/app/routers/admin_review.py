@@ -8,7 +8,7 @@ from ..database import get_db
 from ..dependencies import require_admin
 from ..models.user import User
 from ..models.race import Race, Heat, Result
-from ..services.hall_of_fame import refresh_hall_of_fame
+from ..services.hall_of_fame import refresh_team_hall_of_fame
 from ..services.notifications import notify_many
 
 router = APIRouter(prefix="/admin", tags=["admin-review"])
@@ -182,7 +182,9 @@ def approve_result(
     result.decided_by = admin.id
     db.flush()
     if heat:
-        refresh_hall_of_fame(db, heat.distance_m, result.gender)
+        race = db.get(Race, heat.race_id)
+        if race and race.team_id is not None:
+            refresh_team_hall_of_fame(db, race.team_id)
     db.commit()
     return {"ok": True}
 

@@ -12,7 +12,7 @@ from ..schemas.race import (
     RegistrationCreate, RegistrationUpdate, RegistrationOut,
 )
 from ..services.time_utils import parse_time, seconds_to_display, format_pace
-from ..services.hall_of_fame import refresh_hall_of_fame
+from ..services.hall_of_fame import refresh_team_hall_of_fame
 from ..services.notifications import notify_many
 
 router = APIRouter(prefix="/races", tags=["races"])
@@ -458,13 +458,14 @@ def add_result(
         time_seconds=time_sec,
         status=new_status,
         created_by=coach.id,
+        team_id=race.team_id,
     )
     db.add(result)
     db.flush()
 
     # Refresh HoF only when the result is actually approved.
-    if new_status == "approved":
-        refresh_hall_of_fame(db, heat.distance_m, gender)
+    if new_status == "approved" and race.team_id is not None:
+        refresh_team_hall_of_fame(db, race.team_id)
     db.commit()
     db.refresh(result)
 
@@ -603,9 +604,9 @@ def update_result(
 
     # Only refresh HoF if the result was/is approved (admin edits live data).
     if was_approved or result.status == "approved":
-        refresh_hall_of_fame(db, heat.distance_m, result.gender)
-        if old_gender != result.gender:
-            refresh_hall_of_fame(db, heat.distance_m, old_gender)
+        race = db.get(Race, heat.race_id)
+        if race and race.team_id is not None:
+            refresh_team_hall_of_fame(db, race.team_id)
     db.commit()
     db.refresh(result)
 
@@ -654,6 +655,6 @@ def delete_result(
         remaining = db.query(Result).join(Heat, Result.heat_id == Heat.id).filter(Heat.race_id == race_id).count()
         if remaining == 0:
             db.delete(race)  # cascades to heats
-    if was_approved:
-        refresh_hall_of_fame(db, distance_m, gender)
+    if was_approved and race and race.team_id is not None:
+        refresh_team_hall_of_fame(db, race.team_id)
     db.commit()

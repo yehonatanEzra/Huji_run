@@ -65,26 +65,6 @@ except Exception as e:
     log.warning("bootstrap_admin_failed", error=str(e))
 
 
-def _refresh_all_hall_of_fame():
-    """Recompute HoF on startup so results inserted directly via SQL appear correctly."""
-    from .database import SessionLocal
-    from .models.race import CANONICAL_DISTANCES
-    from .services.hall_of_fame import refresh_hall_of_fame
-    db = SessionLocal()
-    try:
-        for d in CANONICAL_DISTANCES:
-            for g in ("M", "F"):
-                refresh_hall_of_fame(db, d, g)
-        db.commit()
-    finally:
-        db.close()
-
-
-try:
-    _refresh_all_hall_of_fame()
-except Exception as e:
-    log.warning("hof_refresh_failed", error=str(e))
-
 
 app = FastAPI(title="Huji Run API", version="1.0.0")
 

@@ -23,7 +23,7 @@ from ..models.health_wellness import HealthProfessional, HealthReview
 from ..models.notification import Notification
 from ..models.challenge import Challenge
 from ..models.workout import GroupWorkout
-from ..services.hall_of_fame import refresh_hall_of_fame
+from ..services.hall_of_fame import refresh_team_hall_of_fame
 
 
 ALLOWED_ROLES = ("athlete", "coach", "admin")
@@ -147,15 +147,14 @@ def _purge_user_owned_data(db: Session, user_id: int, deleter_id: int) -> Iterab
         {IndividualTarget.created_by: deleter_id}, synchronize_session=False
     )
 
-    hof_refresh: set[tuple[int, str]] = set()
+    teams_to_refresh: set[int] = set()
     user_results = db.query(Result).filter(Result.user_id == user_id).all()
     for r in user_results:
-        heat = db.get(Heat, r.heat_id)
-        if heat:
-            hof_refresh.add((heat.distance_m, r.gender))
+        if r.team_id is not None:
+            teams_to_refresh.add(r.team_id)
         db.delete(r)
     db.query(HallOfFame).filter(HallOfFame.user_id == user_id).delete()
-    return hof_refresh
+    return teams_to_refresh
 
 
 def cascade_delete_user(db: Session, target: User, actor: User) -> None:
@@ -175,9 +174,9 @@ def cascade_delete_user(db: Session, target: User, actor: User) -> None:
     if target.role in ("coach", "admin"):
         _orphan_roster_and_groups(db, target.id)
 
-    hof_refresh = _purge_user_owned_data(db, target.id, actor.id)
+    teams_to_refresh = _purge_user_owned_data(db, target.id, actor.id)
 
     db.delete(target)
     db.commit()
-    for distance_m, gender in hof_refresh:
-        refresh_hall_of_fame(db, distance_m, gender)
+    for team_id in teams_to_refresh:
+        refresh_team_hall_of_fame(db, team_id)

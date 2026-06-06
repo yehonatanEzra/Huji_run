@@ -13,6 +13,7 @@ class HallOfFame(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     distance_m: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     gender: Mapped[str] = mapped_column(Enum("M", "F", name="hof_gender_enum"), nullable=False)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -8,7 +8,6 @@ from .database import engine, Base
 structlog.configure(
     processors=[
         structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -25,6 +24,8 @@ log = structlog.get_logger()
 from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, RaceRegistration, HallOfFame, HealthProfessional, HealthReview, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
 from .models.workout import WorkoutLogComment  # noqa: F401
 from .models.notification import Notification  # noqa: F401
+from .models.team import Team, TeamMembership  # noqa: F401
+from .models.group_coach import GroupCoach  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
 from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats
 

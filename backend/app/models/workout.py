@@ -24,6 +24,7 @@ class GroupWorkout(Base):
     # athlete-side picker resolves overlaps by newest-id-wins.
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     training_group_id: Mapped[int] = mapped_column(Integer, ForeignKey("training_groups.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     # workout_type: simple | easy | tempo | long | intervals | fartlek
@@ -47,6 +48,7 @@ class IndividualTarget(Base):
     __table_args__ = (UniqueConstraint("athlete_id", "date", name="uq_target_athlete_date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     note: Mapped[str] = mapped_column(Text, nullable=False)  # kept for backward compat; used for simple/easy
@@ -70,6 +72,7 @@ class WorkoutLog(Base):
     __table_args__ = (UniqueConstraint("athlete_id", "date", name="uq_log_athlete_date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

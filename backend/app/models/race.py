@@ -13,6 +13,7 @@ class Race(Base):
     __tablename__ = "races"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     race_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
@@ -39,6 +40,7 @@ class Heat(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     race_id: Mapped[int] = mapped_column(Integer, ForeignKey("races.id", ondelete="CASCADE"), nullable=False, index=True)
     distance_m: Mapped[int] = mapped_column(Integer, nullable=False)
     label: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -52,6 +54,7 @@ class Result(Base):
     __tablename__ = "results"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     heat_id: Mapped[int] = mapped_column(Integer, ForeignKey("heats.id", ondelete="CASCADE"), nullable=False, index=True)
     athlete_name: Mapped[str] = mapped_column(String(150), nullable=False)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
@@ -78,6 +81,7 @@ class RaceRegistration(Base):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     race_id: Mapped[int] = mapped_column(Integer, ForeignKey("races.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     heat_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("heats.id", ondelete="SET NULL"), nullable=True, index=True)

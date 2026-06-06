@@ -32,6 +32,25 @@ class ReportingOverview(BaseModel):
     athletes: list[AthleteReportRow]
 
 
+class LoadRow(BaseModel):
+    user_id: int
+    full_name: str
+    group_id: Optional[int]
+    group_name: Optional[str]
+    current_week_km: float
+    avg_prev_km: float          # mean weekly km over the prior weeks (baseline)
+    spike_pct: Optional[float]  # % over baseline; None when no baseline history
+    is_spike: bool              # spike_pct > threshold
+    weekly_km: list[float]      # oldest → newest, including current week
+
+
+class LoadOverview(BaseModel):
+    week_start: date
+    week_end: date
+    threshold_pct: float
+    athletes: list[LoadRow]
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _week_bounds(week_str: Optional[str]) -> tuple[date, date]:
@@ -48,6 +67,21 @@ def _week_bounds(week_str: Optional[str]) -> tuple[date, date]:
     return monday, monday + timedelta(days=6)
 
 
+def _visible_group_ids(coach: User, db: Session, active_team_id: Optional[int]) -> set[int]:
+    """Groups this coach can report on: all team groups for admins, else the
+    groups they're a GroupCoach of."""
+    from ..models.group_coach import GroupCoach
+    if coach.role == "admin":
+        q = db.query(TrainingGroup.id)
+        if active_team_id:
+            q = q.filter(TrainingGroup.team_id == active_team_id)
+        return {row[0] for row in q.all()}
+    return {
+        row[0] for row in db.query(GroupCoach.group_id)
+        .filter(GroupCoach.user_id == coach.id).all()
+    }
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/overview", response_model=ReportingOverview)
@@ -60,19 +94,7 @@ def reporting_overview(
 ):
     week_start, week_end = _week_bounds(week)
 
-    # Determine which groups this coach can see.
-    from ..models.group_coach import GroupCoach
-    if coach.role == "admin":
-        group_ids_q = db.query(TrainingGroup.id)
-        if active_team_id:
-            group_ids_q = group_ids_q.filter(TrainingGroup.team_id == active_team_id)
-        visible_group_ids = {row[0] for row in group_ids_q.all()}
-    else:
-        visible_group_ids = {
-            row[0] for row in db.query(GroupCoach.group_id)
-            .filter(GroupCoach.user_id == coach.id).all()
-        }
-
+    visible_group_ids = _visible_group_ids(coach, db, active_team_id)
     if group_id is not None:
         if group_id not in visible_group_ids:
             raise HTTPException(status_code=403, detail="Not a coach of that group")
@@ -132,17 +154,7 @@ def alert_non_loggers(
     days: int = Query(3, ge=1, le=14, description="Flag athletes silent for this many days"),
 ):
     """FR-B2: Send push notification to athletes who haven't logged in `days` days."""
-    from ..models.group_coach import GroupCoach
-    if coach.role == "admin":
-        group_ids_q = db.query(TrainingGroup.id)
-        if active_team_id:
-            group_ids_q = group_ids_q.filter(TrainingGroup.team_id == active_team_id)
-        visible_group_ids = {row[0] for row in group_ids_q.all()}
-    else:
-        visible_group_ids = {
-            row[0] for row in db.query(GroupCoach.group_id)
-            .filter(GroupCoach.user_id == coach.id).all()
-        }
+    visible_group_ids = _visible_group_ids(coach, db, active_team_id)
 
     since = date.today() - timedelta(days=days)
     athletes = db.query(User).filter(
@@ -175,3 +187,81 @@ def alert_non_loggers(
         background_tasks.add_task(_send)
 
     return {"alerted": len(silent_ids)}
+
+
+@router.get("/load-overview", response_model=LoadOverview)
+def load_overview(
+    coach: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+    active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
+    group_id: Optional[int] = Query(None),
+    week: Optional[str] = Query(None, description="ISO week string: YYYY-WNN (current week)"),
+    weeks: int = Query(4, ge=2, le=12, description="Total weeks of history including current"),
+    threshold: float = Query(30.0, ge=0, description="Spike threshold percent over baseline"),
+):
+    """FR-C: weekly km load per athlete with a >threshold% week-over-baseline
+    spike flag. Baseline = mean of the prior weeks (excluding current)."""
+    week_start, week_end = _week_bounds(week)
+    history_start = week_start - timedelta(weeks=weeks - 1)
+
+    visible_group_ids = _visible_group_ids(coach, db, active_team_id)
+    if group_id is not None:
+        if group_id not in visible_group_ids:
+            raise HTTPException(status_code=403, detail="Not a coach of that group")
+        visible_group_ids = {group_id}
+
+    groups = {g.id: g for g in db.query(TrainingGroup).filter(
+        TrainingGroup.id.in_(visible_group_ids)
+    ).all()} if visible_group_ids else {}
+
+    athletes = db.query(User).filter(
+        User.training_group_id.in_(visible_group_ids),
+        User.role == "athlete",
+    ).order_by(User.full_name).all() if visible_group_ids else []
+
+    # Pull every logged km in the window once, then bucket per athlete per week.
+    km_by_athlete_week: dict[int, list[float]] = {
+        a.id: [0.0] * weeks for a in athletes
+    }
+    if athletes:
+        logs = db.query(WorkoutLog.athlete_id, WorkoutLog.date, WorkoutLog.distance_km).filter(
+            WorkoutLog.athlete_id.in_([a.id for a in athletes]),
+            WorkoutLog.date >= history_start,
+            WorkoutLog.date <= week_end,
+            WorkoutLog.distance_km.isnot(None),
+        ).all()
+        for aid, log_date, km in logs:
+            idx = (log_date - history_start).days // 7
+            if 0 <= idx < weeks:
+                km_by_athlete_week[aid][idx] += km or 0.0
+
+    rows = []
+    for athlete in athletes:
+        weekly = [round(v, 1) for v in km_by_athlete_week[athlete.id]]
+        current = weekly[-1]
+        prior = weekly[:-1]
+        # Baseline ignores zero-weeks so a single rest week doesn't fake a spike.
+        active_prior = [v for v in prior if v > 0]
+        avg_prev = round(sum(active_prior) / len(active_prior), 1) if active_prior else 0.0
+        spike_pct = round((current - avg_prev) / avg_prev * 100, 1) if avg_prev > 0 else None
+        is_spike = spike_pct is not None and spike_pct > threshold and current > avg_prev
+        group = groups.get(athlete.training_group_id)
+        rows.append(LoadRow(
+            user_id=athlete.id,
+            full_name=athlete.full_name,
+            group_id=athlete.training_group_id,
+            group_name=group.name if group else None,
+            current_week_km=current,
+            avg_prev_km=avg_prev,
+            spike_pct=spike_pct,
+            is_spike=is_spike,
+            weekly_km=weekly,
+        ))
+
+    # Spiking athletes first, then by how big the spike is.
+    rows.sort(key=lambda r: (not r.is_spike, -(r.spike_pct or 0)))
+
+    return LoadOverview(
+        week_start=week_start, week_end=week_end,
+        threshold_pct=threshold, athletes=rows,
+    )

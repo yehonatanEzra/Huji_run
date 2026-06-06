@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import create_access_token, get_current_user
+from ..dependencies import create_access_token, get_current_user, get_active_team_id
 from ..models.user import User
 from ..models.team import Team, TeamMembership
 from ..schemas.auth import RegisterRequest, LoginRequest, TokenResponse, UserOut
@@ -77,16 +77,28 @@ def login(body: LoginRequest, db: Annotated[Session, Depends(get_db)]):
 
 
 @router.get("/me", response_model=UserOut)
-def me(current_user: Annotated[User, Depends(get_current_user)], db: Annotated[Session, Depends(get_db)]):
-    active_team_id = _primary_team_id(db, current_user.id)
+def me(
+    current_user: Annotated[User, Depends(get_current_user)],
+    active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
+    db: Annotated[Session, Depends(get_db)],
+):
     active_team_name: Optional[str] = None
     if active_team_id is not None:
         team = db.get(Team, active_team_id)
         active_team_name = team.name if team else None
-    # Attach as transient attributes so Pydantic's from_attributes can read them.
-    current_user.active_team_id = active_team_id
-    current_user.active_team_name = active_team_name
-    return current_user
+    return UserOut(
+        id=current_user.id,
+        full_name=current_user.full_name,
+        username=current_user.username,
+        gender=current_user.gender,
+        role=current_user.role,
+        training_group_id=current_user.training_group_id,
+        coach_id=current_user.coach_id,
+        strava_connected=current_user.strava_connected,
+        has_photo=current_user.has_photo,
+        active_team_id=active_team_id,
+        active_team_name=active_team_name,
+    )
 
 
 @router.post("/switch-team", response_model=TokenResponse)

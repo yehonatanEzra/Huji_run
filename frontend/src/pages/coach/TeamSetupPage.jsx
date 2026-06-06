@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { createTeam } from '../../api/teams';
 
+
 export default function TeamSetupPage() {
-  const { user, login } = useAuth();
+  const { user, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   const [form, setForm] = useState({ name: '', sport: '', location: '', description: '' });
@@ -37,8 +38,9 @@ export default function TeamSetupPage() {
         location: form.location.trim() || null,
         description: form.description.trim() || null,
       });
-      // Store the new token (active_team_id set to the new team)
-      login({ ...data, user_id: user.id, role: user.role, full_name: user.full_name, access_token: data.access_token });
+      // Store the new token then fetch full user profile from /me.
+      localStorage.setItem('token', data.access_token);
+      await refreshUser();
       navigate('/home', { replace: true });
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create team');

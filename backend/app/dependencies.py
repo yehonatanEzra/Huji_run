@@ -56,6 +56,18 @@ def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> U
     return current_user
 
 
+def get_active_team_id(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+) -> Optional[int]:
+    """Extract active_team_id from JWT without a DB round-trip. Returns None for old tokens."""
+    try:
+        payload = jwt.decode(credentials.credentials, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        val = payload.get("active_team_id")
+        return int(val) if val is not None else None
+    except (JWTError, ValueError):
+        return None
+
+
 def get_optional_user(
     credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(optional_bearer)],
     db: Annotated[Session, Depends(get_db)],

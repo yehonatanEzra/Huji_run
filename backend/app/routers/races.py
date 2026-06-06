@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, extract
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import get_current_user, require_coach, require_admin
+from ..dependencies import get_current_user, require_coach, require_admin, get_active_team_id
 from ..models.user import User
 from ..models.race import Race, Heat, Result, RaceRegistration, CANONICAL_DISTANCES
 from ..schemas.race import (
@@ -370,6 +370,7 @@ def create_race(
     body: RaceCreate,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
     """Admin creates approved races directly; coaches create pending races
     that need admin approval before going public."""
@@ -378,6 +379,7 @@ def create_race(
         race_date=body.race_date,
         created_by=coach.id,
         status="approved" if coach.role == "admin" else "pending",
+        team_id=active_team_id,
     )
     db.add(race)
     db.flush()

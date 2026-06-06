@@ -74,8 +74,10 @@ def upgrade() -> None:
     )).fetchall()
     for (user_id,) in coaches:
         bind.execute(text(
-            "INSERT OR IGNORE INTO team_memberships (user_id, team_id, role) "
-            "VALUES (:uid, :tid, 'main')"
+            "INSERT INTO team_memberships (user_id, team_id, role) "
+            "SELECT :uid, :tid, 'main' WHERE NOT EXISTS ("
+            "  SELECT 1 FROM team_memberships WHERE user_id = :uid AND team_id = :tid"
+            ")"
         ), {"uid": user_id, "tid": team_id})
 
     # 4. Backfill team_id on all domain tables (only NULL rows).

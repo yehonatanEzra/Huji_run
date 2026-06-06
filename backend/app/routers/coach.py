@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import require_coach
+from ..dependencies import require_coach, get_active_team_id
 from ..models.user import User
 from ..models.training_group import TrainingGroup
 from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
@@ -585,17 +585,13 @@ def add_athlete_pb(
     body: AddPBRequest,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    coach_team_id: Optional[int] = Depends(get_active_team_id),
 ):
     from ..services.hall_of_fame import refresh_team_hall_of_fame
-    from ..models.team import TeamMembership
 
     athlete = db.get(User, athlete_id)
     if not _athlete_in_scope(coach, athlete):
         raise HTTPException(status_code=404, detail="Athlete not found")
-
-    # Resolve the coach's primary team for scoping new rows.
-    membership = db.query(TeamMembership).filter(TeamMembership.user_id == coach.id).first()
-    coach_team_id = membership.team_id if membership else None
 
     if body.race_id and body.heat_id:
         heat = db.get(Heat, body.heat_id)

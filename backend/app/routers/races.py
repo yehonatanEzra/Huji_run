@@ -21,15 +21,34 @@ router = APIRouter(prefix="/races", tags=["races"])
 # ── Moderation helpers ────────────────────────────────────────────────────────
 
 
-def _can_see_race(user: User, race: Race) -> bool:
-    """A pending race is visible only to its author + admins. Approved + manual
-    races are visible to everyone. Rejected races are visible only to the
-    author + admins (so the coach can see admin's note on their drafts)."""
-    if race.status == "approved":
+def _can_see_race(user: User, race: Race, db: Optional[Session] = None) -> bool:
+    """Visibility combines moderation status and scope.
+
+    Moderation: pending/rejected races are author+admin only.
+    Scope (for approved races):
+      global  → everyone
+      group   → athletes in creator's training group + coaches + admins
+      personal → creator + coaches + admins
+    """
+    if race.status != "approved":
+        if user.role == "admin":
+            return True
+        return race.created_by == user.id
+
+    scope = race.scope or "global"
+    if scope == "global":
         return True
-    if user.role == "admin":
+    if user.role in ("admin", "coach"):
         return True
-    return race.created_by == user.id
+    if race.created_by == user.id:
+        return True
+    if scope == "personal":
+        return False
+    # scope == "group"
+    if db is None or user.training_group_id is None:
+        return False
+    creator = db.get(User, race.created_by)
+    return creator is not None and creator.training_group_id == user.training_group_id
 
 
 def _can_modify_race(user: User, race: Race) -> bool:
@@ -38,10 +57,10 @@ def _can_modify_race(user: User, race: Race) -> bool:
     return race.created_by == user.id and race.status in ("pending", "rejected")
 
 
-def _can_see_result(user: User, race: Race, result: Result) -> bool:
+def _can_see_result(user: User, race: Race, result: Result, db: Optional[Session] = None) -> bool:
     """Approved results visible to all (once the race itself is visible).
     Pending/rejected results visible only to the proposing coach + admins."""
-    if not _can_see_race(user, race):
+    if not _can_see_race(user, race, db):
         return False
     if result.status == "approved":
         return True
@@ -74,6 +93,7 @@ def _attach_race_meta(db: Session, race: Race) -> dict:
         "id": race.id,
         "name": race.name,
         "race_date": race.race_date,
+        "scope": race.scope or "global",
         "status": status_val,
         "registration_count": reg_count,
         "heat_count": heat_count,
@@ -128,6 +148,8 @@ def list_races(
     races = q.order_by(Race.race_date.desc()).all()
     out = []
     for r in races:
+        if not _can_see_race(current_user, r, db):
+            continue
         meta = _attach_race_meta(db, r)
         meta["moderation_status"] = r.status
         meta["decline_note"] = r.decline_note
@@ -140,7 +162,7 @@ def list_races(
 @router.get("/{race_id}", response_model=RaceDetail)
 def get_race(race_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     race = db.get(Race, race_id)
-    if not race or not _can_see_race(current_user, race):
+    if not race or not _can_see_race(current_user, race, db):
         raise HTTPException(status_code=404, detail="Race not found")
     return {
         "id": race.id,
@@ -298,13 +320,13 @@ def get_race_results(
     current_user: User = Depends(get_current_user),
 ):
     race = db.get(Race, race_id)
-    if not race or not _can_see_race(current_user, race):
+    if not race or not _can_see_race(current_user, race, db):
         raise HTTPException(status_code=404, detail="Race not found")
     heats = db.query(Heat).filter(Heat.race_id == race_id, Heat.distance_m == distance_m).all()
     output = []
     for heat in heats:
         # Drop results the caller isn't allowed to see (e.g. another coach's pending).
-        visible_results = [r for r in heat.results if _can_see_result(current_user, race, r)]
+        visible_results = [r for r in heat.results if _can_see_result(current_user, race, r, db)]
         sorted_results = sorted(visible_results, key=lambda r: r.time_seconds)
         result_outs = []
         # Placement is computed on APPROVED results only (so a pending result
@@ -337,7 +359,7 @@ def get_race_leaderboard(
     current_user: User = Depends(get_current_user),
 ):
     race = db.get(Race, race_id)
-    if not race or not _can_see_race(current_user, race):
+    if not race or not _can_see_race(current_user, race, db):
         raise HTTPException(status_code=404, detail="Race not found")
     heats = db.query(Heat).filter(Heat.race_id == race_id, Heat.distance_m == distance_m).all()
     # Leaderboard reflects approved results only — pending entries shouldn't
@@ -380,6 +402,7 @@ def create_race(
         created_by=coach.id,
         status="approved" if coach.role == "admin" else "pending",
         team_id=active_team_id,
+        scope=body.scope,
     )
     db.add(race)
     db.flush()
@@ -431,7 +454,7 @@ def add_result(
     heat = db.get(Heat, heat_id)
     if not race or not heat or heat.race_id != race_id:
         raise HTTPException(status_code=404, detail="Heat not found")
-    if not _can_see_race(coach, race):
+    if not _can_see_race(coach, race, db):
         raise HTTPException(status_code=404, detail="Race not found")
 
     try:
@@ -504,6 +527,7 @@ def update_race(
         raise HTTPException(status_code=403, detail="Approved races can only be edited by admin")
     race.name = body.name.strip()
     race.race_date = body.race_date
+    race.scope = body.scope
     # An edit to a rejected race puts it back into the review queue.
     if race.status == "rejected" and coach.role != "admin":
         race.status = "pending"

@@ -24,6 +24,7 @@ def refresh_hall_of_fame(
             Result.gender == gender,
             Result.status == "approved",
             Race.status == "approved",
+            Race.scope == "global",
         )
     )
     if team_id is not None:

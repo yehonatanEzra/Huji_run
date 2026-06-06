@@ -25,6 +25,8 @@ class Race(Base):
     # entire backfill + every admin-created race lives normally; coach-proposed
     # races start "pending" until an admin approves.
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="approved", server_default="approved", index=True)
+    # Visibility scope: personal (athlete + coaches) | group | global (HoF eligible, admin-verified)
+    scope: Mapped[str] = mapped_column(String(20), nullable=False, default="global", server_default="global")
     decline_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     decided_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)

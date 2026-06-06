@@ -26,27 +26,31 @@ const athleteUnpairedItems = [
 ];
 
 const coachItems = [
-  { to: '/coach/dashboard', label: 'Tracking',  icon: '📊', image: '/icons/tracking.jpg' },
-  { to: '/coach/workouts',  label: 'Coach',     icon: '📋', image: '/icons/coach.jpg' },
-  { to: '/coach/requests',  label: 'Requests',  icon: '📥', image: '/icons/requests.jpg', isRequests: true },
-  { to: '/feed',            label: 'Feed',      icon: '📢', image: '/icons/feed.jpg' },
-  { to: '/races',           label: 'Races',     icon: '🏆', image: '/icons/races.jpg' },
-  { to: '/hall-of-fame',    label: 'Hall of Fame', icon: '🥇', image: '/icons/hall-of-fame.jpg' },
-  { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },
-  { to: '/profile',         label: 'Profile',   icon: '👤', image: '/icons/profile.jpg' },
+  { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
+  { to: '/coach/workouts',     label: 'Coach',       icon: '📋', image: '/icons/coach.jpg' },
+  { to: '/coach/requests',     label: 'Requests',    icon: '📥', image: '/icons/requests.jpg', isRequests: true },
+  { to: '/coach/reporting',    label: 'Reporting',   icon: '📈', image: '/icons/reporting.jpg' },
+  { to: '/coach/group-coaches',label: 'Co-coaches',  icon: '👥', image: '/icons/group-coaches.jpg' },
+  { to: '/feed',               label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
+  { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
+  { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
+  { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
+  { to: '/profile',            label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
 const adminItems = [
-  { to: '/coach/dashboard', label: 'Tracking',  icon: '📊', image: '/icons/tracking.jpg' },
-  { to: '/coach/workouts',  label: 'Coach',     icon: '📋', image: '/icons/coach.jpg' },
-  { to: '/coach/requests',  label: 'Requests',  icon: '📥', image: '/icons/requests.jpg', isRequests: true },
-  { to: '/admin/pending',   label: 'Review',    icon: '⚖️', image: '/icons/review.jpg', isPending: true },
-  { to: '/admin/users',     label: 'Users',     icon: '👥', image: '/icons/users.jpg' },
-  { to: '/feed',            label: 'Feed',      icon: '📢', image: '/icons/feed.jpg' },
-  { to: '/races',           label: 'Races',     icon: '🏆', image: '/icons/races.jpg' },
-  { to: '/hall-of-fame',    label: 'Hall of Fame', icon: '🥇', image: '/icons/hall-of-fame.jpg' },
-  { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },
-  { to: '/profile',         label: 'Profile',   icon: '👤', image: '/icons/profile.jpg' },
+  { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
+  { to: '/coach/workouts',     label: 'Coach',       icon: '📋', image: '/icons/coach.jpg' },
+  { to: '/coach/requests',     label: 'Requests',    icon: '📥', image: '/icons/requests.jpg', isRequests: true },
+  { to: '/coach/reporting',    label: 'Reporting',   icon: '📈', image: '/icons/reporting.jpg' },
+  { to: '/coach/group-coaches',label: 'Co-coaches',  icon: '👥', image: '/icons/group-coaches.jpg' },
+  { to: '/admin/pending',      label: 'Review',      icon: '⚖️', image: '/icons/review.jpg', isPending: true },
+  { to: '/admin/users',        label: 'Users',       icon: '👥', image: '/icons/users.jpg' },
+  { to: '/feed',               label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
+  { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
+  { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
+  { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
+  { to: '/profile',            label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
 export default function BottomNav() {

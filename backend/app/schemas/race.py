@@ -8,18 +8,17 @@ from ..models.race import CANONICAL_DISTANCES
 class RaceCreate(BaseModel):
     name: str
     race_date: date
+    scope: Literal["personal", "group", "global"] = "global"
 
 
 class RaceOut(BaseModel):
     id: int
     name: str
     race_date: date
+    scope: str = "global"
     status: str = "upcoming"  # "upcoming" or "completed"
     registration_count: int = 0
     heat_count: int = 0
-    # Moderation state. "approved" is the live, public default; coach-proposed
-    # races sit as "pending" until an admin approves; "rejected" carries
-    # decline_note set by admin.
     moderation_status: str = "approved"
     decline_note: Optional[str] = None
     model_config = {"from_attributes": True}

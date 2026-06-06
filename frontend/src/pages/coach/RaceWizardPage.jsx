@@ -18,6 +18,7 @@ export default function RaceWizardPage() {
   const [raceId, setRaceId] = useState(null);
   const [raceName, setRaceName] = useState('');
   const [raceDate, setRaceDate] = useState('');
+  const [raceScope, setRaceScope] = useState('global');
   const [heats, setHeats] = useState([]);
   const [newDist, setNewDist] = useState(5000);
   const [newLabel, setNewLabel] = useState('');
@@ -33,7 +34,7 @@ export default function RaceWizardPage() {
     setSaving(true);
     setError('');
     try {
-      const { data } = await createRace({ name: raceName.trim(), race_date: raceDate });
+      const { data } = await createRace({ name: raceName.trim(), race_date: raceDate, scope: raceScope });
       setRaceId(data.id);
       setStep(2);
     } catch (err) {
@@ -93,6 +94,30 @@ export default function RaceWizardPage() {
             onChange={(e) => setRaceDate(e.target.value)}
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Visibility</label>
+            <div className="flex gap-2">
+              {[
+                { value: 'global', label: 'Global', desc: 'Everyone & Hall of Fame' },
+                { value: 'group', label: 'Group', desc: 'Training group members' },
+                { value: 'personal', label: 'Personal', desc: 'Athletes & coaches only' },
+              ].map(({ value, label, desc }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRaceScope(value)}
+                  className={`flex-1 rounded-lg border px-2 py-2 text-center transition-colors ${
+                    raceScope === value
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="text-xs font-semibold">{label}</div>
+                  <div className="text-[10px] leading-tight mt-0.5 opacity-75">{desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             onClick={handleStep1}
             disabled={saving || !raceName.trim() || !raceDate}

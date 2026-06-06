@@ -24,6 +24,7 @@ After each session, the athlete reports the workout with one of three statuses (
 - All Races: every race the club has ever participated in, searchable.
 - My Races:  only the races the athlete personally ran in.
 - Each race page has tabs for **Heats** (sorted by time, with auto-calculated pace per km) and **Overall** (combined men's and women's leaderboards across all heats of the same distance).
+- **Race scopes:** a race can be **global** (visible to everyone and eligible for the Hall of Fame), **group** (visible to the training group), or **personal** (visible to the athlete and coaches). Coaches pick the scope when creating a race.
 
 ### Races
 
@@ -117,3 +118,31 @@ Post announcements to the team feed, optionally targeted to a single training gr
 ### Moderation in Health & Wellness
 
 Only coaches can edit or delete entries in the Health & Wellness directory, keeping the shared database clean.
+
+### Workout plan templates
+
+Write a multi-week training block once and reuse it across seasons. A template is a **week × weekday grid** — pick a workout type and fill in the details for each day. Apply a template to any group from a start date and every workout populates the calendar automatically (the start date snaps to its Monday). Re-applying over dates that already have workouts asks for confirmation before replacing them. Templates are private to the coach who created them.
+
+### Reporting overview
+
+A dedicated page showing, for each athlete, **how consistently they're logging** — days reported out of the week, response-rate %, filterable by group and week, with the least-active athletes surfaced first. One click sends a push reminder to everyone who's been silent for a chosen number of days.
+
+### Load management warnings
+
+A **Load** tab that tracks each athlete's weekly km and flags anyone whose volume **spikes week-over-week** beyond a configurable threshold (default 30%). Each athlete shows their current km, the % change versus last week, and a four-week sparkline; spiking athletes are highlighted.
+
+### Team analytics
+
+A coach analytics page with three charts, filterable by group:
+
+- **Weekly volume** — total, average per athlete, or a per-athlete multi-line view, with the latest week-over-week % change shown inline
+- **Logging completion rate** over time
+- **Planned workout-type breakdown** (how much easy / tempo / intervals / long the group is doing)
+
+### Multi-coach groups
+
+A group has one **main coach** plus any number of **assistant coaches**. The main coach can add or remove assistants and transfer ownership of the group. This lets several coaches share a group without stepping on each other.
+
+### Teams
+
+The platform is organized into **teams**. A coach can create a team and manage its groups and athletes; data is scoped per team so multiple clubs can run independently on the same platform. Coaches who belong to more than one team can switch the active team from the header.

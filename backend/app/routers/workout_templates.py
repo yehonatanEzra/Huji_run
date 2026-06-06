@@ -63,6 +63,14 @@ def _write_days(db: Session, template: WorkoutTemplate, days) -> None:
         ))
 
 
+def _detail(t: WorkoutTemplate) -> TemplateDetail:
+    return TemplateDetail(
+        id=t.id, name=t.name, description=t.description,
+        weeks_count=t.weeks_count,
+        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week)),
+    )
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[TemplateSummary])
@@ -77,16 +85,23 @@ def list_templates(
     elif coach.role != "admin":
         return []  # a coach with no active team sees no templates
     templates = q.order_by(WorkoutTemplate.created_at.desc()).all()
-    out = []
-    for t in templates:
-        count = db.query(WorkoutTemplateDay).filter(
-            WorkoutTemplateDay.template_id == t.id
-        ).count()
-        out.append(TemplateSummary(
+    if not templates:
+        return []
+    # One grouped query for all day counts instead of a COUNT per template (N+1).
+    from sqlalchemy import func
+    counts = dict(
+        db.query(WorkoutTemplateDay.template_id, func.count(WorkoutTemplateDay.id))
+        .filter(WorkoutTemplateDay.template_id.in_([t.id for t in templates]))
+        .group_by(WorkoutTemplateDay.template_id)
+        .all()
+    )
+    return [
+        TemplateSummary(
             id=t.id, name=t.name, description=t.description,
-            weeks_count=t.weeks_count, day_count=count,
-        ))
-    return out
+            weeks_count=t.weeks_count, day_count=counts.get(t.id, 0),
+        )
+        for t in templates
+    ]
 
 
 @router.get("/{template_id}", response_model=TemplateDetail)
@@ -97,11 +112,7 @@ def get_template(
     active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
 ):
     t = _owned_template(db, template_id, coach, active_team_id)
-    return TemplateDetail(
-        id=t.id, name=t.name, description=t.description,
-        weeks_count=t.weeks_count,
-        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week)),
-    )
+    return _detail(t)
 
 
 @router.post("", response_model=TemplateDetail, status_code=status.HTTP_201_CREATED)
@@ -123,11 +134,7 @@ def create_template(
     _write_days(db, t, body.days)
     db.commit()
     db.refresh(t)
-    return TemplateDetail(
-        id=t.id, name=t.name, description=t.description,
-        weeks_count=t.weeks_count,
-        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week)),
-    )
+    return _detail(t)
 
 
 @router.put("/{template_id}", response_model=TemplateDetail)
@@ -145,11 +152,7 @@ def update_template(
     _write_days(db, t, body.days)
     db.commit()
     db.refresh(t)
-    return TemplateDetail(
-        id=t.id, name=t.name, description=t.description,
-        weeks_count=t.weeks_count,
-        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week)),
-    )
+    return _detail(t)
 
 
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -183,10 +186,37 @@ def apply_template(
     start_monday = body.start_date - timedelta(days=body.start_date.weekday())
 
     days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week))
+    # Map each template day to its calendar date up front so we can both detect
+    # collisions and report the plan's end date.
+    targets = {
+        d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
+        for d in days
+    }
+    target_dates = set(targets.values())
+
+    # Idempotency: a prior apply (or manual workouts) on the plan's dates would
+    # otherwise stack duplicates, since GroupWorkout allows many per (group,date).
+    replaced = 0
+    if target_dates:
+        existing = db.query(GroupWorkout).filter(
+            GroupWorkout.training_group_id == body.group_id,
+            GroupWorkout.date.in_(target_dates),
+        )
+        conflicts = existing.count()
+        if conflicts and not body.replace:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{conflicts} workout(s) already exist on these dates; "
+                       f"re-apply with replace=true to overwrite",
+            )
+        if conflicts:
+            existing.delete(synchronize_session=False)
+            replaced = conflicts
+
     created = 0
     last_date = start_monday
     for d in days:
-        target = start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
+        target = targets[d]
         last_date = max(last_date, target)
         db.add(GroupWorkout(
             team_id=active_team_id,
@@ -216,4 +246,5 @@ def apply_template(
         )
 
     db.commit()
-    return TemplateApplyResult(created=created, start_monday=start_monday, end_date=last_date)
+    return TemplateApplyResult(created=created, replaced=replaced,
+                              start_monday=start_monday, end_date=last_date)

@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_coach, get_active_team_id
@@ -168,7 +169,6 @@ def type_breakdown(
     slices: list[TypeSlice] = []
     total = 0
     if visible:
-        from sqlalchemy import func
         rows = db.query(GroupWorkout.workout_type, func.count(GroupWorkout.id)).filter(
             GroupWorkout.training_group_id.in_(visible),
             GroupWorkout.date >= since,

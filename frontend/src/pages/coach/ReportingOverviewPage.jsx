@@ -78,7 +78,6 @@ export default function ReportingOverviewPage() {
 
   const currentWeek = toIsoWeekStr(new Date());
   const isCurrentWeek = week === currentWeek;
-  const active = view === 'load' ? loadData : data;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">

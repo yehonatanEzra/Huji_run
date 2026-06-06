@@ -230,7 +230,7 @@ def load_overview(
         active_prior = [v for v in prior if v > 0]
         avg_prev = round(sum(active_prior) / len(active_prior), 1) if active_prior else 0.0
         spike_pct = round((current - avg_prev) / avg_prev * 100, 1) if avg_prev > 0 else None
-        is_spike = spike_pct is not None and spike_pct > threshold and current > avg_prev
+        is_spike = spike_pct is not None and spike_pct > threshold
         group = groups.get(athlete.training_group_id)
         rows.append(LoadRow(
             user_id=athlete.id,

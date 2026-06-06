@@ -75,10 +75,12 @@ class TemplateDetail(BaseModel):
 
 class TemplateApply(BaseModel):
     group_id: int
-    start_date: date  # snapped to the Monday of its week on the server
+    start_date: date          # snapped to the Monday of its week on the server
+    replace: bool = True      # overwrite existing group workouts on the plan's dates
 
 
 class TemplateApplyResult(BaseModel):
     created: int
+    replaced: int             # existing workouts on the plan's dates that were overwritten
     start_monday: date
     end_date: date

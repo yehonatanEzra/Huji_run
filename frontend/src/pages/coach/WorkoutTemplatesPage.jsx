@@ -401,12 +401,14 @@ function ApplyModal({ template, onClose }) {
       <h3 className="font-semibold mb-1">Apply "{template.name}"</h3>
       <p className="text-xs text-gray-500 mb-3">
         {template.weeks_count} weeks · {template.day_count} workouts. The start date snaps to its Monday.
+        Existing workouts on the plan's dates are replaced.
       </p>
 
       {result ? (
         <div className="space-y-3">
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-800">
-            Created {result.created} workouts from {result.start_monday} to {result.end_date}.
+            Created {result.created} workouts from {result.start_monday} to {result.end_date}
+            {result.replaced > 0 && `, replacing ${result.replaced} existing`}.
           </div>
           <button onClick={onClose} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700">
             Done

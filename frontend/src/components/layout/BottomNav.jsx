@@ -28,6 +28,7 @@ const athleteUnpairedItems = [
 const coachItems = [
   { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
   { to: '/coach/workouts',     label: 'Coach',       icon: '📋', image: '/icons/coach.jpg' },
+  { to: '/coach/plans',        label: 'Plans',       icon: '🗓️', image: '/icons/plans.jpg' },
   { to: '/coach/requests',     label: 'Requests',    icon: '📥', image: '/icons/requests.jpg', isRequests: true },
   { to: '/coach/reporting',    label: 'Reporting',   icon: '📈', image: '/icons/reporting.jpg' },
   { to: '/coach/analytics',    label: 'Analytics',   icon: '📉', image: '/icons/analytics.jpg' },
@@ -42,6 +43,7 @@ const coachItems = [
 const adminItems = [
   { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
   { to: '/coach/workouts',     label: 'Coach',       icon: '📋', image: '/icons/coach.jpg' },
+  { to: '/coach/plans',        label: 'Plans',       icon: '🗓️', image: '/icons/plans.jpg' },
   { to: '/coach/requests',     label: 'Requests',    icon: '📥', image: '/icons/requests.jpg', isRequests: true },
   { to: '/coach/reporting',    label: 'Reporting',   icon: '📈', image: '/icons/reporting.jpg' },
   { to: '/coach/analytics',    label: 'Analytics',   icon: '📉', image: '/icons/analytics.jpg' },

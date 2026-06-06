@@ -25,6 +25,7 @@ import TeamSetupPage from './pages/coach/TeamSetupPage';
 import GroupCoachPage from './pages/coach/GroupCoachPage';
 import ReportingOverviewPage from './pages/coach/ReportingOverviewPage';
 import AnalyticsPage from './pages/coach/AnalyticsPage';
+import WorkoutTemplatesPage from './pages/coach/WorkoutTemplatesPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
 import AboutPage from './pages/AboutPage';
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="/coach/group-coaches" element={<ProtectedRoute requireCoach><GroupCoachPage /></ProtectedRoute>} />
         <Route path="/coach/reporting" element={<ProtectedRoute requireCoach><ReportingOverviewPage /></ProtectedRoute>} />
         <Route path="/coach/analytics" element={<ProtectedRoute requireCoach><AnalyticsPage /></ProtectedRoute>} />
+        <Route path="/coach/plans" element={<ProtectedRoute requireCoach><WorkoutTemplatesPage /></ProtectedRoute>} />
       </Route>
 
       <Route path="*" element={<Navigate to={user ? landingFor(user) : "/login"} replace />} />

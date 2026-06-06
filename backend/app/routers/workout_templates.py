@@ -31,8 +31,8 @@ def _owned_template(db: Session, template_id: int, coach: User, active_team_id: 
     t = db.get(WorkoutTemplate, template_id)
     if t is None:
         raise HTTPException(status_code=404, detail="Template not found")
-    # Admins may touch any template in their active team; coaches only their team's.
-    if coach.role != "admin" and t.team_id != active_team_id:
+    # Templates are private to their creator (PRD FR-A). Admins may touch any.
+    if coach.role != "admin" and t.created_by != coach.id:
         raise HTTPException(status_code=404, detail="Template not found")
     return t
 
@@ -79,11 +79,10 @@ def list_templates(
     db: Annotated[Session, Depends(get_db)],
     active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
 ):
+    # Templates are private to their creator (PRD FR-A); admins see all.
     q = db.query(WorkoutTemplate)
-    if active_team_id is not None:
-        q = q.filter(WorkoutTemplate.team_id == active_team_id)
-    elif coach.role != "admin":
-        return []  # a coach with no active team sees no templates
+    if coach.role != "admin":
+        q = q.filter(WorkoutTemplate.created_by == coach.id)
     templates = q.order_by(WorkoutTemplate.created_at.desc()).all()
     if not templates:
         return []

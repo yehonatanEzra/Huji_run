@@ -225,12 +225,13 @@ def load_overview(
     for athlete in athletes:
         weekly = [round(v, 1) for v in km_by_athlete_week[athlete.id]]
         current = weekly[-1]
-        prior = weekly[:-1]
-        # Baseline ignores zero-weeks so a single rest week doesn't fake a spike.
-        active_prior = [v for v in prior if v > 0]
-        avg_prev = round(sum(active_prior) / len(active_prior), 1) if active_prior else 0.0
-        spike_pct = round((current - avg_prev) / avg_prev * 100, 1) if avg_prev > 0 else None
-        is_spike = spike_pct is not None and spike_pct > threshold
+        # PRD FR-C: spike is week-over-week — compare against the prior week.
+        prev_week = weekly[-2] if len(weekly) >= 2 else 0.0
+        avg_prev = prev_week
+        # Flag on the raw ratio so a value just over the threshold isn't lost to rounding.
+        raw_pct = (current - prev_week) / prev_week * 100 if prev_week > 0 else None
+        spike_pct = round(raw_pct, 1) if raw_pct is not None else None
+        is_spike = raw_pct is not None and raw_pct > threshold
         group = groups.get(athlete.training_group_id)
         rows.append(LoadRow(
             user_id=athlete.id,

@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { parseISO, format } from 'date-fns';
 import { getTeamVolume, getTeamCompletion, getTypeBreakdown } from '../../api/analytics';
 import { listGroups } from '../../api/coach';
 import Spinner from '../../components/ui/Spinner';
+
+// Distinct line colors for the per-athlete view.
+const SERIES_COLORS = ['#60a5fa', '#f87171', '#34d399', '#fbbf24', '#a78bfa', '#f472b6', '#22d3ee', '#fb923c'];
 
 // Mirrors the workout-type palette used across the coach pages.
 const TYPE_META = {
@@ -76,7 +80,7 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold">Weekly volume</h3>
               <div className="flex gap-1 bg-gray-100 rounded-md p-0.5">
-                {['total', 'avg'].map((m) => (
+                {[['total', 'Total'], ['avg', 'Avg/athlete'], ['athletes', 'Per athlete']].map(([m, label]) => (
                   <button
                     key={m}
                     onClick={() => setVolumeMode(m)}
@@ -84,17 +88,24 @@ export default function AnalyticsPage() {
                       volumeMode === m ? 'bg-white shadow-sm' : 'text-gray-500'
                     }`}
                   >
-                    {m === 'total' ? 'Total' : 'Avg/athlete'}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
-            <BarChart
-              buckets={volume.buckets}
-              valueKey={volumeMode === 'total' ? 'total_km' : 'avg_km'}
-              unit="km"
-              color="#60a5fa"
-            />
+            {volumeMode === 'athletes' ? (
+              <MultiLineChart buckets={volume.buckets} athletes={volume.athletes} />
+            ) : (
+              <>
+                <BarChart
+                  buckets={volume.buckets}
+                  valueKey={volumeMode === 'total' ? 'total_km' : 'avg_km'}
+                  unit="km"
+                  color="#60a5fa"
+                />
+                <WoWChange buckets={volume.buckets} valueKey={volumeMode === 'total' ? 'total_km' : 'avg_km'} />
+              </>
+            )}
             <p className="text-xs text-gray-400 mt-2">{volume.athlete_count} athletes</p>
           </section>
 
@@ -148,9 +159,62 @@ function BarChart({ buckets, valueKey, unit, color, asPercent = false }) {
             }}
             title={`${b.label}: ${fmt(b[valueKey])}${!asPercent && unit ? ' ' + unit : ''}`}
           />
-          <span className="text-[8px] text-gray-400 rotate-0 whitespace-nowrap">{b.label.split(' ')[1]}</span>
+          <span className="text-[8px] text-gray-400 rotate-0 whitespace-nowrap">{format(parseISO(b.start), 'd')}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// FR-C↔FR-G: week-over-week % change for the latest bucket, shown inline.
+function WoWChange({ buckets, valueKey }) {
+  if (buckets.length < 2) return null;
+  const cur = buckets[buckets.length - 1][valueKey];
+  const prev = buckets[buckets.length - 2][valueKey];
+  if (!prev) return null;
+  const pct = Math.round(((cur - prev) / prev) * 100);
+  const up = pct >= 0;
+  return (
+    <p className="text-xs mt-2">
+      <span className="text-gray-400">This week vs last: </span>
+      <span className={up ? 'text-red-600 font-medium' : 'text-emerald-600 font-medium'}>
+        {up ? '▲' : '▼'} {Math.abs(pct)}%
+      </span>
+    </p>
+  );
+}
+
+// FR-G: per-athlete weekly volume as overlaid lines.
+function MultiLineChart({ buckets, athletes }) {
+  if (!athletes || athletes.length === 0) {
+    return <p className="text-sm text-gray-500">No per-athlete volume yet.</p>;
+  }
+  const W = 100, H = 40;
+  const n = buckets.length;
+  const max = Math.max(1, ...athletes.flatMap((a) => a.weekly_km));
+  const x = (i) => (n <= 1 ? 0 : (i / (n - 1)) * W);
+  const y = (v) => H - (v / max) * H;
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-32">
+        {athletes.map((a, ai) => (
+          <polyline
+            key={a.user_id}
+            fill="none"
+            stroke={SERIES_COLORS[ai % SERIES_COLORS.length]}
+            strokeWidth="0.7"
+            points={a.weekly_km.map((v, i) => `${x(i)},${y(v)}`).join(' ')}
+          />
+        ))}
+      </svg>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+        {athletes.map((a, ai) => (
+          <span key={a.user_id} className="flex items-center gap-1 text-[10px] text-gray-600">
+            <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: SERIES_COLORS[ai % SERIES_COLORS.length] }} />
+            {a.full_name}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,10 @@
+# Deferred Work
+
+## Deferred from: code review of Sprint 2 (FR-A/C/G) — PRD prd-Huji_run-2026-06-06 (2026-06-06)
+
+- **Concurrency race on template apply/update** — `_write_days` (delete-then-insert) and `apply_template` (count-then-delete-then-insert) are not atomic against concurrent writers; two simultaneous calls can violate `uq_template_week_day` or stack duplicate GroupWorkouts, surfacing as an unhandled IntegrityError 500. Low likelihood with the current single-coach usage; app-wide pattern. [workout_templates.py]
+- **Naive `date.today()` week boundaries (timezone)** — analytics/reporting week bucketing and load-spike "current week" use server-local naive dates. On Render (UTC) an evening run can land in the wrong ISO week. App-wide pre-existing pattern (stats.py, calendar.py all naive); fix holistically, not per-feature. [analytics.py, reporting.py]
+- **type-breakdown is row-weighted and ignores IndividualTarget overrides** — counts GroupWorkout rows (multiple allowed per group+date) and reflects group-level programming only, not per-athlete prescriptions. Metric-definition nuance. [analytics.py::type_breakdown]
+- **WORKOUT_TYPES / ALLOWED_TYPES duplication** — workout_templates.py adds a 3rd backend ALLOWED_TYPES copy; AnalyticsPage + WorkoutTemplatesPage add the 5th/6th frontend copy. Known DRY debt tracked in CLAUDE.md; right fix is a shared constants module (best done alongside the planned UI/UX pass). [workout_templates.py, AnalyticsPage.jsx, WorkoutTemplatesPage.jsx]
+- **`avg_km` labeled "Avg/athlete" but divides by logging athletes** — a week where 1 of 20 logged 80km shows avg 80, implying the roster averaged 80. Either relabel ("avg per logging athlete") or divide by scoped roster. Metric nuance. [analytics.py::team_volume, AnalyticsPage.jsx]
+- **Apply re-notifies the whole group on every re-apply** — `notify_many` fires unconditionally; a coach fixing a typo and re-applying spams all athletes with "new plan". Suppress or differentiate "updated" when replaced>0. [workout_templates.py::apply_template]

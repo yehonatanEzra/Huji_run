@@ -371,7 +371,10 @@ function ApplyModal({ template, onClose }) {
   const [startDate, setStartDate] = useState('');
   const [applying, setApplying] = useState(false);
   const [result, setResult] = useState(null);
+  const [conflict, setConflict] = useState(null); // message when existing workouts would be overwritten
   const [error, setError] = useState('');
+
+  const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
     listGroups().then(({ data }) => {
@@ -380,20 +383,30 @@ function ApplyModal({ template, onClose }) {
     }).catch(() => {});
   }, []);
 
-  const handleApply = async () => {
-    if (!groupId || !startDate) return;
+  const doApply = async (replace) => {
     setApplying(true);
     setError('');
     try {
       const { data } = await applyTemplate(template.id, {
-        group_id: Number(groupId), start_date: startDate,
+        group_id: Number(groupId), start_date: startDate, replace,
       });
       setResult(data);
+      setConflict(null);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to apply');
+      // 409 = existing workouts on the plan's dates; ask before overwriting.
+      if (err.response?.status === 409) {
+        setConflict(err.response.data?.detail || 'Existing workouts on these dates will be replaced.');
+      } else {
+        setError(err.response?.data?.detail || 'Failed to apply');
+      }
     } finally {
       setApplying(false);
     }
+  };
+
+  const handleApply = () => {
+    if (!groupId || !startDate) return;
+    doApply(false); // probe first; backend 409s if anything would be overwritten
   };
 
   return (
@@ -401,7 +414,6 @@ function ApplyModal({ template, onClose }) {
       <h3 className="font-semibold mb-1">Apply "{template.name}"</h3>
       <p className="text-xs text-gray-500 mb-3">
         {template.weeks_count} weeks · {template.day_count} workouts. The start date snaps to its Monday.
-        Existing workouts on the plan's dates are replaced.
       </p>
 
       {result ? (
@@ -413,6 +425,27 @@ function ApplyModal({ template, onClose }) {
           <button onClick={onClose} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700">
             Done
           </button>
+        </div>
+      ) : conflict ? (
+        <div className="space-y-3">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+            {conflict} Replace them?
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => doApply(true)}
+              disabled={applying}
+              className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50"
+            >
+              {applying ? 'Replacing…' : 'Replace & apply'}
+            </button>
+            <button
+              onClick={() => setConflict(null)}
+              className="px-4 border border-gray-300 rounded-lg py-2 text-sm hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
@@ -432,6 +465,7 @@ function ApplyModal({ template, onClose }) {
             <input
               type="date"
               value={startDate}
+              min={today}
               onChange={(e) => setStartDate(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />

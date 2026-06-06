@@ -23,10 +23,17 @@ class VolumeBucket(BaseModel):
     avg_km: float        # total / athletes who logged anything that week
 
 
+class AthleteVolumeSeries(BaseModel):
+    user_id: int
+    full_name: str
+    weekly_km: list[float]   # aligned to buckets, oldest → newest
+
+
 class VolumeTrend(BaseModel):
     weeks: int
     athlete_count: int
     buckets: list[VolumeBucket]
+    athletes: list[AthleteVolumeSeries]   # per-athlete weekly series (FR-G)
 
 
 class CompletionBucket(BaseModel):
@@ -84,11 +91,13 @@ def team_volume(
     group_id: Optional[int] = Query(None),
     weeks: int = Query(12, ge=2, le=26),
 ):
-    """Total + average weekly km across the coach's athletes."""
+    """Total + average weekly km across the coach's athletes, plus a per-athlete series."""
     athlete_ids = _scoped_athlete_ids(coach, db, active_team_id, group_id)
     starts = [_monday(date.today()) - timedelta(weeks=weeks - 1 - i) for i in range(weeks)]
+    index_of = {s: i for i, s in enumerate(starts)}
     totals = {s: 0.0 for s in starts}
     loggers = {s: set() for s in starts}
+    per_athlete = {aid: [0.0] * weeks for aid in athlete_ids}
 
     if athlete_ids:
         rows = db.query(WorkoutLog.athlete_id, WorkoutLog.date, WorkoutLog.distance_km).filter(
@@ -103,6 +112,7 @@ def team_volume(
                 totals[ws] += km or 0.0
                 if km:
                     loggers[ws].add(aid)
+                    per_athlete[aid][index_of[ws]] += km
 
     buckets = [
         VolumeBucket(
@@ -112,7 +122,17 @@ def team_volume(
         )
         for s in starts
     ]
-    return VolumeTrend(weeks=weeks, athlete_count=len(athlete_ids), buckets=buckets)
+    # Names for the per-athlete series; only include athletes with any logged km.
+    names = dict(db.query(User.id, User.full_name).filter(User.id.in_(athlete_ids)).all()) if athlete_ids else {}
+    athletes = [
+        AthleteVolumeSeries(
+            user_id=aid, full_name=names.get(aid, "Unknown"),
+            weekly_km=[round(v, 1) for v in series],
+        )
+        for aid, series in per_athlete.items() if any(series)
+    ]
+    athletes.sort(key=lambda a: a.full_name)
+    return VolumeTrend(weeks=weeks, athlete_count=len(athlete_ids), buckets=buckets, athletes=athletes)
 
 
 @router.get("/completion", response_model=CompletionTrend)

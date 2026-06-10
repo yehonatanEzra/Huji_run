@@ -1,5 +1,4 @@
 import { format } from 'date-fns';
-import { NoiseBackground } from './ui/NoiseBackground';
 
 const TYPE = {
   simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
@@ -180,7 +179,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
               {lastRace ? (
                 <div className="flex items-baseline justify-between gap-3">
                   <div className="min-w-0">
-                    <p className={`font-bold truncate ${raceName}`}>🏁 {lastRace.name}</p>
+                    <p className={`font-bold truncate ${raceName}`}>{lastRace.name}</p>
                     <p className={`text-[11px] ${metaText}`}>
                       {format(new Date(lastRace.date + 'T00:00'), 'MMM d, yyyy')} · {lastRace.distance_label}
                     </p>
@@ -197,21 +196,12 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
         </div>
 
         {/* CTA — full width, outside the ticket but right under it */}
-        <NoiseBackground
-          containerClassName="mt-2 w-full rounded-xl p-[2px]"
-          gradientColors={
-            isRace
-              ? ['rgb(99,102,241)', 'rgb(168,85,247)', 'rgb(236,72,153)']
-              : ['rgb(37,99,235)', 'rgb(99,102,241)', 'rgb(139,92,246)']
-          }
+        <button
+          onClick={onOpenWorkout}
+          className="mt-2 w-full rounded-xl bg-[#8083ff] text-white py-2.5 text-sm font-semibold tracking-wide transition hover:brightness-110 active:scale-[0.98]"
         >
-          <button
-            onClick={onOpenWorkout}
-            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-2 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
-          >
-            {ctaLabel}
-          </button>
-        </NoiseBackground>
+          {ctaLabel}
+        </button>
       </div>
     </div>
   );

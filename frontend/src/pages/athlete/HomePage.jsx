@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { getHomeSummary } from '../../api/home';
 import { useAuth } from '../../contexts/AuthContext';
 import TrainingTicket from '../../components/TrainingTicket';
-import AnimatedWelcome from '../../components/AnimatedWelcome';
 import Spinner from '../../components/ui/Spinner';
 
 export default function HomePage() {
@@ -65,15 +64,15 @@ export default function HomePage() {
             className="fixed inset-0 -z-10 bg-cover bg-center"
             style={{ backgroundImage: `url(${bgUrl})` }}
           />
-          {/* ↓ TUNE OVERLAY DARKNESS HERE — raise the number to darken, lower to show more photo */}
-          <div className="fixed inset-0 -z-10 bg-black/45" />
+          {/* Match the feed / training-log darkness level */}
+          <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 0%, rgba(19,19,20,0.82) 100%)' }} />
         </>
       )}
       <div className="mb-3 px-1">
         <p className={`text-sm font-semibold uppercase tracking-widest ${bgUrl ? 'text-blue-200' : 'text-blue-600'}`}>Welcome back,</p>
-        <div className="mt-1">
-          <AnimatedWelcome name={user?.full_name || 'Runner'} color={bgUrl ? '#ffffff' : undefined} />
-        </div>
+        <h1 className="mt-1 text-3xl font-black text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]">
+          {user?.full_name || 'Runner'}
+        </h1>
       </div>
 
       <TrainingTicket

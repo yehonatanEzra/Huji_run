@@ -188,92 +188,101 @@ export default function CalendarPage() {
     ? `${format(ws, 'MMM d')} - ${format(addDays(ws, 6), 'MMM d, yyyy')}`
     : format(currentDate, 'MMMM yyyy');
 
+  // Dark-glass workout-type palette (matches the dark training-log design).
+  const TYPE_GLASS = {
+    simple:    { label: 'Other',     color: 'bg-white/10 text-white/70' },
+    easy:      { label: 'Easy run',  color: 'bg-emerald-400/20 text-emerald-200' },
+    rest:      { label: 'Rest day',  color: 'bg-slate-400/20 text-slate-200' },
+    tempo:     { label: 'Tempo',     color: 'bg-orange-400/20 text-orange-200' },
+    long:      { label: 'Long run',  color: 'bg-purple-400/20 text-purple-200' },
+    intervals: { label: 'Intervals', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
+    fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
+    race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+  };
+  // Short labels for the compact month-grid cells.
+  const TYPE_ABBR_GLASS = {
+    simple:    { abbr: 'Oth',  color: 'bg-white/10 text-white/70' },
+    easy:      { abbr: 'Easy', color: 'bg-emerald-400/20 text-emerald-200' },
+    rest:      { abbr: 'Rest', color: 'bg-slate-400/20 text-slate-200' },
+    tempo:     { abbr: 'Tempo',color: 'bg-orange-400/20 text-orange-200' },
+    long:      { abbr: 'Long', color: 'bg-purple-400/20 text-purple-200' },
+    intervals: { abbr: 'Int',  color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
+    fartlek:   { abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200' },
+    race:      { abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+  };
+
   const renderDayCard = (day) => {
+    const date = new Date(day.date + 'T00:00');
     const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
-    const hasLog = day.workout_log;
-    const isRace = day.individual_target?.override_group
-      ? day.individual_target?.workout_type === 'race'
-      : day.group_workout?.workout_type === 'race';
+    const log = day.workout_log;
+    const t = day.individual_target;
+    const gw = day.group_workout;
+    const personalOverride = t?.override_group;
+    const activeType = personalOverride ? t?.workout_type : gw?.workout_type;
+    const isRace = activeType === 'race';
+    const typeMeta = activeType ? TYPE_GLASS[activeType] : null;
+
+    // Workout text + optional coach note (personal override replaces the group workout).
+    let snippet, note;
+    if (personalOverride) {
+      snippet = t.title || t.note;
+      note = t.note && t.note !== snippet ? t.note : (t.main_session || t.warmup || null);
+    } else {
+      snippet = gw?.title || gw?.content || gw?.main_session || gw?.warmup;
+      note = t && (t.title || t.note) ? `Coach note: ${t.title || t.note}` : null;
+    }
+
+    const km = log?.distance_km;
+    const kudos = log?.kudos_count;
+
     return (
       <button
         key={day.date}
         onClick={() => openDay(day)}
-        className={`w-full text-left p-3 rounded-xl transition hover:shadow-sm backdrop-blur-sm ${
-          isRace ? 'border-2 border-indigo-400/70 bg-indigo-200/25' :
-          isToday ? 'border border-blue-300/60 bg-blue-200/25' : 'border border-white/30 bg-white/20'
-        }`}
+        style={{ background: 'rgba(32,31,32,0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+        className={`w-full text-left rounded-2xl p-5 transition active:scale-[0.99] hover:border-[#c0c1ff]/40 border ${
+          isRace ? 'border-[#8083ff]/45 bg-[#8083ff]/10' :
+          isToday ? 'border-[#c0c1ff]/30' : 'border-white/10'
+        } ${activeType === 'intervals' ? 'border-l-4 border-l-[#ec6a06]' : ''}`}
       >
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">
-            {isRace && <span className="mr-1">🏁</span>}
-            {format(new Date(day.date + 'T00:00'), 'EEE, MMM d')}
-          </span>
-          <div className="flex items-center gap-1.5">
-            {day.group_workout?.workout_type && (() => {
-              const TYPE = {
-                simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
-                easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
-                rest:      { label: 'Rest day',  color: 'bg-slate-100 text-slate-700' },
-                tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
-                long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
-                intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
-                fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
-                race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
-              };
-              const t = TYPE[day.group_workout.workout_type];
-              if (!t) return null;
-              return <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${t.color}`}>{t.label}</span>;
-            })()}
-            {hasLog?.kudos_count > 0 && (
-              <span className="text-xs text-pink-600">👏 {hasLog.kudos_count}</span>
+        <div className="flex justify-between items-start gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-white/50">
+              {isRace && '🏁 '}{format(date, 'EEE, MMM d')}
+            </p>
+            {snippet ? (
+              <p className="text-[17px] leading-snug text-[#e5e2e3] mt-0.5 truncate">{snippet}</p>
+            ) : (
+              <p className="text-[17px] italic text-white/35 mt-0.5">No workout scheduled</p>
             )}
-            {hasLog?.manual_override && (
-              <span
-                className="text-[9px] font-bold uppercase tracking-wider bg-emerald-500 text-white px-1.5 py-0.5 rounded"
-                title="Manual — not overwritten by Strava"
-              >
-                Manual
+            {note && <p className="text-xs text-white/55 mt-1 truncate">{note}</p>}
+            {(km > 0 || kudos > 0) && (
+              <div className="flex items-center gap-3 mt-2">
+                {km > 0 && <span className="text-sm font-semibold text-[#c0c1ff]">{km.toFixed(1)} km</span>}
+                {kudos > 0 && <span className="text-sm text-[#ffb690]">👏 {kudos}</span>}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            {typeMeta && (
+              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${typeMeta.color}`}>{typeMeta.label}</span>
+            )}
+            {log && (
+              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                log.status === 'completed' ? 'bg-green-400/20 text-green-200' :
+                log.status === 'partial'   ? 'bg-yellow-400/20 text-yellow-100' :
+                                              'bg-red-400/20 text-red-200'
+              }`}>
+                {log.status === 'completed' ? 'Done' : log.status === 'partial' ? 'Partial' : 'Missed'}
               </span>
             )}
-            {hasLog && (
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                hasLog.status === 'completed' ? 'bg-green-100 text-green-700' :
-                hasLog.status === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-red-100 text-red-700'
-              }`}>
-                {hasLog.status === 'completed' ? 'Done' : hasLog.status === 'partial' ? 'Partial' : 'Missed'}
+            {log?.manual_override && (
+              <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-500/80 text-white px-1.5 py-0.5 rounded" title="Manual — not overwritten by Strava">
+                Manual
               </span>
             )}
           </div>
         </div>
-        {(() => {
-          const t = day.individual_target;
-          const gw = day.group_workout;
-          const personalOverride = t?.override_group;
-          // Personal override → show personal title/body in place of group
-          if (personalOverride) {
-            const title = t.title || t.note;
-            const body = t.note || t.main_session || t.warmup;
-            return (
-              <>
-                {title && <p className="text-sm text-white font-semibold truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{title}</p>}
-                {body && body !== title && <p className="text-xs text-white/75 truncate">{body}</p>}
-              </>
-            );
-          }
-          // Otherwise: group workout + personal note alongside
-          const gwSnippet = gw?.title || gw?.content || gw?.main_session || gw?.warmup;
-          return (
-            <>
-              {gwSnippet && <p className="text-sm text-white font-semibold truncate [text-shadow:0_1px_3px_rgba(0,0,0,0.6)]">{gwSnippet}</p>}
-              {t && (t.title || t.note) && (
-                <p className="text-xs text-white/75 mt-1 truncate">
-                  Coach note: {t.title || t.note}
-                </p>
-              )}
-            </>
-          );
-        })()}
       </button>
     );
   };
@@ -283,75 +292,88 @@ export default function CalendarPage() {
     for (let i = 0; i < days.length; i += 7) {
       weeks.push(days.slice(i, i + 7));
     }
+    const glass = { background: 'rgba(32,31,32,0.6)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' };
+    const monthKm = days.reduce((s, d) =>
+      new Date(d.date + 'T00:00').getMonth() === currentDate.getMonth()
+        ? s + (d.workout_log?.distance_km || 0) : s, 0);
     return (
       <div>
-        <NoiseBackground
-          containerClassName="mb-4 w-full rounded-xl p-[2px]"
-          gradientColors={['rgb(37,99,235)', 'rgb(99,102,241)', 'rgb(139,92,246)']}
+        {/* Premium monthly volume card */}
+        <div className="rounded-2xl p-6 mb-4 border border-white/10" style={glass}>
+          <div className="flex justify-between items-end">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff] mb-1">Monthly volume</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-5xl font-bold text-white" style={{ textShadow: '0 0 15px rgba(192,193,255,0.4)' }}>{monthKm.toFixed(1)}</span>
+                <span className="text-sm text-white/50 mb-1">km</span>
+              </div>
+            </div>
+            <div className="w-16 h-16 rounded-full bg-[#c0c1ff]/10 border border-[#c0c1ff]/20 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#c0c1ff" strokeWidth={1.6} className="w-7 h-7">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Expand button */}
+        <button
+          onClick={() => setMonthExpanded(true)}
+          style={glass}
+          className="w-full rounded-xl py-4 mb-8 flex items-center justify-center gap-2 text-sm font-medium text-white/90 border border-[#c0c1ff]/20 hover:bg-[#c0c1ff]/5 active:scale-[0.98] transition"
         >
-          <button
-            onClick={() => setMonthExpanded(true)}
-            className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
-          >
-            ⛶ Expand monthly view
-          </button>
-        </NoiseBackground>
-        <div className="space-y-4">
+          ⛶ Expand monthly view
+        </button>
+
+        <div className="space-y-6">
         {weeks.map((week, wi) => (
           <div key={wi}>
-            <p className="text-xs text-gray-400 mb-1 font-medium">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-white/55 mb-3 px-1">
               {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
             </p>
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-2">
               {week.map((day) => {
+                const dayDate = new Date(day.date + 'T00:00');
                 const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
                 const hasLog = day.workout_log;
-                const hasWorkout = day.group_workout || day.individual_target;
-                const inMonth = new Date(day.date + 'T00:00').getMonth() === currentDate.getMonth();
-                  const TYPE_ABBR = {
-                    simple:    { abbr: 'Oth',  color: 'bg-gray-100 text-gray-700' },
-                    easy:      { abbr: 'Easy', color: 'bg-emerald-100 text-emerald-700' },
-                    rest:      { abbr: 'Rest', color: 'bg-slate-100 text-slate-700' },
-                    tempo:     { abbr: 'Tem',  color: 'bg-orange-100 text-orange-700' },
-                    long:      { abbr: 'Long', color: 'bg-purple-100 text-purple-700' },
-                    intervals: { abbr: 'Int',  color: 'bg-red-100 text-red-700' },
-                    fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
-                    race:      { abbr: 'Race', color: 'bg-indigo-100 text-indigo-700' },
-                  };
-                  // Personal override wins; otherwise show group type
-                  const activeType = day.individual_target?.override_group
-                    ? day.individual_target?.workout_type
-                    : day.group_workout?.workout_type;
-                  const typeBadge = activeType ? TYPE_ABBR[activeType] : null;
-                  const isRace = activeType === 'race';
-                  return (
+                const inMonth = dayDate.getMonth() === currentDate.getMonth();
+                const activeType = day.individual_target?.override_group
+                  ? day.individual_target?.workout_type
+                  : day.group_workout?.workout_type;
+                const isRace = activeType === 'race';
+                const tag = activeType ? TYPE_ABBR_GLASS[activeType] : null;
+                return (
                   <button
                     key={day.date}
                     onClick={() => openDay(day)}
-                    className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
-                      !inMonth ? 'opacity-40' : ''
-                    } ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' :
-                       isToday ? 'border border-blue-400 bg-blue-50' : 'border border-gray-200 bg-white'}`}
+                    style={glass}
+                    className={`flex flex-col items-center justify-start py-2 px-1 rounded-xl relative transition active:scale-95 border ${
+                      !inMonth ? 'opacity-40 border-white/10' :
+                      isRace ? 'border-[#8083ff]/45 bg-[#8083ff]/10' :
+                      isToday ? 'border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border-white/10'
+                    }`}
                   >
-                    {isRace && (
-                      <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
-                    )}
-                    {typeBadge && !isRace && (
-                      <span className={`absolute top-0.5 right-0.5 text-[8px] px-1 py-px rounded font-semibold leading-none ${typeBadge.color}`}>
-                        {typeBadge.abbr}
-                      </span>
-                    )}
-                    <span className="font-semibold">{format(new Date(day.date + 'T00:00'), 'd')}</span>
-                    <span className="text-[10px] text-gray-400">{format(new Date(day.date + 'T00:00'), 'EEE')}</span>
-                    <div className="flex gap-0.5 mt-1">
-                      {hasWorkout && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
+                    {/* Workout-type tag at the top */}
+                    <span className="h-4 flex items-center">
+                      {tag && (
+                        <span className={`text-[8px] font-bold uppercase px-1 py-px rounded leading-none ${tag.color}`}>
+                          {isRace ? '🏁' : tag.abbr}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`text-xl font-semibold leading-none mt-1 ${isToday ? 'text-[#c0c1ff]' : 'text-white'}`}>
+                      {format(dayDate, 'd')}
+                    </span>
+                    <span className="text-[10px] text-white/45 mt-0.5">{format(dayDate, 'EEE')}</span>
+                    {/* One dot — the report status */}
+                    <span className="h-1.5 mt-1.5 flex items-center">
                       {hasLog && (
                         <span className={`w-1.5 h-1.5 rounded-full ${
                           hasLog.status === 'completed' ? 'bg-green-400' :
                           hasLog.status === 'partial' ? 'bg-yellow-400' : 'bg-red-400'
                         }`} />
                       )}
-                    </div>
+                    </span>
                   </button>
                 );
               })}
@@ -363,89 +385,88 @@ export default function CalendarPage() {
     );
   };
 
+  const glassBtn = 'w-10 h-10 flex items-center justify-center rounded-full bg-[#201f20]/40 backdrop-blur-xl border border-white/10 text-white/80 active:scale-95 transition';
+
   return (
     <div>
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
-      <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={goBack}
-          className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 text-white text-sm font-semibold px-3 py-1.5 rounded-xl transition active:scale-95"
-        >
-          <span className="text-base leading-none">‹</span> Prev
-        </button>
+      {/* Track background + dark hero gradient (designer's training-log look) */}
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 0%, rgba(19,19,20,0.82) 100%)' }} />
+
+      {/* Date selector */}
+      <div className="flex items-center justify-between mb-6">
+        <button onClick={goBack} className={glassBtn} aria-label="Previous">‹</button>
         {view === 'monthly' ? (
           <YearMonthLabel
             currentDate={currentDate}
             onYearChange={(y) => setCurrentDate(new Date(y, currentDate.getMonth(), 1))}
-            className="text-sm font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)] tracking-wide"
+            className="text-lg font-semibold text-[#e5e2e3] tracking-tight text-center"
           />
         ) : (
-          <h2 className="text-sm font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.6)] tracking-wide">
-            {headerLabel}
-          </h2>
+          <h2 className="text-lg font-semibold text-[#e5e2e3] tracking-tight text-center">{headerLabel}</h2>
         )}
-        <button
-          onClick={goForward}
-          className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 backdrop-blur-sm border border-white/20 text-white text-sm font-semibold px-3 py-1.5 rounded-xl transition active:scale-95"
-        >
-          Next <span className="text-base leading-none">›</span>
-        </button>
+        <button onClick={goForward} className={glassBtn} aria-label="Next">›</button>
       </div>
 
-      <div className="flex gap-2 mb-4">
-        <div className="flex rounded-xl overflow-hidden bg-white/10 backdrop-blur-sm border border-white/20 flex-1">
-          <button
-            onClick={() => setView('weekly')}
-            className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'weekly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
-          >Weekly</button>
-          <button
-            onClick={() => setView('monthly')}
-            className={`flex-1 py-1.5 text-sm font-semibold transition ${view === 'monthly' ? 'bg-blue-600 text-white' : 'text-white/60 hover:text-white'}`}
-          >Monthly</button>
-        </div>
+      {/* Segmented control: Weekly / Monthly / My progress */}
+      <div
+        className="flex p-1 mb-6 rounded-full border border-white/5"
+        style={{ background: 'rgba(28,27,28,0.5)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+      >
+        <button
+          onClick={() => setView('weekly')}
+          className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition ${view === 'weekly' ? 'bg-[#c0c1ff] text-[#1000a9] shadow-[0_0_15px_rgba(192,193,255,0.4)]' : 'text-white/60 hover:text-white'}`}
+        >Weekly</button>
+        <button
+          onClick={() => setView('monthly')}
+          className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition ${view === 'monthly' ? 'bg-[#c0c1ff] text-[#1000a9] shadow-[0_0_15px_rgba(192,193,255,0.4)]' : 'text-white/60 hover:text-white'}`}
+        >Monthly</button>
         <Link
           to="/progress"
-          className="shrink-0 flex items-center bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white text-sm font-semibold px-3 rounded-xl transition active:scale-95"
+          className="flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider text-white/60 hover:text-white transition flex items-center justify-center text-center"
           title="See your trends, pace, and PBs"
-        >
-          My progress
-        </Link>
+        >My progress</Link>
       </div>
 
 
-      {!loading && (() => {
+      {!loading && view === 'weekly' && (() => {
         const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
         return weekKm > 0 ? (
-          <div className="flex items-center justify-between bg-blue-600/40 backdrop-blur-sm rounded-lg px-4 py-2 mb-4 border border-blue-400/30">
-            <span className="text-sm font-medium text-white/90">
-              {view === 'weekly' ? 'Weekly' : 'Monthly'} Volume
+          <div
+            className="flex items-center justify-between rounded-2xl px-5 py-3 mb-4 border border-white/10"
+            style={{ background: 'rgba(32,31,32,0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+          >
+            <span className="text-[11px] font-bold uppercase tracking-widest text-white/55">
+              {view === 'weekly' ? 'Weekly' : 'Monthly'} volume
             </span>
-            <span className="text-lg font-bold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.5)]">{weekKm.toFixed(1)} km</span>
+            <span className="text-2xl font-bold text-[#c0c1ff]">
+              {weekKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
+            </span>
           </div>
         ) : null;
       })()}
 
       {loading ? <Spinner /> : view === 'weekly' ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {days.map(renderDayCard)}
         </div>
       ) : renderMonthGrid()}
 
-      <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
+      <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
         {selectedDay && (
           <div className="space-y-4">
             {selectedDay.group_workout && (() => {
               const gw = selectedDay.group_workout;
               const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
               const TYPE_COLOR = {
-                simple: 'bg-gray-100 text-gray-700',
-                easy: 'bg-emerald-100 text-emerald-700',
-                rest: 'bg-slate-100 text-slate-700',
-                tempo: 'bg-orange-100 text-orange-700',
-                long: 'bg-purple-100 text-purple-700',
-                intervals: 'bg-red-100 text-red-700',
-                fartlek: 'bg-pink-100 text-pink-700',
-                race: 'bg-indigo-100 text-indigo-700',
+                simple: 'bg-white/10 text-white/70',
+                easy: 'bg-emerald-400/20 text-emerald-200',
+                rest: 'bg-slate-400/20 text-slate-200',
+                tempo: 'bg-orange-400/20 text-orange-200',
+                long: 'bg-purple-400/20 text-purple-200',
+                intervals: 'bg-[#ec6a06]/25 text-[#ffb690]',
+                fartlek: 'bg-pink-400/20 text-pink-200',
+                race: 'bg-[#8083ff]/30 text-[#c0c1ff]',
               };
               const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
               const middleLabel = gw.workout_type === 'race' ? 'Race' : 'Main';
@@ -476,14 +497,14 @@ export default function CalendarPage() {
               const t = selectedDay.individual_target;
               const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
               const TYPE_COLOR = {
-                simple: 'bg-gray-100 text-gray-700',
-                easy: 'bg-emerald-100 text-emerald-700',
-                rest: 'bg-slate-100 text-slate-700',
-                tempo: 'bg-orange-100 text-orange-700',
-                long: 'bg-purple-100 text-purple-700',
-                intervals: 'bg-red-100 text-red-700',
-                fartlek: 'bg-pink-100 text-pink-700',
-                race: 'bg-indigo-100 text-indigo-700',
+                simple: 'bg-white/10 text-white/70',
+                easy: 'bg-emerald-400/20 text-emerald-200',
+                rest: 'bg-slate-400/20 text-slate-200',
+                tempo: 'bg-orange-400/20 text-orange-200',
+                long: 'bg-purple-400/20 text-purple-200',
+                intervals: 'bg-[#ec6a06]/25 text-[#ffb690]',
+                fartlek: 'bg-pink-400/20 text-pink-200',
+                race: 'bg-[#8083ff]/30 text-[#c0c1ff]',
               };
               const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(t.workout_type);
               const middleLabel = t.workout_type === 'race' ? 'Race' : 'Main';
@@ -491,7 +512,7 @@ export default function CalendarPage() {
               return (
                 <div className={`rounded-lg p-3 space-y-2 ${isRaceT ? 'bg-indigo-400/20 border-2 border-indigo-400/60' : 'bg-blue-400/15 backdrop-blur-sm border border-blue-300/25'}`}>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-blue-300">Coach's workout for you</p>
+                    <p className="text-xs font-medium text-[#c0c1ff]">Coach's workout for you</p>
                     {t.workout_type && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[t.workout_type] || TYPE_COLOR.simple}`}>
                         {TYPE_LABELS[t.workout_type] || 'Other'}
@@ -529,22 +550,28 @@ export default function CalendarPage() {
                   Auto-marked missed — tap a status to update it.
                 </p>
               )}
-              <div className="flex gap-2 mb-3">
+              <div className="grid grid-cols-3 gap-3 mb-4">
                 {[
-                  { value: 'completed', label: 'Completed', bg: 'bg-green-100 text-green-700 border-green-300', active: 'bg-green-600 text-white border-green-600' },
-                  { value: 'partial', label: 'Half', bg: 'bg-yellow-50 text-yellow-700 border-yellow-300', active: 'bg-yellow-500 text-white border-yellow-500' },
-                  { value: 'missed', label: 'Missed', bg: 'bg-red-50 text-red-700 border-red-300', active: 'bg-red-600 text-white border-red-600' },
-                ].map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setLogForm({ ...logForm, status: opt.value })}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition ${
-                      logForm.status === opt.value ? opt.active : opt.bg
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                  { value: 'completed', label: 'Completed', text: 'text-green-400', border: 'border-green-500/40', glow: 'rgba(74,222,128,0.25)',
+                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /> },
+                  { value: 'partial', label: 'Half', text: 'text-yellow-400', border: 'border-yellow-500/40', glow: 'rgba(250,204,21,0.25)',
+                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /> },
+                  { value: 'missed', label: 'Missed', text: 'text-red-400', border: 'border-red-500/40', glow: 'rgba(248,113,113,0.25)',
+                    icon: <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /> },
+                ].map((opt) => {
+                  const active = logForm.status === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => setLogForm({ ...logForm, status: opt.value })}
+                      style={{ background: 'rgba(32,31,32,0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', ...(active ? { boxShadow: `0 0 20px ${opt.glow}` } : {}) }}
+                      className={`flex flex-col items-center justify-center gap-2 rounded-2xl p-3 border transition active:scale-95 ${active ? opt.border : 'border-white/10'}`}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} className={`w-6 h-6 ${opt.text}`}>{opt.icon}</svg>
+                      <span className={`text-[11px] font-bold uppercase tracking-wider ${opt.text}`}>{opt.label}</span>
+                    </button>
+                  );
+                })}
               </div>
               {logForm.status !== 'missed' && (
                 <div className="flex items-center gap-2">
@@ -578,17 +605,20 @@ export default function CalendarPage() {
                   </div>
                 </div>
               )}
+              <label className="text-[11px] font-bold uppercase tracking-wider text-white/45 mt-4 mb-2 block">Feedback</label>
               <textarea
                 placeholder="How did it go? Any notes..."
                 value={logForm.notes}
                 onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })}
                 rows={3}
-                className="w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                style={{ background: 'rgba(28,27,28,0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+                className="w-full border border-white/10 rounded-2xl p-4 text-sm text-white placeholder-white/35 resize-none focus:outline-none focus:border-[#c0c1ff] focus:ring-4 focus:ring-[#c0c1ff]/10 transition"
               />
               <button
                 onClick={handleSaveLog}
                 disabled={saving}
-                className="w-full mt-3 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition"
+                style={{ boxShadow: '0 0 20px rgba(192,193,255,0.3)' }}
+                className="w-full mt-4 rounded-full bg-[#c0c1ff] text-[#1000a9] py-3 text-sm font-bold transition hover:scale-[1.01] active:scale-95 disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save Report'}
               </button>
@@ -615,12 +645,8 @@ export default function CalendarPage() {
               </div>
             )}
 
-            {selectedDay.workout_log?.id ? (
+            {selectedDay.workout_log?.id && (
               <WorkoutCommentThread workoutLogId={selectedDay.workout_log.id} />
-            ) : (
-              <div className="border-t border-white/15 pt-3">
-                <p className="text-xs text-white/35 italic">💬 Save a report to enable comments with your coach.</p>
-              </div>
             )}
           </div>
         )}
@@ -632,7 +658,7 @@ export default function CalendarPage() {
         onClose={() => setMonthExpanded(false)}
         title="Training log"
         fullScreen
-        panelClassName="bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950"
+        panelClassName="bg-[#131314]"
       >
         <div>
           {/* Zoom controls */}
@@ -655,7 +681,7 @@ export default function CalendarPage() {
           <div className="flex items-center justify-between mb-3">
             <button
               onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-              className="text-blue-300 hover:text-blue-200 text-sm transition"
+              className="text-[#c0c1ff] hover:text-white text-sm transition"
             >&larr; Prev</button>
             <YearMonthLabel
               currentDate={currentDate}
@@ -664,7 +690,7 @@ export default function CalendarPage() {
             />
             <button
               onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-              className="text-blue-300 hover:text-blue-200 text-sm transition"
+              className="text-[#c0c1ff] hover:text-white text-sm transition"
             >Next &rarr;</button>
           </div>
 
@@ -674,6 +700,33 @@ export default function CalendarPage() {
             style={{ touchAction: 'pan-x pan-y' }}
           >
             <div className="px-2" style={{ minWidth: '960px', zoom: expandedZoom }}>
+              {/* Month totals (top) */}
+              {(() => {
+                let mKm = 0, mDone = 0, mPart = 0, mMiss = 0;
+                for (const d of days) {
+                  if (!isSameMonth(new Date(d.date + 'T00:00'), currentDate)) continue;
+                  const log = d.workout_log;
+                  if (!log) continue;
+                  if (log.distance_km) mKm += log.distance_km;
+                  const st = log.status || (log.completed ? 'completed' : 'missed');
+                  if (st === 'completed') mDone++;
+                  else if (st === 'partial') mPart++;
+                  else mMiss++;
+                }
+                return (
+                  <div className="flex items-center justify-between mb-3 pb-3 border-b border-white/15">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-sm font-semibold text-white/85">{format(currentDate, 'MMMM')} totals</span>
+                      <span className="font-bold text-[#c0c1ff]">{mKm.toFixed(1)} km</span>
+                    </div>
+                    <div className="flex gap-2 text-xs font-mono">
+                      <span className="text-green-300">V{mDone}</span>
+                      <span className="text-yellow-300">~{mPart}</span>
+                      <span className="text-red-300">X{mMiss}</span>
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="grid gap-1 mb-1 text-xs text-white/60 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => <div key={i}>{d}</div>)}
                 <div className="text-right pr-1">Week</div>
@@ -719,14 +772,14 @@ export default function CalendarPage() {
                         : (d.group_workout?.content || d.group_workout?.main_session || '');
                       const hasPersonal = d.individual_target?.note || d.individual_target?.title;
                       const TYPE_FULL = {
-                        simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
-                        easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
-                        rest:      { label: 'Rest day',  color: 'bg-slate-100 text-slate-700' },
-                        tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
-                        long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
-                        intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
-                        fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
-                        race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
+                        simple:    { label: 'Other',     color: 'bg-white/10 text-white/70' },
+                        easy:      { label: 'Easy run',  color: 'bg-emerald-400/20 text-emerald-200' },
+                        rest:      { label: 'Rest day',  color: 'bg-slate-400/20 text-slate-200' },
+                        tempo:     { label: 'Tempo',     color: 'bg-orange-400/20 text-orange-200' },
+                        long:      { label: 'Long run',  color: 'bg-purple-400/20 text-purple-200' },
+                        intervals: { label: 'Intervals', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
+                        fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
+                        race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
                       };
                       const typeChip = personalOverride
                         ? (it?.workout_type ? TYPE_FULL[it.workout_type] : null)
@@ -738,7 +791,7 @@ export default function CalendarPage() {
                         <button
                           key={d.date}
                           onClick={() => { setMonthExpanded(false); openDay(d); }}
-                          className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                          className={`rounded-lg ${cellIsRace ? 'border-2 border-[#8083ff]' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                           style={{ minHeight: `${cellHeight}px` }}
                         >
                           <div className="flex items-start justify-between px-2 pt-1.5">
@@ -753,12 +806,12 @@ export default function CalendarPage() {
                           {/* Top half: planned workout */}
                           <div className="flex-1 px-2 py-1 min-h-0">
                             {workoutTitle && (
-                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-200' : 'text-white'} [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]`}>
+                              <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-[#c0c1ff]' : 'text-white'} [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]`}>
                                 {cellIsRace && '🏁 '}{workoutTitle}
                               </p>
                             )}
                             {!workoutTitle && cellIsRace && (
-                              <p className="text-xs font-semibold leading-tight text-indigo-200">🏁 Race</p>
+                              <p className="text-xs font-semibold leading-tight text-[#c0c1ff]">🏁 Race</p>
                             )}
                             {workoutBody && (
                               <p className="text-[10px] text-white/65 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>
@@ -778,7 +831,7 @@ export default function CalendarPage() {
                                   <p className="text-[10px] text-white/40 italic flex-1">No report</p>
                                 ) : <div className="flex-1" />}
                                 {d.workout_log.distance_km > 0 && (
-                                  <p className="text-xs text-blue-200 font-bold leading-none mt-1 self-end">{d.workout_log.distance_km.toFixed(1)} km</p>
+                                  <p className="text-xs text-[#c0c1ff] font-bold leading-none mt-1 self-end">{d.workout_log.distance_km.toFixed(1)} km</p>
                                 )}
                               </>
                             ) : (
@@ -786,13 +839,13 @@ export default function CalendarPage() {
                             )}
                           </div>
 
-                          {hasPersonal && !personalOverride && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500" />}
+                          {hasPersonal && !personalOverride && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#c0c1ff]" />}
                         </button>
                       );
                     })}
                     {/* Week stats column */}
                     <div className="flex flex-col items-end justify-center text-right px-1 text-xs">
-                      <div className="font-bold text-blue-200">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      <div className="font-bold text-[#c0c1ff]">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
                       <div className="flex gap-1.5 mt-1 text-[11px] font-mono">
                         <span className="text-green-300">V{wkDone}</span>
                         <span className="text-yellow-300">~{wkPart}</span>
@@ -803,34 +856,6 @@ export default function CalendarPage() {
                   );
                 })}
               </div>
-
-              {/* Month totals */}
-              {(() => {
-                let mKm = 0, mDone = 0, mPart = 0, mMiss = 0;
-                for (const d of days) {
-                  if (!isSameMonth(new Date(d.date + 'T00:00'), currentDate)) continue;
-                  const log = d.workout_log;
-                  if (!log) continue;
-                  if (log.distance_km) mKm += log.distance_km;
-                  const st = log.status || (log.completed ? 'completed' : 'missed');
-                  if (st === 'completed') mDone++;
-                  else if (st === 'partial') mPart++;
-                  else mMiss++;
-                }
-                return (
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/15">
-                    <span className="text-sm font-semibold text-white/85">{format(currentDate, 'MMMM')} totals</span>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="font-bold text-blue-200">{mKm.toFixed(1)} km</span>
-                      <div className="flex gap-2 text-xs font-mono">
-                        <span className="text-green-300">V{mDone}</span>
-                        <span className="text-yellow-300">~{mPart}</span>
-                        <span className="text-red-300">X{mMiss}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
           </div>
         </div>
@@ -877,14 +902,14 @@ function YearMonthLabel({ currentDate, onYearChange, className = '' }) {
         </button>
       </h2>
       {open && (
-        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-blue-950 border border-white/20 rounded-lg shadow-2xl py-1 w-24 max-h-72 overflow-y-auto">
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 z-50 bg-[#1c1b1c] border border-white/20 rounded-lg shadow-2xl py-1 w-24 max-h-72 overflow-y-auto">
           {years.map((y) => (
             <button
               key={y}
               onClick={() => { onYearChange(y); setOpen(false); }}
               className={`block w-full px-3 py-1.5 text-sm text-center transition ${
                 y === currentYear
-                  ? 'bg-blue-500 text-white font-semibold'
+                  ? 'bg-[#c0c1ff] text-[#1000a9] font-semibold'
                   : 'text-white/75 hover:bg-white/10 hover:text-white'
               }`}
             >

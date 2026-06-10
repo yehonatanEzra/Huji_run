@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { getKmSeries, getPaceTrends, getActivity } from '../api/stats';
 import Spinner from './ui/Spinner';
 
-const CARD = 'bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4';
-const SECTION_TITLE = 'text-xs font-bold uppercase tracking-wider text-white';
+const CARD = 'bg-white/[0.03] backdrop-blur-2xl border border-white/10 rounded-3xl p-6';
+const SECTION_TITLE = 'text-sm font-bold uppercase tracking-widest text-white/80';
 
 function fmtPace(secPerKm) {
   if (!secPerKm || !isFinite(secPerKm)) return '—';
@@ -66,13 +66,13 @@ function ConsistencyCard({ athleteId }) {
     <div className={CARD}>
       <div className="flex items-center justify-between mb-3 gap-2">
         <h3 className={SECTION_TITLE}>Consistency</h3>
-        <div className="flex rounded-lg overflow-hidden border border-white/20 text-[11px]">
+        <div className="flex p-1 gap-1 rounded-lg border border-white/10 bg-white/5 text-[11px] font-bold">
           {['week', 'month'].map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-2.5 py-0.5 font-medium transition ${
-                period === p ? 'bg-white text-black' : 'bg-white/5 text-white/65 hover:bg-white/15'
+              className={`px-3 py-1 rounded-md transition ${
+                period === p ? 'bg-white text-black' : 'text-white/50 hover:text-white'
               }`}
             >
               {p === 'week' ? 'Week' : 'Month'}
@@ -126,12 +126,12 @@ function ConsistencyCard({ athleteId }) {
 
 function Stat({ label, total, avg, unit, color }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 bg-white/5 border border-white/10 rounded-md px-2 py-1">
-      <span className="text-white/65 truncate">{label}</span>
-      <span className="whitespace-nowrap">
-        <span className={`font-semibold ${color}`}>{total}</span>
+    <div className="flex items-center justify-between gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5">
+      <span className="text-white/60 text-xs truncate">{label}</span>
+      <span className="whitespace-nowrap flex items-center gap-1.5">
+        <span className={`font-bold text-sm ${color}`}>{total}</span>
         {avg != null && (
-          <span className="text-white/45 ml-1">· {avg}/{unit}</span>
+          <span className="text-white/40 text-[10px]">{avg}/{unit}</span>
         )}
       </span>
     </div>
@@ -261,13 +261,13 @@ function VolumeCard({ athleteId }) {
     <div className={CARD}>
       <div className="flex items-center justify-between mb-3 gap-2">
         <h3 className={SECTION_TITLE}>Volume</h3>
-        <div className="flex rounded-lg overflow-hidden border border-white/20 text-[11px]">
+        <div className="flex p-1 gap-1 rounded-lg border border-white/10 bg-white/5 text-[11px] font-bold">
           {['week', 'month'].map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-2.5 py-0.5 font-medium transition ${
-                period === p ? 'bg-white text-black' : 'bg-white/5 text-white/65 hover:bg-white/15'
+              className={`px-3 py-1 rounded-md transition ${
+                period === p ? 'bg-white text-black' : 'text-white/50 hover:text-white'
               }`}
             >
               {p === 'week' ? 'Week' : 'Month'}
@@ -366,24 +366,26 @@ function RaceHistoryCard({ athleteId }) {
       ) : races.length === 0 ? (
         <p className="text-sm text-white/50 italic py-4 text-center">No races yet</p>
       ) : (
-        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+        <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
           {races.map((r, i) => (
             <div
               key={`${r.race_date}-${r.distance_m}-${i}`}
-              className="flex items-center justify-between gap-2 bg-white/10 border border-white/15 rounded-lg px-3 py-2 text-sm"
+              className={`flex items-center justify-between gap-2 bg-white/[0.04] border border-white/[0.08] border-l-4 ${
+                r.is_pb ? 'border-l-amber-400' : 'border-l-[#8083ff]'
+              } rounded-xl px-4 py-3 text-sm transition active:scale-[0.98] hover:brightness-125`}
             >
               <div className="min-w-0 flex-1">
-                <p className="text-white/90 font-medium truncate">
-                  {r.is_pb && <span className="mr-1">🥇</span>}
+                <p className="text-white font-bold text-base truncate flex items-center gap-1.5">
+                  {r.is_pb && <span>🥇</span>}
                   {r.race_name || r.distance_label}
                 </p>
-                <p className="text-[11px] text-white/55">
+                <p className="text-xs text-white/40 mt-0.5">
                   {r.race_date} · {r.distance_label}
                 </p>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-white font-mono font-semibold">{fmtTime(r.time_seconds)}</p>
-                <p className="text-[11px] text-blue-200">{fmtPace(r.pace_seconds_per_km)} /km</p>
+                <p className="text-white font-mono font-bold text-base">{fmtTime(r.time_seconds)}</p>
+                <p className="text-[10px] text-white/40 uppercase">{fmtPace(r.pace_seconds_per_km)} /km</p>
               </div>
             </div>
           ))}

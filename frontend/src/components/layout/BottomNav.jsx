@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { incomingRequests } from '../../api/coaching';
 import { listPending } from '../../api/adminReview';
 import { FloatingDock } from '../ui/FloatingDock';
+import { NAV_ICONS } from './navIcons';
 
 // Drop JPGs/PNGs into frontend/public/icons/ to replace emojis. See README there.
 const athletePairedItems = [
@@ -10,8 +11,8 @@ const athletePairedItems = [
   { to: '/calendar',      label: 'Training log', icon: '🏋️', image: '/icons/training.jpg' },
   { to: '/feed',          label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',         label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
-  { to: '/hall-of-fame',  label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },
+  { to: '/hall-of-fame',  label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/profile',       label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
@@ -20,8 +21,8 @@ const athleteUnpairedItems = [
   { to: '/calendar',      label: 'Training log', icon: '🏋️', image: '/icons/training.jpg' },
   { to: '/feed',          label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',         label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
-  { to: '/hall-of-fame',  label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },
+  { to: '/hall-of-fame',  label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/profile',       label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
@@ -35,8 +36,8 @@ const coachItems = [
   { to: '/coach/group-coaches',label: 'Co-coaches',  icon: '👥', image: '/icons/group-coaches.jpg' },
   { to: '/feed',               label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
-  { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
+  { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/profile',            label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
@@ -52,8 +53,8 @@ const adminItems = [
   { to: '/admin/users',        label: 'Users',       icon: '👥', image: '/icons/users.jpg' },
   { to: '/feed',               label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
-  { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
+  { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/profile',            label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
@@ -98,7 +99,9 @@ export default function BottomNav() {
 
   const items = baseItems.map((item) => ({
     ...item,
-    image: item.to === '/profile' && profilePhotoUrl ? profilePhotoUrl : item.image,
+    svg: NAV_ICONS[item.to],
+    // Line icons everywhere; keep the athlete's real photo only on the Profile tab.
+    image: item.to === '/profile' ? profilePhotoUrl : undefined,
     badge: item.isRequests ? pendingCount : item.isPending ? reviewCount : 0,
   }));
 

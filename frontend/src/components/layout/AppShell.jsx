@@ -78,7 +78,7 @@ export default function AppShell() {
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
-      <header className={`shrink-0 z-40 border-b border-white/10 text-white px-4 py-3 flex items-center justify-between ${isAbout ? 'bg-black' : 'bg-black/40 backdrop-blur-md'}`}>
+      <header className={`shrink-0 z-40 border-b border-white/10 text-[#e5e2e3] px-4 py-3 flex items-center justify-between ${isAbout ? 'bg-black' : 'bg-[#131314]/45 backdrop-blur-xl'}`}>
         <div className="flex items-center gap-2">
           {!isRoot && (
             <button
@@ -92,7 +92,7 @@ export default function AppShell() {
           <h1 className="text-lg font-bold tracking-tight">Huji Run</h1>
           <button
             onClick={() => navigate('/about')}
-            className="ml-1 text-xs font-medium bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-0.5 transition"
+            className="ml-1 text-xs font-medium bg-[#353436] hover:bg-[#454446] rounded-full px-3 py-1 transition"
           >
             About
           </button>
@@ -102,7 +102,7 @@ export default function AppShell() {
             canSwitch ? (
               <button
                 onClick={() => setShowSwitcher(true)}
-                className="text-xs font-medium bg-white/15 hover:bg-white/25 rounded-full px-2.5 py-0.5 transition flex items-center gap-1"
+                className="text-xs font-medium bg-[#353436] hover:bg-[#454446] rounded-full px-3 py-1 transition flex items-center gap-1"
                 title="Switch team"
               >
                 {teamName}

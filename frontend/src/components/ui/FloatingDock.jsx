@@ -30,7 +30,7 @@ export function FloatingDock({ items, className = '' }) {
   };
 
   return (
-    <div className={`flex items-center rounded-2xl bg-black/50 backdrop-blur-md border border-white/15 px-2 pb-2 pt-1 gap-1 ${className}`}>
+    <div className={`flex items-center rounded-full bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] px-2 pb-2 pt-1 gap-1 ${className}`}>
       {/* Left arrow */}
       <AnimatePresence>
         {canLeft && (
@@ -77,7 +77,7 @@ export function FloatingDock({ items, className = '' }) {
   );
 }
 
-function DockItem({ mouseX, to, label, icon, image, badge = 0 }) {
+function DockItem({ mouseX, to, label, icon, image, svg, badge = 0 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const ref = useRef(null);
 
@@ -112,7 +112,9 @@ function DockItem({ mouseX, to, label, icon, image, badge = 0 }) {
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             className={`relative flex items-center justify-center rounded-full transition-colors ${
-              isActive ? 'bg-white/25 ring-1 ring-white/30' : 'bg-white/10 hover:bg-white/20'
+              isActive
+                ? 'bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.6)]'
+                : 'bg-transparent text-white/40 hover:text-white hover:bg-white/10'
             }`}
           >
             <AnimatePresence>
@@ -135,9 +137,7 @@ function DockItem({ mouseX, to, label, icon, image, badge = 0 }) {
             )}
 
             {image && !imgFailed ? (
-              // Image icons fill the full outer circle (the emoji-sized inner
-              // wrapper made them look tiny). overflow-hidden + rounded-full
-              // clip the image to the button's circular shape.
+              // Profile photo fills the full circle (clipped round).
               <img
                 src={image}
                 alt=""
@@ -145,6 +145,20 @@ function DockItem({ mouseX, to, label, icon, image, badge = 0 }) {
                 className="absolute inset-0 w-full h-full object-cover rounded-full"
                 draggable={false}
               />
+            ) : svg ? (
+              <motion.div style={{ width: wIcon, height: hIcon }} className="relative flex items-center justify-center">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="w-full h-full"
+                >
+                  {svg}
+                </svg>
+              </motion.div>
             ) : (
               <motion.div
                 style={{ width: wIcon, height: hIcon }}
@@ -155,7 +169,7 @@ function DockItem({ mouseX, to, label, icon, image, badge = 0 }) {
             )}
           </motion.div>
 
-          <span className={`text-[9px] mt-0.5 font-medium leading-none ${isActive ? 'text-white' : 'text-white/45'}`}>
+          <span className={`text-[9px] mt-0.5 font-medium leading-none ${isActive ? 'text-white' : 'text-white/40'}`}>
             {label}
           </span>
         </>

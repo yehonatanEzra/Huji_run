@@ -4,7 +4,6 @@ import { isCoachLike } from '../utils/roles';
 import { getFeed, createAnnouncement, updateAnnouncement, deleteAnnouncement, toggleReaction, addComment, deleteComment } from '../api/feed';
 import { listGroups } from '../api/coach';
 import Modal from '../components/ui/Modal';
-import PageBackground from '../components/PageBackground';
 import Spinner from '../components/ui/Spinner';
 
 const EMOJI_MAP = {
@@ -29,7 +28,7 @@ function Avatar({ photoUrl, name, size = 'sm' }) {
     return <img src={photoUrl} alt={name} className={`${cls} rounded-full object-cover`} />;
   }
   return (
-    <div className={`${cls} rounded-full bg-blue-100 flex items-center justify-center font-bold text-blue-600`}>
+    <div className={`${cls} rounded-full bg-[#8083ff]/25 border border-[#8083ff]/30 flex items-center justify-center font-bold text-[#c0c1ff]`}>
       {name?.charAt(0).toUpperCase()}
     </div>
   );
@@ -206,39 +205,44 @@ export default function FeedPage() {
 
   return (
     <div>
-      <PageBackground src="/bg-feed.jpg" />
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-bold text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.7)]">Feed</h2>
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 0%, rgba(19,19,20,0.82) 100%)' }} />
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-[#e5e2e3]">Feed</h2>
         {canPost && (
           <button
             onClick={openCreate}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700"
+            style={{ boxShadow: '0 0 15px rgba(192,193,255,0.3)' }}
+            className="bg-[#c0c1ff] text-[#1000a9] px-4 py-1.5 rounded-full text-sm font-bold hover:scale-[1.02] active:scale-95 transition"
           >
-            + New Post
+            + New post
           </button>
         )}
       </div>
 
       {/* Filter tabs */}
-      <div className="flex rounded-xl overflow-hidden mb-4 bg-white/10 backdrop-blur-sm border border-white/20">
+      <div
+        className="flex p-1 mb-4 rounded-full border border-white/5"
+        style={{ background: 'rgba(28,27,28,0.5)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+      >
         <button
           onClick={() => setAuthorFilter('all')}
-          className={`flex-1 py-1.5 text-sm font-semibold transition ${authorFilter === 'all' ? 'bg-white text-black' : 'text-white/60 hover:text-white'}`}
+          className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition ${authorFilter === 'all' ? 'bg-[#c0c1ff] text-[#1000a9]' : 'text-white/60 hover:text-white'}`}
         >All posts</button>
         <button
           onClick={() => setAuthorFilter('coach')}
-          className={`flex-1 py-1.5 text-sm font-semibold transition ${authorFilter === 'coach' ? 'bg-white text-black' : 'text-white/60 hover:text-white'}`}
+          className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition ${authorFilter === 'coach' ? 'bg-[#c0c1ff] text-[#1000a9]' : 'text-white/60 hover:text-white'}`}
         >Coach only</button>
       </div>
 
       {visiblePosts.length === 0 ? (
-        <p className="text-center text-gray-400 py-8">No announcements yet</p>
+        <p className="text-center text-white/40 py-8">No announcements yet</p>
       ) : (
         <div className="space-y-3">
           {visiblePosts.map(post => {
             const showComments = expandedComments[post.id];
             return (
-              <div key={post.id} className="bg-black/50 backdrop-blur-md border border-white/15 rounded-xl p-4">
+              <div key={post.id} style={{ background: 'rgba(32,31,32,0.6)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }} className="border border-white/10 rounded-2xl p-4">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <Avatar photoUrl={post.author_photo_url} name={post.author_name} />
@@ -280,8 +284,8 @@ export default function FeedPage() {
                         onClick={() => handleReact(post.id, key)}
                         className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition ${
                           reaction?.reacted
-                            ? 'bg-white/30 border-white/50 text-white'
-                            : 'bg-white/10 border-white/20 text-white/60 hover:bg-white/20'
+                            ? 'bg-[#c0c1ff]/20 border-[#c0c1ff]/40 text-white'
+                            : 'bg-white/5 border-white/15 text-white/60 hover:bg-white/15'
                         }`}
                       >
                         <span>{icon}</span>
@@ -329,12 +333,12 @@ export default function FeedPage() {
                     value={commentTexts[post.id] || ''}
                     onChange={e => setCommentTexts(prev => ({ ...prev, [post.id]: e.target.value }))}
                     onKeyDown={e => { if (e.key === 'Enter') handleComment(post.id); }}
-                    className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 bg-white/5 border border-white/15 rounded-full px-4 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
                   />
                   <button
                     onClick={() => handleComment(post.id)}
                     disabled={!commentTexts[post.id]?.trim()}
-                    className="px-3 py-1.5 bg-white text-black rounded-lg text-sm font-semibold hover:bg-white/80 disabled:opacity-50"
+                    className="px-4 py-1.5 bg-[#c0c1ff] text-[#1000a9] rounded-full text-sm font-bold hover:scale-[1.02] active:scale-95 disabled:opacity-40 transition"
                   >Send</button>
                 </div>
               </div>
@@ -352,37 +356,38 @@ export default function FeedPage() {
       )}
 
       <Modal open={showCreate} onClose={() => { setShowCreate(false); setEditingId(null); }}
-        title={editingId ? 'Edit post' : 'New post'}>
+        title={editingId ? 'Edit post' : 'New post'}
+        panelClassName="bg-[#131314] border-t border-white/10">
         <div className="space-y-3">
           <input
             type="text"
             placeholder="Title"
             value={form.title}
             onChange={e => setForm({ ...form, title: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
           />
           <textarea
             placeholder="What would you like to share with the team?"
             value={form.body}
             onChange={e => setForm({ ...form, body: e.target.value })}
             rows={4}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/40 resize-none focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
           />
           {isCoach && !editingId ? (
             <select
               value={form.training_group_id}
               onChange={e => setForm({ ...form, training_group_id: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
             >
-              <option value="">All athletes (global)</option>
+              <option value="" className="bg-[#1c1b1c]">All athletes (global)</option>
               {groups.map(g => (
-                <option key={g.id} value={g.id}>{g.name}</option>
+                <option key={g.id} value={g.id} className="bg-[#1c1b1c]">{g.name}</option>
               ))}
             </select>
           ) : !isCoach ? (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-white/60">
               Posting to{' '}
-              <span className="font-semibold">
+              <span className="font-semibold text-white/80">
                 {groups.find(g => g.id === user?.training_group_id)?.name || 'your group'}
               </span>
             </p>
@@ -390,7 +395,8 @@ export default function FeedPage() {
           <button
             onClick={handleCreate}
             disabled={saving || !form.title.trim() || !form.body.trim()}
-            className="w-full bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            style={{ boxShadow: '0 0 20px rgba(192,193,255,0.3)' }}
+            className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-full py-3 text-sm font-bold hover:scale-[1.01] active:scale-95 disabled:opacity-40 transition"
           >
             {saving ? 'Saving…' : editingId ? 'Save changes' : 'Post'}
           </button>

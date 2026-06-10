@@ -24,14 +24,17 @@ const TAB_ACTIVE = 'bg-white text-black';
 const TAB_INACTIVE = 'text-white/60 hover:text-white';
 const TAB_ROW = 'flex rounded-xl overflow-hidden mb-4 bg-white/10 backdrop-blur-sm border border-white/20';
 
+const GLASS = { background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' };
+const DARK_INPUT = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
+
 function FilterPill({ active, onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition ${
+      className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap border transition ${
         active
-          ? 'bg-white text-black border-white'
-          : 'bg-white/10 backdrop-blur-sm border-white/20 text-white/70 hover:text-white'
+          ? 'bg-[#c0c1ff] text-[#1000a9] border-transparent'
+          : 'bg-white/5 border-white/10 text-white/60 hover:text-white'
       }`}
     >
       {children}
@@ -41,7 +44,7 @@ function FilterPill({ active, onClick, children }) {
 
 function GlassCard({ children, className = '' }) {
   return (
-    <div className={`bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4 ${className}`}>
+    <div style={GLASS} className={`border border-white/10 rounded-2xl p-5 ${className}`}>
       {children}
     </div>
   );
@@ -49,7 +52,7 @@ function GlassCard({ children, className = '' }) {
 
 function MedalRow({ children }) {
   return (
-    <div className="flex items-center gap-3 p-2 rounded-lg bg-white/10">
+    <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
       {children}
     </div>
   );
@@ -98,15 +101,16 @@ function RecordsView() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-6">
         {['men', 'women'].map(g => (
           <button
             key={g}
             onClick={() => setGender(g)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold border transition capitalize ${
+            style={gender === g ? undefined : GLASS}
+            className={`px-6 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition active:scale-95 ${
               gender === g
-                ? 'bg-white text-black border-white'
-                : 'bg-white/10 backdrop-blur-sm border-white/25 text-white/65 hover:text-white'
+                ? 'bg-[#e5e2e3] text-[#131314]'
+                : 'border border-white/10 text-white/60 hover:text-white'
             }`}
           >{g}</button>
         ))}
@@ -126,15 +130,16 @@ function RecordsView() {
             ].filter(({ entries }) => entries.length > 0).map(({ title, sub, entries, myRank }) => (
               <div
                 key={title}
-                className="min-w-[85%] snap-start bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4 flex-shrink-0"
+                style={GLASS}
+                className="min-w-[85%] snap-start border border-white/10 rounded-2xl p-5 flex-shrink-0"
               >
-                <div className="mb-3 flex items-start justify-between gap-2">
+                <div className="mb-4 flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-white">{title}</h3>
+                    <h3 className="text-base font-bold uppercase tracking-wide text-[#e5e2e3]">{title}</h3>
                     <p className="text-[11px] text-white/50 mt-0.5">{sub}</p>
                   </div>
                   {tabMatchesUserGender && (
-                    <span className="text-xs font-bold text-amber-300 [text-shadow:0_1px_4px_rgba(0,0,0,0.5)] shrink-0">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#ffb690] shrink-0">
                       Your rank: {myRank ? `#${myRank}` : '--'}
                     </span>
                   )}
@@ -144,9 +149,9 @@ function RecordsView() {
                     <MedalRow key={e.rank}>
                       <span className="text-2xl">{MEDAL[e.rank - 1] || `#${e.rank}`}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-white truncate">{e.athlete_name}</p>
+                        <p className="font-semibold text-sm text-white truncate">{e.athlete_name}</p>
                       </div>
-                      <span className="font-bold text-sm text-blue-200">{e.total_km} km</span>
+                      <span className="font-bold text-base text-[#c0c1ff]">{e.total_km} <span className="text-xs">km</span></span>
                     </MedalRow>
                   ))}
                 </div>
@@ -170,16 +175,13 @@ function RecordsView() {
               (user.gender === 'F' && gender === 'women')
             );
             return (
-              <div
-                key={dist.distance_m}
-                className="min-w-[85%] snap-start flex-shrink-0 bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4"
-              >
-                <div className="flex items-center justify-between mb-3 gap-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+              <div key={dist.distance_m} style={GLASS} className="min-w-[85%] snap-start flex-shrink-0 border border-white/10 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-4 gap-2">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-white/70">
                     {DISTANCE_LABELS[dist.distance_m] || `${dist.distance_m}m`}
                   </h3>
                   {tabMatchesGender && (
-                    <span className="text-xs font-bold text-amber-300 [text-shadow:0_1px_4px_rgba(0,0,0,0.5)]">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#ffb690]">
                       Your rank: {dist.my_rank ? `#${dist.my_rank}` : '--'}
                     </span>
                   )}
@@ -192,12 +194,12 @@ function RecordsView() {
                       <MedalRow key={e.rank}>
                         <span className="text-2xl">{MEDAL[e.rank - 1]}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm text-white truncate">{e.athlete_name}</p>
-                          <p className="text-xs text-white/50">{e.achieved_date}</p>
+                          <p className="font-semibold text-sm text-white truncate">{e.athlete_name}</p>
+                          <p className="text-xs text-white/40">{e.achieved_date}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-mono font-semibold text-sm text-white">{e.time_display}</p>
-                          <p className="text-xs text-white/50">{e.pace_display} /km</p>
+                          <p className="font-mono font-bold text-base text-white">{e.time_display}</p>
+                          <p className="text-[10px] text-white/40 uppercase">{e.pace_display} /km</p>
                         </div>
                       </MedalRow>
                     ))}
@@ -318,7 +320,8 @@ function ChallengesView() {
         {isCoach && (
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-white text-black px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-white/80 transition active:scale-95"
+            style={{ boxShadow: '0 0 15px rgba(192,193,255,0.3)' }}
+            className="bg-[#c0c1ff] text-[#1000a9] px-4 py-1.5 rounded-full text-sm font-bold hover:scale-[1.02] active:scale-95 transition"
           >+ Challenge</button>
         )}
       </div>
@@ -328,7 +331,7 @@ function ChallengesView() {
       ) : (
         <div className="space-y-3">
           {challenges.map(ch => (
-            <div key={ch.id} className="bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl overflow-hidden">
+            <div key={ch.id} style={GLASS} className="border border-white/10 rounded-2xl overflow-hidden">
               <button
                 onClick={() => toggleExpand(ch.id)}
                 className="w-full text-left p-4"
@@ -384,7 +387,7 @@ function ChallengesView() {
                     </div>
                   )}
                   {detail.my_rank && (
-                    <p className="text-xs text-blue-200 mt-2 font-medium">
+                    <p className="text-xs text-[#c0c1ff] mt-2 font-medium">
                       Your rank: #{detail.my_rank}
                     </p>
                   )}
@@ -395,33 +398,34 @@ function ChallengesView() {
         </div>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Challenge">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Challenge"
+        panelClassName="bg-[#131314] border-t border-white/10">
         <div className="space-y-3">
           <input
             type="text"
             placeholder="Challenge name"
             value={form.name}
             onChange={e => setForm({ ...form, name: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={DARK_INPUT}
           />
           <textarea
             placeholder="Description (optional)"
             value={form.description}
             onChange={e => setForm({ ...form, description: e.target.value })}
             rows={2}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`${DARK_INPUT} resize-none`}
           />
           <div className="flex gap-2">
             <button
               onClick={() => setForm({ ...form, challenge_type: 'total_km' })}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition ${
-                form.challenge_type === 'total_km' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200'
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition ${
+                form.challenge_type === 'total_km' ? 'bg-[#c0c1ff] text-[#1000a9] border-transparent' : 'bg-white/5 text-white/60 border-white/10'
               }`}
             >Total KM</button>
             <button
               onClick={() => setForm({ ...form, challenge_type: 'best_time' })}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium border transition ${
-                form.challenge_type === 'best_time' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200'
+              className={`flex-1 py-2.5 rounded-xl text-sm font-bold border transition ${
+                form.challenge_type === 'best_time' ? 'bg-[#a078ff] text-white border-transparent' : 'bg-white/5 text-white/60 border-white/10'
               }`}
             >Best Time</button>
           </div>
@@ -432,55 +436,56 @@ function ChallengesView() {
               placeholder="Target km (optional goal)"
               value={form.target_km}
               onChange={e => setForm({ ...form, target_km: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={DARK_INPUT}
             />
           )}
           {form.challenge_type === 'best_time' && (
             <select
               value={form.target_distance_m}
               onChange={e => setForm({ ...form, target_distance_m: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={DARK_INPUT}
             >
-              <option value="">Select distance</option>
+              <option value="" className="bg-[#1c1b1c]">Select distance</option>
               {Object.entries(DISTANCE_LABELS).map(([val, label]) => (
-                <option key={val} value={val}>{label}</option>
+                <option key={val} value={val} className="bg-[#1c1b1c]">{label}</option>
               ))}
             </select>
           )}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-xs text-gray-500">Start date</label>
+              <label className="text-xs text-white/50">Start date</label>
               <input
                 type="date"
                 value={form.start_date}
                 onChange={e => setForm({ ...form, start_date: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={DARK_INPUT}
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500">End date</label>
+              <label className="text-xs text-white/50">End date</label>
               <input
                 type="date"
                 value={form.end_date}
                 onChange={e => setForm({ ...form, end_date: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className={DARK_INPUT}
               />
             </div>
           </div>
           <select
             value={form.training_group_id}
             onChange={e => setForm({ ...form, training_group_id: e.target.value })}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={DARK_INPUT}
           >
-            <option value="">All athletes</option>
+            <option value="" className="bg-[#1c1b1c]">All athletes</option>
             {groups.map(g => (
-              <option key={g.id} value={g.id}>{g.name}</option>
+              <option key={g.id} value={g.id} className="bg-[#1c1b1c]">{g.name}</option>
             ))}
           </select>
           <button
             onClick={handleCreate}
             disabled={saving || !form.name.trim() || !form.start_date || !form.end_date}
-            className="w-full bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            style={{ boxShadow: '0 0 20px rgba(192,193,255,0.3)' }}
+            className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-full py-3 text-sm font-bold hover:scale-[1.01] active:scale-95 disabled:opacity-40 transition"
           >
             {saving ? 'Creating...' : 'Create Challenge'}
           </button>
@@ -497,48 +502,57 @@ export default function HallOfFamePage() {
     <div>
       <PageBackground src="/bg-hof.jpg" />
 
-      {/* Title — springs in on mount, stays forever */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.75, y: 40 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.65, ease: [0.34, 1.56, 0.64, 1] }}
-        className="text-center pt-2 pb-2"
-      >
-        <h2
-          className="text-5xl font-black uppercase tracking-wide leading-none"
-          style={{
-            background: 'linear-gradient(135deg, #fde68a, #f59e0b, #fbbf24, #d97706)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            filter: 'drop-shadow(0 0 18px rgba(251,191,36,0.65))',
-          }}
-        >
-          Hall of Fame
-        </h2>
-        <p className="text-[11px] tracking-[0.25em] uppercase text-amber-200 mt-3 [text-shadow:0_1px_8px_rgba(0,0,0,0.9)]">
-          🏆 &nbsp; Where legends are made &nbsp; 🏆
-        </p>
-
-        {/* Small section toggle — sits right under the title */}
-        <div className="flex justify-center gap-2 mt-4">
+      {/* Records / Challenges pill toggle — pinned top-left */}
+      <div className="flex justify-start -mt-1 -ml-1 mb-1">
+        <div className="flex rounded-full p-0.5 border border-white/5" style={GLASS}>
           {['records', 'challenges'].map(s => (
             <button
               key={s}
               onClick={() => setSection(s)}
-              className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition capitalize ${
-                section === s
-                  ? 'bg-amber-400/90 text-black border-amber-400'
-                  : 'bg-white/10 backdrop-blur-sm border-white/25 text-white/65 hover:text-white'
+              className={`px-3 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition ${
+                section === s ? 'bg-[#c0c1ff] text-[#1000a9]' : 'text-white/50 hover:text-white'
               }`}
             >
-              {s === 'records' ? '🥇 Records' : '⚡ Challenges'}
+              {s}
             </button>
           ))}
         </div>
-      </motion.div>
+      </div>
+
+      {/* Title — letters blur-reveal one by one */}
+      <div className="text-center pt-4 pb-2">
+        <motion.h2
+          className="text-4xl font-bold uppercase italic tracking-tight text-[#FFD700]"
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: 0.045, delayChildren: 0.1 } } }}
+        >
+          {'Hall of Fame'.split('').map((ch, i) => (
+            <motion.span
+              key={i}
+              className="inline-block"
+              style={{ whiteSpace: 'pre' }}
+              variants={{
+                hidden: { opacity: 0, y: 26, filter: 'blur(8px)' },
+                visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+              }}
+            >
+              {ch}
+            </motion.span>
+          ))}
+        </motion.h2>
+        <motion.p
+          className="text-[11px] tracking-[0.25em] uppercase text-white/50 mt-2"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.75, duration: 0.6 }}
+        >
+          🏆 &nbsp; Where legends are made &nbsp; 🏆
+        </motion.p>
+      </div>
 
       {/* Spacer — photo breathes here */}
-      <div className="h-[22vh]" />
+      <div className="h-[18vh]" />
       {section === 'records' ? <RecordsView /> : <ChallengesView />}
     </div>
   );

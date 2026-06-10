@@ -3,7 +3,6 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../api/client';
 import Modal from '../components/ui/Modal';
 import Spinner from '../components/ui/Spinner';
-import PageBackground from '../components/PageBackground';
 
 const SPECIALTIES = [
   'Physiotherapist',
@@ -15,8 +14,8 @@ const SPECIALTIES = [
   'Other',
 ];
 
-const GLASS = 'bg-white/15 backdrop-blur-sm border border-white/25';
-const GLASS_INPUT = 'w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30';
+const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
+const GLASS_INPUT = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
 
 function StarRating({ value, onChange, size = 'md' }) {
   const [hovered, setHovered] = useState(0);
@@ -107,7 +106,7 @@ function ReviewsModal({ professional, onClose }) {
   }
 
   return (
-    <Modal open onClose={onClose} panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
+    <Modal open onClose={onClose} panelClassName="bg-[#131314] border-t border-white/10">
       <h2 className="text-lg font-bold text-white mb-0.5">{professional.name}</h2>
       <p className="text-sm text-white/50 mb-4">{professional.specialty} · {professional.city}</p>
 
@@ -125,7 +124,7 @@ function ReviewsModal({ professional, onClose }) {
           />
           <div className="flex gap-2">
             <button type="submit" disabled={!editingReview.rating || submitting}
-              className="bg-white text-black text-sm px-4 py-1.5 rounded-lg font-semibold disabled:opacity-40">
+              className="bg-[#c0c1ff] text-[#1000a9] text-sm px-4 py-1.5 rounded-lg font-semibold disabled:opacity-40">
               {submitting ? 'Saving…' : 'Save'}
             </button>
             <button type="button" onClick={() => setEditingReview(null)}
@@ -139,7 +138,7 @@ function ReviewsModal({ professional, onClose }) {
           <div className="flex items-center justify-between mb-1">
             <p className="text-sm font-semibold text-white">Your review</p>
             <button onClick={() => setEditingReview({ ...myReview })}
-              className="text-xs text-blue-300 hover:text-blue-200 underline transition">
+              className="text-xs text-[#c0c1ff] hover:text-white underline transition">
               Edit
             </button>
           </div>
@@ -159,7 +158,7 @@ function ReviewsModal({ professional, onClose }) {
             className={GLASS_INPUT}
           />
           <button type="submit" disabled={!rating || submitting}
-            className="bg-white text-black text-sm px-4 py-1.5 rounded-lg font-semibold disabled:opacity-40">
+            className="bg-[#c0c1ff] text-[#1000a9] text-sm px-4 py-1.5 rounded-lg font-semibold disabled:opacity-40">
             {submitting ? 'Submitting…' : 'Submit rating'}
           </button>
         </form>
@@ -223,7 +222,7 @@ function ProfessionalForm({ initial, onSave, onClose }) {
   const label = (text) => <label className="block text-[10px] uppercase tracking-wider text-white/50 font-semibold mb-1">{text}</label>;
 
   return (
-    <Modal open onClose={onClose} panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
+    <Modal open onClose={onClose} panelClassName="bg-[#131314] border-t border-white/10">
       <h2 className="text-lg font-bold text-white mb-4">
         {initial ? 'Edit Professional' : 'Add Professional'}
       </h2>
@@ -235,9 +234,8 @@ function ProfessionalForm({ initial, onSave, onClose }) {
         </div>
         <div>
           {label('Specialty *')}
-          <select required value={form.specialty} onChange={set('specialty')}
-            className="w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30">
-            {SPECIALTIES.map((s) => <option key={s} className="bg-blue-950">{s}</option>)}
+          <select required value={form.specialty} onChange={set('specialty')} className={GLASS_INPUT}>
+            {SPECIALTIES.map((s) => <option key={s} className="bg-[#1c1b1c]">{s}</option>)}
           </select>
         </div>
         <div>
@@ -258,7 +256,7 @@ function ProfessionalForm({ initial, onSave, onClose }) {
         </div>
         <div className="flex gap-2 pt-1">
           <button type="submit" disabled={saving}
-            className="flex-1 bg-white text-black text-sm py-2 rounded-lg font-semibold disabled:opacity-40">
+            className="flex-1 bg-[#c0c1ff] text-[#1000a9] text-sm py-2 rounded-lg font-semibold disabled:opacity-40">
             {saving ? 'Saving…' : 'Save'}
           </button>
           <button type="button" onClick={onClose}
@@ -273,7 +271,7 @@ function ProfessionalForm({ initial, onSave, onClose }) {
 
 function ProfessionalCard({ professional, canEdit, onEdit, onDelete, onReviews, expanded, onToggle }) {
   return (
-    <div className={`${GLASS} rounded-xl overflow-hidden transition-all duration-200`}>
+    <div className={`${GLASS} rounded-2xl overflow-hidden transition-all duration-200`}>
       {/* Compact row — always visible, tap to expand */}
       <button
         onClick={onToggle}
@@ -305,7 +303,7 @@ function ProfessionalCard({ professional, canEdit, onEdit, onDelete, onReviews, 
             <a
               href={`tel:${professional.phone}`}
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-2 text-sm text-blue-300 font-medium hover:text-blue-200 transition"
+              className="flex items-center gap-2 text-sm text-[#c0c1ff] font-medium hover:text-white transition"
             >
               <span>📞</span><span>{professional.phone}</span>
             </a>
@@ -396,17 +394,19 @@ export default function HealthWellnessPage() {
 
   return (
     <div className="space-y-4">
-      <PageBackground src="/bg-health.jpg" />
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg-health.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.55) 0%, rgba(19,19,20,0.88) 100%)' }} />
 
       {/* Header */}
       <div className="flex items-center justify-between pt-1">
         <div>
           <p className="text-[10px] uppercase tracking-widest text-white/50 font-semibold">Directory</p>
-          <h1 className="text-xl font-bold text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Health &amp; Wellness</h1>
+          <h1 className="text-xl font-bold text-[#e5e2e3]">Health &amp; Wellness</h1>
         </div>
         <button
           onClick={() => setShowAddForm(true)}
-          className="bg-white/15 backdrop-blur-sm border border-white/25 text-white text-sm px-3 py-1.5 rounded-lg font-semibold hover:bg-white/25 transition"
+          style={{ boxShadow: '0 0 15px rgba(192,193,255,0.3)' }}
+          className="bg-[#c0c1ff] text-[#1000a9] text-sm px-4 py-1.5 rounded-full font-bold hover:scale-[1.02] active:scale-95 transition"
         >
           + Add
         </button>
@@ -417,18 +417,18 @@ export default function HealthWellnessPage() {
         <select
           value={cityFilter}
           onChange={(e) => setCityFilter(e.target.value)}
-          className="flex-1 bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none"
+          className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
         >
-          <option value="" className="bg-blue-950">All Cities</option>
-          {cities.map((c) => <option key={c} className="bg-blue-950">{c}</option>)}
+          <option value="" className="bg-[#1c1b1c]">All Cities</option>
+          {cities.map((c) => <option key={c} className="bg-[#1c1b1c]">{c}</option>)}
         </select>
         <select
           value={specialtyFilter}
           onChange={(e) => setSpecialtyFilter(e.target.value)}
-          className="flex-1 bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none"
+          className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
         >
-          <option value="" className="bg-blue-950">All Specialties</option>
-          {SPECIALTIES.map((s) => <option key={s} className="bg-blue-950">{s}</option>)}
+          <option value="" className="bg-[#1c1b1c]">All Specialties</option>
+          {SPECIALTIES.map((s) => <option key={s} className="bg-[#1c1b1c]">{s}</option>)}
         </select>
       </div>
 
@@ -441,7 +441,7 @@ export default function HealthWellnessPage() {
           <p className="text-sm mt-1">Be the first to add one!</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {professionals.map((p) => (
             <ProfessionalCard
               key={p.id}

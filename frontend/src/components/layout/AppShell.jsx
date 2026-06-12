@@ -78,7 +78,7 @@ export default function AppShell() {
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
-      <header className={`shrink-0 z-40 border-b border-white/10 text-[#e5e2e3] px-4 py-3 flex items-center justify-between ${isAbout ? 'bg-black' : 'bg-[#131314]/45 backdrop-blur-xl'}`}>
+      <header className={`shrink-0 z-40 border-b border-white/10 text-white px-4 py-3 flex items-center justify-between ${isAbout ? 'bg-black' : 'bg-black/40 backdrop-blur-md'}`}>
         <div className="flex items-center gap-2">
           {!isRoot && (
             <button
@@ -121,16 +121,15 @@ export default function AppShell() {
         </div>
       </header>
 
-      {/* Only this div scrolls — nav and header are always visible */}
+      {/* Only this div scrolls — header is always visible, dock floats over it.
+          pb-28 keeps the last content clear of the floating dock. */}
       <div className="flex-1 overflow-y-auto">
-        <div className="px-4 py-4 pb-6 max-w-2xl mx-auto w-full">
+        <div className="px-4 py-4 pb-28 max-w-2xl mx-auto w-full">
           <Outlet />
         </div>
       </div>
 
-      <div className={isAbout ? 'bg-black' : ''}>
-        <BottomNav />
-      </div>
+      <BottomNav />
 
       {showSwitcher && (
         <TeamSwitcherModal

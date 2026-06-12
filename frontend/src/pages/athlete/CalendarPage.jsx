@@ -391,7 +391,7 @@ export default function CalendarPage() {
     <div>
       {/* Track background + dark hero gradient (designer's training-log look) */}
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 0%, rgba(19,19,20,0.82) 100%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
       {/* Date selector */}
       <div className="flex items-center justify-between mb-6">

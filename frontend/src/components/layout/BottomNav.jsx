@@ -106,8 +106,11 @@ export default function BottomNav() {
   }));
 
   return (
-    <div className="shrink-0 flex justify-center py-2 px-4">
-      <div className="overflow-x-auto scrollbar-hide max-w-full">
+    // Floating dock — detached from the bottom edge, hovers over the content.
+    // pointer-events-none on the wrapper lets taps pass through the empty sides;
+    // the dock itself re-enables them.
+    <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-4 pointer-events-none">
+      <div className="overflow-x-auto scrollbar-hide max-w-full pointer-events-auto">
         <FloatingDock items={items} />
       </div>
     </div>

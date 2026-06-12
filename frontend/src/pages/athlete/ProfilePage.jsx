@@ -12,8 +12,8 @@ const DISTANCE_LABELS = {
   10000: '10,000m', 21100: 'Half Marathon', 42200: 'Marathon',
 };
 
-const GLASS_CARD = 'bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-4';
-const SECTION_LABEL = 'text-[10px] uppercase tracking-widest text-white/55 font-semibold';
+const GLASS_CARD = 'bg-black/30 backdrop-blur-md border border-white/15 rounded-xl p-4';
+const SECTION_LABEL = 'text-[10px] uppercase tracking-widest text-[#c4c7c8] font-semibold';
 const GLASS_INPUT = 'w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/40';
 
 export default function ProfilePage() {
@@ -290,7 +290,7 @@ export default function ProfilePage() {
           {user?.strava_connected ? (
             <div className="flex items-center gap-2 flex-wrap justify-end">
               <span className="text-xs font-semibold text-orange-300 bg-orange-400/20 border border-orange-400/30 px-2.5 py-1 rounded-full">
-                🏃 Connected
+                 Connected
               </span>
               <button
                 onClick={handleDisconnectStrava}
@@ -345,7 +345,7 @@ export default function ProfilePage() {
       {/* Personal Bests + Race History (athletes only) */}
       {!isCoach && (
         <>
-          <h3 className="text-sm font-bold uppercase tracking-wider text-white/70 mb-3 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-[#c4c7c8] mb-3 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
             Personal Bests
           </h3>
           {profile.personal_bests.length === 0 ? (
@@ -353,17 +353,19 @@ export default function ProfilePage() {
           ) : (
             <div className="grid grid-cols-2 gap-3 mb-6">
               {profile.personal_bests.map((pb) => (
-                <div key={pb.distance_m} className="bg-white/15 backdrop-blur-sm border border-white/25 rounded-xl p-3">
-                  <p className="text-[11px] text-white/55 font-medium uppercase tracking-wide">{DISTANCE_LABELS[pb.distance_m]}</p>
-                  <p className="text-xl font-mono font-bold text-blue-200 mt-0.5">{pb.time_display}</p>
-                  <p className="text-xs text-white/50">{pb.pace_display} /km</p>
-                  <p className="text-[11px] text-white/40 mt-1 truncate">{pb.race_name} · {pb.achieved_date}</p>
+                <div key={pb.distance_m} className="bg-black/30 backdrop-blur-md border border-white/15 rounded-xl p-3">
+                  <p className="text-[11px] text-[#c4c7c8] font-medium uppercase tracking-wide">{DISTANCE_LABELS[pb.distance_m]}</p>
+                  <div className="flex items-baseline gap-2 mt-0.5">
+                    <p className="text-xl font-mono font-bold text-white">{pb.time_display}</p>
+                    <p className="text-xs font-mono text-[#c0c1ff]">{pb.pace_display} /km</p>
+                  </div>
+                  <p className="text-[11px] text-[#c4c7c8]/70 mt-1 truncate">{pb.race_name} · {pb.achieved_date}</p>
                 </div>
               ))}
             </div>
           )}
 
-          <h3 className="text-sm font-bold uppercase tracking-wider text-white/70 mb-3 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-[#c4c7c8] mb-3 [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]">
             Race History
           </h3>
           {profile.race_history.length === 0 ? (
@@ -373,7 +375,7 @@ export default function ProfilePage() {
               {profile.race_history.map((r, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between gap-2 bg-white/10 border border-white/15 rounded-lg px-3 py-2 text-sm"
+                  className="flex items-center justify-between gap-2 bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-white truncate">{r.race_name}</p>

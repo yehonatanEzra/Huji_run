@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./dev.db"
     JWT_SECRET: str = "dev-secret"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 10080  # 7 days
+    JWT_EXPIRE_MINUTES: int = 10080  # 7 daysß
 
     # Comma-separated list of allowed origins. Set in prod to your Vercel URL.
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"

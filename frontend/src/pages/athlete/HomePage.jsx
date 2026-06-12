@@ -10,6 +10,13 @@ export default function HomePage() {
   const { user } = useAuth();
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Bumps every 3s to remount the name and replay the letter-reveal animation.
+  const [nameTick, setNameTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setNameTick((t) => t + 1), 3000);
+    return () => clearInterval(id);
+  }, []);
 
   // Athletes without a coach belong on /find-coach, not the home ticket.
   useEffect(() => {
@@ -58,6 +65,31 @@ export default function HomePage() {
 
   return (
     <div className="relative pb-8">
+      {/* Track background + dark hero gradient (designer's training-log look) */}
+      <style>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes gentleFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+        @keyframes letterReveal {
+          from { opacity: 0; filter: blur(8px); transform: translateY(10px); }
+          to   { opacity: 1; filter: blur(0);  transform: translateY(0); }
+        }
+        .animate-fade-in-up {
+          animation: fadeInUp 0.8s ease-out forwards;
+        }
+        .animate-gentle-float {
+          animation: gentleFloat 4s ease-in-out infinite;
+        }
+        .animate-letter-reveal {
+          animation: letterReveal 0.7s ease-out forwards;
+        }
+      `}</style>
+
       {bgUrl && (
         <>
           <div
@@ -65,13 +97,27 @@ export default function HomePage() {
             style={{ backgroundImage: `url(${bgUrl})` }}
           />
           {/* Match the feed / training-log darkness level */}
-          <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 0%, rgba(19,19,20,0.82) 100%)' }} />
+          <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 0%, rgba(0,0,0,0.50) 100%)' }} />
         </>
       )}
-      <div className="mb-3 px-1">
-        <p className={`text-sm font-semibold uppercase tracking-widest ${bgUrl ? 'text-blue-200' : 'text-blue-600'}`}>Welcome back,</p>
-        <h1 className="mt-1 text-3xl font-black text-white [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]">
-          {user?.full_name || 'Runner'}
+
+      {/* Welcome message — "Welcome back," fades in first, then the name
+          reveals letter by letter; the whole block replays every 3s. */}
+      <div key={nameTick} className="mb-3 px-1">
+        <p className={`text-sm font-semibold uppercase tracking-widest opacity-0 animate-fade-in-up ${bgUrl ? 'text-blue-200' : 'text-blue-600'}`}>
+          Welcome back,
+        </p>
+        {/*athlete name */}
+        <h1 className="mt-1 text-3xl font-black text-blue-300 [text-shadow:0_2px_12px_rgba(0,8,0,0.6)] inline-block">
+          {(user?.full_name || 'Runner').split('').map((ch, i) => (
+            <span
+              key={i}
+              className="inline-block opacity-0 animate-letter-reveal"
+              style={{ animationDelay: `${0.9 + i * 0.09}s`, whiteSpace: 'pre' }}
+            >
+              {ch}
+            </span>
+          ))}
         </h1>
       </div>
 

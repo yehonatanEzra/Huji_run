@@ -30,7 +30,7 @@ export function FloatingDock({ items, className = '' }) {
   };
 
   return (
-    <div className={`flex items-center rounded-full bg-white/5 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] px-2 pb-2 pt-1 gap-1 ${className}`}>
+    <div className={`flex items-center rounded-full bg-black/40 backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] px-2 pb-2 pt-1 gap-1 ${className}`}>
       {/* Left arrow */}
       <AnimatePresence>
         {canLeft && (

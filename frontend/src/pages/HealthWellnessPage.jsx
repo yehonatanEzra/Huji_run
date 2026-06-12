@@ -395,7 +395,7 @@ export default function HealthWellnessPage() {
   return (
     <div className="space-y-4">
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg-health.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.55) 0%, rgba(19,19,20,0.88) 100%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
       {/* Header */}
       <div className="flex items-center justify-between pt-1">

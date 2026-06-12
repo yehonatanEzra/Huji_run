@@ -206,7 +206,7 @@ export default function FeedPage() {
   return (
     <div>
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 0%, rgba(19,19,20,0.82) 100%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-[#e5e2e3]">Feed</h2>
         {canPost && (

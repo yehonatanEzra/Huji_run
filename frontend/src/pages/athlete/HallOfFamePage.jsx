@@ -497,6 +497,13 @@ function ChallengesView() {
 
 export default function HallOfFamePage() {
   const [section, setSection] = useState('records');
+  // Bumps on an interval to remount the title and replay the blur-reveal.
+  const [titleTick, setTitleTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setTitleTick((t) => t + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <div>
@@ -519,8 +526,9 @@ export default function HallOfFamePage() {
         </div>
       </div>
 
-      {/* Title — letters blur-reveal one by one */}
-      <div className="text-center pt-4 pb-2">
+      {/* Title — letters blur-reveal one by one; keying the wrapper on titleTick
+          remounts both lines together so the animation replays on an interval. */}
+      <div key={titleTick} className="text-center pt-4 pb-2">
         <motion.h2
           className="text-4xl font-bold uppercase italic tracking-tight text-[#FFD700]"
           initial="hidden"

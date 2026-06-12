@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../api/client';
 import Modal from '../components/ui/Modal';
@@ -13,6 +13,51 @@ const SPECIALTIES = [
   'Nutritionist',
   'Other',
 ];
+
+// Custom dropdown anchored directly under its button — native <select> opens
+// centered over the control on mobile/desktop, which we don't want.
+function AnchoredSelect({ value, options, allLabel, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const items = [{ v: '', label: allLabel }, ...options.map((o) => ({ v: o, label: o }))];
+
+  return (
+    <div className="relative flex-1" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full bg-[#1c1b1c]/60 backdrop-blur-xl border border-white/10 rounded-full px-4 py-2 text-sm text-white text-left flex items-center justify-between gap-2 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
+      >
+        <span className="truncate">{value || allLabel}</span>
+        <span className="opacity-60 text-[10px] shrink-0">▾</span>
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#1c1b1c] border border-white/10 rounded-xl shadow-2xl py-1 max-h-60 overflow-y-auto">
+          {items.map((opt) => (
+            <button
+              key={opt.v}
+              type="button"
+              onClick={() => { onChange(opt.v); setOpen(false); }}
+              className={`block w-full text-left px-4 py-2 text-sm transition ${
+                value === opt.v ? 'bg-[#c0c1ff] text-[#1000a9] font-semibold' : 'text-white/75 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
 const GLASS_INPUT = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
@@ -393,14 +438,17 @@ export default function HealthWellnessPage() {
   const cities = [...new Set(professionals.map((p) => p.city))].sort();
 
   return (
-    <div className="space-y-4">
+    <>
+      {/* Backgrounds live outside the space-y wrapper — inside it, space-y adds a
+          top margin to the gradient div which over-constrains `fixed inset-0`
+          and collapses it, leaving a seam at the bottom. */}
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg-health.jpg)' }} />
       <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
+      <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between pt-1">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-white/50 font-semibold">Directory</p>
           <h1 className="text-xl font-bold text-[#e5e2e3]">Health &amp; Wellness</h1>
         </div>
         <button
@@ -414,22 +462,8 @@ export default function HealthWellnessPage() {
 
       {/* Filters */}
       <div className="flex gap-2">
-        <select
-          value={cityFilter}
-          onChange={(e) => setCityFilter(e.target.value)}
-          className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-        >
-          <option value="" className="bg-[#1c1b1c]">All Cities</option>
-          {cities.map((c) => <option key={c} className="bg-[#1c1b1c]">{c}</option>)}
-        </select>
-        <select
-          value={specialtyFilter}
-          onChange={(e) => setSpecialtyFilter(e.target.value)}
-          className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-        >
-          <option value="" className="bg-[#1c1b1c]">All Specialties</option>
-          {SPECIALTIES.map((s) => <option key={s} className="bg-[#1c1b1c]">{s}</option>)}
-        </select>
+        <AnchoredSelect value={cityFilter} options={cities} allLabel="All Cities" onChange={setCityFilter} />
+        <AnchoredSelect value={specialtyFilter} options={SPECIALTIES} allLabel="All Specialties" onChange={setSpecialtyFilter} />
       </div>
 
       {loading ? (
@@ -466,6 +500,7 @@ export default function HealthWellnessPage() {
       {reviewTarget && (
         <ReviewsModal professional={reviewTarget} onClose={() => setReviewTarget(null)} />
       )}
-    </div>
+      </div>
+    </>
   );
 }

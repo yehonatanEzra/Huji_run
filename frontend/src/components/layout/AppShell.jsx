@@ -63,6 +63,8 @@ export default function AppShell() {
   const navigate = useNavigate();
   const isRoot = ROOT_PATHS.has(location.pathname);
   const isAbout = location.pathname === '/about';
+  // The About pill gets a subtle blue tint on every page except Hall of Fame / Profile.
+  const blueAbout = !['/hall-of-fame', '/profile'].includes(location.pathname);
 
   const [myTeams, setMyTeams] = useState([]);
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -92,7 +94,7 @@ export default function AppShell() {
           <h1 className="text-lg font-bold tracking-tight">Huji Run</h1>
           <button
             onClick={() => navigate('/about')}
-            className="ml-1 text-xs font-medium bg-[#353436] hover:bg-[#454446] rounded-full px-3 py-1 transition"
+            className={`ml-1 text-xs font-medium rounded-full px-3 py-1 transition ${blueAbout ? 'bg-[#363a52] hover:bg-[#454a68]' : 'bg-[#353436] hover:bg-[#454446]'}`}
           >
             About
           </button>

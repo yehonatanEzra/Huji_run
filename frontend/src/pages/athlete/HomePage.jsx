@@ -80,7 +80,7 @@ export default function HomePage() {
           to   { opacity: 1; filter: blur(0);  transform: translateY(0); }
         }
         @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(90px); }
+          from { opacity: 0; transform: translateX(150px); }
           to   { opacity: 1; transform: translateX(0); }
         }
         .animate-fade-in-up {
@@ -93,7 +93,7 @@ export default function HomePage() {
           animation: letterReveal 0.7s ease-out forwards;
         }
         .animate-slide-in-right {
-          animation: slideInRight 0.6s ease-out forwards;
+          animation: slideInRight 1s ease-out forwards;
         }
       `}</style>
 

@@ -79,6 +79,10 @@ export default function HomePage() {
           from { opacity: 0; filter: blur(8px); transform: translateY(10px); }
           to   { opacity: 1; filter: blur(0);  transform: translateY(0); }
         }
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(90px); }
+          to   { opacity: 1; transform: translateX(0); }
+        }
         .animate-fade-in-up {
           animation: fadeInUp 0.8s ease-out forwards;
         }
@@ -87,6 +91,9 @@ export default function HomePage() {
         }
         .animate-letter-reveal {
           animation: letterReveal 0.7s ease-out forwards;
+        }
+        .animate-slide-in-right {
+          animation: slideInRight 0.6s ease-out forwards;
         }
       `}</style>
 
@@ -101,11 +108,11 @@ export default function HomePage() {
         </>
       )}
 
-      {/* Welcome message — "Welcome back," fades in first, then the name
+      {/* Welcome message — "Welcome back" fades in first, then the name
           reveals letter by letter; the whole block replays every 3s. */}
       <div key={nameTick} className="mb-3 px-1">
-        <p className={`text-sm font-semibold uppercase tracking-widest opacity-0 animate-fade-in-up ${bgUrl ? 'text-blue-200' : 'text-blue-600'}`}>
-          Welcome back,
+        <p className={`text-sm font-semibold uppercase tracking-widest opacity-0 animate-slide-in-right ${bgUrl ? 'text-blue-200' : 'text-blue-600'}`}>
+          Welcome back
         </p>
         {/*athlete name */}
         <h1 className="mt-1 text-3xl font-black text-blue-300 [text-shadow:0_2px_12px_rgba(0,8,0,0.6)] inline-block">

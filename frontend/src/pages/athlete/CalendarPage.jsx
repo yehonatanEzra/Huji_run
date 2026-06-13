@@ -19,6 +19,9 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
+  // When a day is opened from the expanded month view, closing it should return
+  // there rather than dropping back to the compact calendar.
+  const [returnToExpanded, setReturnToExpanded] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(0.75);
   const expandedScrollRef = useRef(null);
   const pinchRef = useRef({ startDist: 0, startZoom: 1 });
@@ -138,7 +141,8 @@ export default function CalendarPage() {
     }
   }, [days, searchParams, autoOpenedToday]);
 
-  const openDay = (day) => {
+  const openDay = (day, fromExpanded = false) => {
+    setReturnToExpanded(fromExpanded);
     setSelectedDay(day);
     setStravaActivities(null);
     setStravaLoading(false);
@@ -157,6 +161,12 @@ export default function CalendarPage() {
     });
   };
 
+  // Close the day detail; return to the expanded month view if we came from it.
+  const closeDay = () => {
+    setSelectedDay(null);
+    if (returnToExpanded) { setMonthExpanded(true); setReturnToExpanded(false); }
+  };
+
   const handleSaveLog = async () => {
     setSaving(true);
     try {
@@ -170,7 +180,7 @@ export default function CalendarPage() {
         payload.distance_km = parseFloat(logForm.distance_km);
       }
       await submitLog(payload);
-      setSelectedDay(null);
+      closeDay();
       fetchData();
     } catch (err) {
       console.error(err);
@@ -476,7 +486,7 @@ export default function CalendarPage() {
         </div>
       ) : renderMonthGrid()}
 
-      <Modal open={!!selectedDay} onClose={() => setSelectedDay(null)} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
+      <Modal open={!!selectedDay} onClose={closeDay} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
         {selectedDay && (
           <div className="space-y-4">
             {selectedDay.group_workout && (() => {
@@ -814,7 +824,7 @@ export default function CalendarPage() {
                       return (
                         <button
                           key={d.date}
-                          onClick={() => { setMonthExpanded(false); openDay(d); }}
+                          onClick={() => { setMonthExpanded(false); openDay(d, true); }}
                           className={`rounded-lg ${cellIsRace ? 'border-2 border-[#8083ff]' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                           style={{ minHeight: `${cellHeight}px` }}
                         >

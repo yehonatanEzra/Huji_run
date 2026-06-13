@@ -18,6 +18,9 @@ const WORKOUT_TYPES = [
 ];
 
 const typeMeta = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
+// Titles we auto-fill from the type — used to tell an auto-default apart from a
+// title the coach actually typed (which must never be overwritten).
+const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
 
 const workoutSnippet = (gw) => {
   if (!gw) return '';
@@ -325,7 +328,7 @@ export default function GroupWorkoutsTab({ group }) {
             onClick={() => setMonthExpanded(true)}
             className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
           >
-            ⛶ Expand monthly view
+             Expand monthly view
           </button>
         </NoiseBackground>
         <div className="space-y-4">
@@ -348,11 +351,11 @@ export default function GroupWorkoutsTab({ group }) {
                 const hasDraft = list.some(g => g.draft_content);
                 return (
                   <button key={day.date} onClick={() => openDay(day)}
-                    className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
+                    className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative backdrop-blur-2xl ${
                       !inMonth ? 'opacity-40' : ''
-                    } ${cellIsRace ? 'border-2 border-indigo-500 bg-indigo-50' :
-                       isToday ? 'border border-blue-400 bg-blue-50' :
-                       'border border-gray-200 bg-white'}`}>
+                    } ${cellIsRace ? 'border-2 border-[#8083ff]/50 bg-[#8083ff]/15' :
+                       isToday ? 'border border-[#c0c1ff]/40 bg-[#c0c1ff]/10' :
+                       'border border-white/10 bg-black/45'}`}>
                     {cellIsRace && (
                       <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
                     )}
@@ -362,10 +365,10 @@ export default function GroupWorkoutsTab({ group }) {
                       </span>
                     )}
                     {list.length > 1 && (
-                      <span className="absolute bottom-0.5 right-0.5 text-[8px] px-1 leading-tight bg-blue-600 text-white rounded font-bold">+{list.length - 1}</span>
+                      <span className="absolute bottom-0.5 right-0.5 text-[8px] px-1 leading-tight bg-[#c0c1ff] text-[#1000a9] rounded font-bold">+{list.length - 1}</span>
                     )}
-                    <span className="font-semibold text-gray-900">{format(dayDate, 'd')}</span>
-                    <span className="text-[10px] text-gray-400">{format(dayDate, 'EEE')}</span>
+                    <span className="font-semibold text-white">{format(dayDate, 'd')}</span>
+                    <span className="text-[10px] text-white/50">{format(dayDate, 'EEE')}</span>
                     <div className="flex gap-0.5 mt-1">
                       {hasPublished && <span className="w-1.5 h-1.5 rounded-full bg-green-400" />}
                       {hasDraft && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
@@ -389,17 +392,17 @@ export default function GroupWorkoutsTab({ group }) {
         <>
 
           <div className="flex items-center justify-between mb-4">
-            <button onClick={goBack} className="text-blue-200 hover:text-white text-sm font-medium transition">&larr; Prev</button>
+            <button onClick={goBack} className="text-white hover:text-white/80 text-sm font-medium transition">&larr; Prev</button>
             <span className="text-sm font-medium text-white/85">{headerLabel}</span>
-            <button onClick={goForward} className="text-blue-200 hover:text-white text-sm font-medium transition">Next &rarr;</button>
+            <button onClick={goForward} className="text-white hover:text-white/80 text-sm font-medium transition">Next &rarr;</button>
           </div>
 
-          <div className="flex rounded-lg border border-white/20 overflow-hidden mb-4">
+          <div className="flex rounded-lg border border-white/10 overflow-hidden mb-4">
             <button onClick={() => setView('weekly')}
-              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'weekly' ? 'bg-blue-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/15'}`}>
+              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'weekly' ? 'bg-[#c0c1ff] text-[#1000a9]' : 'bg-black/40 text-white/70 hover:bg-black/30'}`}>
               Weekly</button>
             <button onClick={() => setView('monthly')}
-              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'monthly' ? 'bg-blue-500 text-white' : 'bg-white/5 text-white/70 hover:bg-white/15'}`}>
+              className={`flex-1 py-1.5 text-sm font-medium transition ${view === 'monthly' ? 'bg-[#c0c1ff] text-[#1000a9]' : 'bg-black/40 text-white/70 hover:bg-black/30'}`}>
               Monthly</button>
           </div>
 
@@ -412,10 +415,10 @@ export default function GroupWorkoutsTab({ group }) {
                 const isRace = list.some(g => g.workout_type === 'race');
                 return (
                 <button key={day.date} onClick={() => openDay(day)}
-                  className={`w-full text-left p-3 rounded-xl transition hover:shadow-sm backdrop-blur-sm ${
-                    isRace ? 'border-2 border-indigo-400/70 bg-indigo-200/25' :
-                    isToday ? 'border border-blue-300/60 bg-blue-200/25' :
-                    'border border-white/30 bg-white/20'
+                  className={`w-full text-left p-3 rounded-xl transition hover:shadow-sm backdrop-blur-2xl ${
+                    isRace ? 'border-2 border-[#8083ff]/50 bg-[#8083ff]/15' :
+                    isToday ? 'border border-[#c0c1ff]/40 bg-[#c0c1ff]/10' :
+                    'border border-white/10 bg-black/45'
                   }`}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-semibold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">
@@ -507,6 +510,13 @@ export default function GroupWorkoutsTab({ group }) {
         {selectedDay && editingId != null && (() => {
           const meta = typeMeta(form.workout_type);
           const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+          // Picking a type auto-titles the workout with that type's name, unless
+          // the coach already typed a custom title. 'Other' stays untitled.
+          const selectType = (value) => setForm((f) => {
+            const wasDefault = !f.title.trim() || DEFAULT_TITLES.has(f.title.trim());
+            const nextTitle = wasDefault ? (value === 'simple' ? '' : typeMeta(value).label) : f.title;
+            return { ...f, workout_type: value, title: nextTitle };
+          });
           const hasPublishedContent = meta.structured
             ? (form.warmup.trim() || form.main_session.trim() || form.cooldown.trim())
             : form.content.trim();
@@ -550,7 +560,7 @@ export default function GroupWorkoutsTab({ group }) {
                   {WORKOUT_TYPES.map(t => (
                     <button
                       key={t.value}
-                      onClick={() => setField('workout_type', t.value)}
+                      onClick={() => selectType(t.value)}
                       className={`text-xs px-2 py-1.5 rounded-lg font-medium border transition ${
                         form.workout_type === t.value
                           ? `${t.color} border-current`
@@ -832,7 +842,7 @@ export default function GroupWorkoutsTab({ group }) {
         onClose={() => setMonthExpanded(false)}
         title="Training log"
         fullScreen
-        panelClassName="bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950"
+        panelClassName="bg-[#131314]"
       >
         {group && (
           <div>
@@ -862,7 +872,7 @@ export default function GroupWorkoutsTab({ group }) {
             <div className="flex items-center justify-between mb-3">
               <button
                 onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-                className="text-blue-300 hover:text-blue-200 text-sm transition"
+                className="text-white hover:text-white/80 text-sm transition"
               >&larr; Prev</button>
               <YearMonthLabel
                 currentDate={currentDate}
@@ -871,7 +881,7 @@ export default function GroupWorkoutsTab({ group }) {
               />
               <button
                 onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-                className="text-blue-300 hover:text-blue-200 text-sm transition"
+                className="text-white hover:text-white/80 text-sm transition"
               >Next &rarr;</button>
             </div>
 
@@ -905,15 +915,15 @@ export default function GroupWorkoutsTab({ group }) {
                           : (draftOnly?.draft_content || '');
                         const cellIsRace = list.some(g => g.workout_type === 'race');
                         const cellHeight = 150;
-                        const bg = !inMonth ? 'bg-white/5 border-white/10 opacity-60' :
+                        const bg = !inMonth ? 'bg-black/30 border-white/10 opacity-60' :
                           hasPublished ? 'bg-green-500/30 border-green-400/40 hover:bg-green-500/40' :
                           draftOnly ? 'bg-yellow-500/25 border-yellow-400/40 hover:bg-yellow-500/35' :
-                          'bg-white/20 border-white/30 hover:bg-white/30';
+                          'bg-black/45 border-white/10 hover:bg-black/35';
                         return (
                           <button
                             key={d.date}
                             onClick={() => { setMonthExpanded(false); openDay(d); }}
-                            className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                            className={`rounded-lg backdrop-blur-2xl ${cellIsRace ? 'border-2 border-[#8083ff]/60' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                             style={{ minHeight: `${cellHeight}px` }}
                           >
                             <div className="flex items-start justify-between px-2 pt-1.5">

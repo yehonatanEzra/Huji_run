@@ -2,14 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { listNotifications, getUnreadCount, markRead, markAllRead } from '../api/notifications';
 
-const TYPE_ICON = {
-  new_workout: '🏋️',
-  personal_workout: '🎯',
-  workout_comment: '💬',
-  new_race: '🏁',
-  post_comment: '💭',
-};
-
 function timeAgo(iso) {
   const ms = Date.now() - new Date(iso).getTime();
   const s = Math.floor(ms / 1000);
@@ -134,7 +126,6 @@ export default function NotificationBell() {
                     n.read ? 'opacity-60' : ''
                   }`}
                 >
-                  <span className="text-lg shrink-0">{TYPE_ICON[n.type] || '🔔'}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white leading-tight">{n.message}</p>
                     <p className="text-[10px] text-white/40 mt-0.5">{timeAgo(n.created_at)}</p>

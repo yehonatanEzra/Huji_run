@@ -443,7 +443,7 @@ export default function HealthWellnessPage() {
           top margin to the gradient div which over-constrains `fixed inset-0`
           and collapses it, leaving a seam at the bottom. */}
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg-health.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: (user?.role === 'coach' || user?.role === 'admin') ? 'linear-gradient(180deg, rgba(19,19,20,0.68) 20%, rgba(0,0,0,0.78) 80%)' : 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
       <div className="space-y-4">
       {/* Header */}

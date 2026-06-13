@@ -10,8 +10,7 @@ import ProgressPage from './pages/athlete/ProgressPage';
 import HomePage from './pages/athlete/HomePage';
 import FindCoachPage from './pages/athlete/FindCoachPage';
 import CoachRequestsPage from './pages/coach/CoachRequestsPage';
-import AdminPendingPage from './pages/AdminPendingPage';
-import UsersPage from './pages/admin/UsersPage';
+import AdminPage from './pages/admin/AdminPage';
 import RaceArchivePage from './pages/athlete/RaceArchivePage';
 import RaceDetailPage from './pages/athlete/RaceDetailPage';
 import HallOfFamePage from './pages/athlete/HallOfFamePage';
@@ -62,9 +61,12 @@ export default function App() {
         <Route path="/coach/targets" element={<ProtectedRoute requireCoach><IndividualTargetsPage /></ProtectedRoute>} />
         <Route path="/coach/dashboard" element={<ProtectedRoute requireCoach><TrackingDashboardPage /></ProtectedRoute>} />
         <Route path="/coach/athletes/:athleteId/progress" element={<ProtectedRoute requireCoach><AthleteProgressPage /></ProtectedRoute>} />
+        <Route path="/coach/athletes/:athleteId/volume" element={<ProtectedRoute requireCoach><VolumePage /></ProtectedRoute>} />
         <Route path="/coach/race-wizard" element={<ProtectedRoute requireCoach><RaceWizardPage /></ProtectedRoute>} />
-        <Route path="/admin/pending" element={<ProtectedRoute requireAdmin><AdminPendingPage /></ProtectedRoute>} />
-        <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UsersPage /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute requireAdmin><AdminPage /></ProtectedRoute>} />
+        {/* Consolidated into the Admin hub — keep old paths working as redirects */}
+        <Route path="/admin/pending" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/users" element={<Navigate to="/admin" replace />} />
         <Route path="/coach/settings" element={<ProtectedRoute requireCoach><SettingsPage /></ProtectedRoute>} />
         <Route path="/team/setup" element={<ProtectedRoute requireCoach><TeamSetupPage /></ProtectedRoute>} />
         <Route path="/coach/group" element={<ProtectedRoute requireCoach><GroupHubPage /></ProtectedRoute>} />

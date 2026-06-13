@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getWeeklyVolume, getMonthlyVolume, getKmSeries } from '../../api/stats';
 import Spinner from '../../components/ui/Spinner';
@@ -10,15 +11,29 @@ const TAB_INACTIVE = 'text-white/55 hover:text-white';
 
 export default function VolumePage() {
   const { user } = useAuth();
+  const params = useParams();
+  const location = useLocation();
   const [tab, setTab] = useState('weeks');
+
+  // A coach viewing one of their athletes passes the id in the route; otherwise
+  // it's the logged-in athlete looking at their own volume.
+  const coachView = !!params.athleteId;
+  const targetId = coachView ? Number(params.athleteId) : user?.id;
+  const athleteName = location.state?.athleteName;
 
   return (
     <div>
-      {/* Same background as the training log */}
-      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
+      {/* Coach view uses the black coach theme; athletes keep their photo background. */}
+      {coachView ? (
+        <div className="fixed inset-0 -z-10 bg-black" />
+      ) : (
+        <>
+          <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+          <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
+        </>
+      )}
 
-      <h2 className="text-xl font-bold text-[#e5e2e3] mb-3">Volume</h2>
+      <h2 className="text-xl font-bold text-[#e5e2e3] mb-3">{coachView && athleteName ? `${athleteName} · Volume` : 'Volume'}</h2>
 
       {/* Tabs */}
       <div className={`flex gap-1 p-1 rounded-full mb-4 ${GLASS}`}>
@@ -33,9 +48,9 @@ export default function VolumePage() {
         ))}
       </div>
 
-      {tab === 'weeks' && <WeeksView athleteId={user?.id} />}
-      {tab === 'months' && <MonthsView athleteId={user?.id} />}
-      {tab === 'diagram' && <DiagramView athleteId={user?.id} />}
+      {tab === 'weeks' && <WeeksView athleteId={targetId} />}
+      {tab === 'months' && <MonthsView athleteId={targetId} />}
+      {tab === 'diagram' && <DiagramView athleteId={targetId} />}
     </div>
   );
 }

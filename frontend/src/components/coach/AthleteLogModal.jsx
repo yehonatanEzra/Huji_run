@@ -9,13 +9,14 @@ const TYPES = [
   { value: 'simple',    label: 'Other',     abbr: 'Oth',  color: 'bg-white/10 text-white/70',        structured: false },
   { value: 'easy',      label: 'Easy run',  abbr: 'Easy', color: 'bg-emerald-400/20 text-emerald-200', structured: false },
   { value: 'rest',      label: 'Rest day',  abbr: 'Rest', color: 'bg-slate-400/20 text-slate-200',     structured: false },
-  { value: 'tempo',     label: 'Tempo',     abbr: 'Tem',  color: 'bg-orange-400/20 text-orange-200',   structured: true },
+  { value: 'tempo',     label: 'Tempo',     abbr: 'Tmp',  color: 'bg-orange-400/20 text-orange-200',   structured: true },
   { value: 'long',      label: 'Long run',  abbr: 'Long', color: 'bg-purple-400/20 text-purple-200',   structured: true },
   { value: 'intervals', label: 'Intervals', abbr: 'Int',  color: 'bg-[#ec6a06]/25 text-[#ffb690]',     structured: true },
   { value: 'fartlek',   label: 'Fartlek',   abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200',       structured: true },
   { value: 'race',      label: 'Race',      abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]',     structured: true, mainLabel: 'Race' },
 ];
 const typeMetaFor = (t) => TYPES.find((x) => x.value === t) || TYPES[0];
+const DEFAULT_TITLES = new Set(TYPES.map((t) => t.label));
 
 const EMPTY = { workout_type: 'simple', title: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false };
 const INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
@@ -107,6 +108,13 @@ export default function AthleteLogModal({ athlete, onClose }) {
     ? (form.warmup.trim() || form.main_session.trim() || form.cooldown.trim() || form.title.trim())
     : (form.note.trim() || form.title.trim());
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  // Picking a type auto-titles the workout with that type's name unless a custom
+  // title was typed. 'Other' stays untitled.
+  const selectType = (value) => setForm((f) => {
+    const wasDefault = !f.title.trim() || DEFAULT_TITLES.has(f.title.trim());
+    const nextTitle = wasDefault ? (value === 'simple' ? '' : typeMetaFor(value).label) : f.title;
+    return { ...f, workout_type: value, title: nextTitle };
+  });
 
   const handleSave = async () => {
     setSaving(true);
@@ -159,7 +167,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
 
             <div className="grid grid-cols-3 gap-1.5">
               {TYPES.map((t) => (
-                <button key={t.value} onClick={() => setField('workout_type', t.value)}
+                <button key={t.value} onClick={() => selectType(t.value)}
                   className={`text-xs px-2 py-1.5 rounded-lg font-medium border transition ${
                     form.workout_type === t.value ? `${t.color} border-current` : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10'
                   }`}>
@@ -208,48 +216,59 @@ export default function AthleteLogModal({ athlete, onClose }) {
               <>
                 <button
                   onClick={() => setExpanded(true)}
-                  className="w-full rounded-xl py-2.5 mb-3 flex items-center justify-center gap-2 text-sm font-medium text-white/90 border border-[#c0c1ff]/25 bg-[#c0c1ff]/5 hover:bg-[#c0c1ff]/10 active:scale-[0.98] transition"
+                  className="w-full rounded-xl py-2.5 mb-4 flex items-center justify-center gap-2 text-sm font-medium text-white/90 border border-[#c0c1ff]/25 bg-[#c0c1ff]/5 hover:bg-[#c0c1ff]/10 active:scale-[0.98] transition"
                 >⛶ Expand monthly view</button>
 
-                <div className="grid grid-cols-7 gap-1 mb-1 text-[10px] text-white/40 text-center font-medium">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d}>{d}</div>)}
+                <div className="space-y-4">
+                  {weeks.map((week, wi) => {
+                    const weekVolume = week.reduce((s, d) => s + (dayOf(d)?.log?.distance_km || 0), 0);
+                    return (
+                      <div key={wi}>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs text-white/45 font-medium">{format(week[0], 'MMM d')} - {format(week[6], 'MMM d')}</p>
+                          <span className="text-xs font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                        </div>
+                        <div className="grid grid-cols-7 gap-2">
+                          {week.map((d) => {
+                            const key = format(d, 'yyyy-MM-dd');
+                            const day = dayOf(d);
+                            const inMonth = isSameMonth(d, monthDate);
+                            const isToday = key === format(new Date(), 'yyyy-MM-dd');
+                            const log = day?.log;
+                            const logStatus = log?.status || (log?.completed ? 'completed' : (log?.missed ? 'missed' : null));
+                            const t = day?.target;
+                            const activeType = t?.override_group ? t?.workout_type : day?.group_workout?.workout_type;
+                            const tm = activeType ? typeMetaFor(activeType) : null;
+                            const isRace = activeType === 'race';
+                            return (
+                              <button
+                                key={key}
+                                onClick={() => day && openEdit(day)}
+                                className={`flex flex-col items-center px-1 py-1.5 rounded-xl text-xs transition hover:shadow-sm relative ${
+                                  !inMonth ? 'opacity-40' : ''
+                                } ${isRace ? 'border-2 border-[#8083ff]/45 bg-[#8083ff]/10' :
+                                   isToday ? 'border border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border border-white/10 bg-white/10'}`}
+                              >
+                                {isRace && <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>}
+                                {tm && !isRace && <span className={`text-[8px] px-1 py-px rounded font-semibold leading-none ${tm.color}`}>{tm.abbr}</span>}
+                                <span className="text-[10px] font-bold text-white">
+                                  {log?.distance_km > 0 ? (log.distance_km < 10 ? log.distance_km.toFixed(1) : Math.round(log.distance_km)) : '-'}
+                                </span>
+                                <span className="font-semibold text-white">{format(d, 'd')}</span>
+                                <span className="text-[10px] text-white/60">{format(d, 'EEE')}</span>
+                                {logStatus && (
+                                  <span className={`w-2 h-2 rounded-full mt-0.5 ${
+                                    logStatus === 'completed' ? 'bg-green-400' : logStatus === 'partial' ? 'bg-yellow-400' : 'bg-red-400'
+                                  }`} />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="space-y-1">
-                  {weeks.map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 gap-1">
-                      {week.map((d) => {
-                        const key = format(d, 'yyyy-MM-dd');
-                        const day = dayOf(d);
-                        const inMonth = isSameMonth(d, monthDate);
-                        const isToday = key === format(new Date(), 'yyyy-MM-dd');
-                        const t = day?.target;
-                        const tm = t ? typeMetaFor(t.workout_type) : null;
-                        const gw = day?.group_workout;
-                        const log = day?.log;
-                        return (
-                          <button
-                            key={key}
-                            onClick={() => day && openEdit(day)}
-                            className={`flex flex-col items-center justify-start py-1 px-0.5 rounded-lg border min-h-[3.4rem] transition active:scale-95 ${
-                              !inMonth ? 'opacity-35 border-white/5' :
-                              isToday ? 'border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border-white/10 bg-[#201f20]/40 hover:bg-white/[0.06]'
-                            }`}
-                          >
-                            <span className="h-3 flex items-center">
-                              {tm && <span className={`text-[7px] font-bold uppercase px-1 rounded leading-none ${tm.color}`}>{t.override_group ? '★' : ''}{tm.abbr}</span>}
-                            </span>
-                            <span className={`text-sm font-semibold leading-none mt-0.5 ${isToday ? 'text-[#c0c1ff]' : 'text-white'}`}>{format(d, 'd')}</span>
-                            <span className="h-1.5 mt-0.5 flex items-center gap-0.5">
-                              {gw && !tm && <span className="w-1 h-1 rounded-full bg-white/30" />}
-                              {log && <span className={`w-1.5 h-1.5 rounded-full ${log.status === 'completed' ? 'bg-green-400' : log.status === 'partial' ? 'bg-yellow-400' : 'bg-red-400'}`} />}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[10px] text-white/40 mt-3">★ = overrides the group workout · gray dot = group has a workout · colored dot = athlete's report</p>
               </>
             )}
           </div>

@@ -15,6 +15,7 @@ const WORKOUT_TYPES = [
   { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
+const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
 import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
@@ -28,6 +29,7 @@ import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 export default function TrackingDashboardPage() {
   const navigate = useNavigate();
   const [weekDate, setWeekDate] = useState(new Date());
+  const [search, setSearch] = useState('');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -45,6 +47,8 @@ export default function TrackingDashboardPage() {
   const [profileMonthDate, setProfileMonthDate] = useState(new Date());
   const [profileMonth, setProfileMonth] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
+  // When a day is opened from the expanded month view, closing it should return there.
+  const [returnToExpanded, setReturnToExpanded] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(0.75);
   const expandedScrollRef = useRef(null);
   const pinchRef = useRef({ startDist: 0, startZoom: 1 });
@@ -183,7 +187,8 @@ export default function TrackingDashboardPage() {
 
   useEffect(() => { fetchData(); }, [weekDate]);
 
-  const openCell = (athlete, dayData) => {
+  const openCell = (athlete, dayData, fromExpanded = false) => {
+    setReturnToExpanded(fromExpanded);
     setSelected({ athlete, day: dayData });
     const t = dayData.target;
     setPersonalForm({
@@ -195,6 +200,12 @@ export default function TrackingDashboardPage() {
       cooldown: t?.cooldown || '',
     });
     setOverrideGroup(t?.override_group || false);
+  };
+
+  // Close the day detail; return to the expanded month view if we came from it.
+  const closeSelected = () => {
+    setSelected(null);
+    if (returnToExpanded) { setMonthExpanded(true); setReturnToExpanded(false); }
   };
 
   const handleSavePersonal = async () => {
@@ -220,7 +231,7 @@ export default function TrackingDashboardPage() {
       } else {
         await deleteTarget(selected.athlete.id, selected.day.date);
       }
-      setSelected(null);
+      closeSelected();
       fetchData();
       if (profile && profile.id === selected.athlete.id) {
         const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
@@ -327,25 +338,34 @@ export default function TrackingDashboardPage() {
 
   return (
     <div>
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
       <h2 className="text-xl font-bold mb-4 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Athletes Tracking</h2>
 
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search member by name…"
+        className="w-full mb-4 bg-black/40 border border-white/15 placeholder-white/40 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+      />
+
       <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-blue-300 hover:text-blue-200 text-sm transition">&larr; Prev</button>
+        <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-white hover:text-white/80 text-sm transition">&larr; Prev</button>
         <span className="text-sm font-medium text-white/85">
           {format(ws, 'MMM d')} - {format(addDays(ws, 6), 'MMM d')}
         </span>
-        <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-blue-300 hover:text-blue-200 text-sm transition">Next &rarr;</button>
+        <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-white hover:text-white/80 text-sm transition">Next &rarr;</button>
       </div>
 
       {loading ? <Spinner /> : !data ? (
         <p className="text-gray-500">Failed to load</p>
       ) : (
-        <div className="bg-blue-950/60 backdrop-blur-sm border border-white/15 rounded-xl overflow-x-auto">
+        <div className="bg-gradient-to-br from-[#201f20]/85 to-[#131314]/75 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-blue-900/70 border-b border-white/10">
-                <th className="px-2 py-2 text-left text-white/65 font-medium sticky left-0 z-20 bg-blue-900/95 min-w-[140px] shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">Athlete</th>
+              <tr className="bg-white/[0.05] border-b border-white/10">
+                <th className="px-2 py-2 text-left text-white/65 font-medium sticky left-0 z-20 bg-[#201f20] min-w-[140px] shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">Athlete</th>
                 {weekDays.map((d) => (
                   <th key={format(d, 'yyyy-MM-dd')} className="px-2 py-2 text-center text-white/65 font-medium min-w-[48px]">
                     {format(d, 'EEE')}
@@ -355,9 +375,11 @@ export default function TrackingDashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {data.athletes.map((athlete) => (
+              {data.athletes
+                .filter((a) => a.full_name.toLowerCase().includes(search.trim().toLowerCase()))
+                .map((athlete) => (
                 <tr key={athlete.id} className="border-t border-white/10">
-                  <td className="px-2 py-2 sticky left-0 z-10 bg-blue-950/95 shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">
+                  <td className="px-2 py-2 sticky left-0 z-10 bg-[#161516] shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">
                     <button onClick={() => openProfile(athlete.id)} className="text-left">
                       <div className="font-medium truncate max-w-[140px] text-white hover:underline">{athlete.full_name}</div>
                       <div className="text-[10px] text-white/45">{athlete.group_name || 'No group'}</div>
@@ -417,7 +439,7 @@ export default function TrackingDashboardPage() {
 
       <Modal open={profileLoading || !!profile} onClose={() => { setProfile(null); setProfileLoading(false); }}
         title={profile ? profile.full_name : 'Loading...'}
-        panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
+        panelClassName="bg-black border-t border-white/10">
         {profileLoading ? <Spinner /> : profile && (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
@@ -475,7 +497,7 @@ export default function TrackingDashboardPage() {
                   return { title, snippet, color: 'text-gray-700' };
                 }
                 if (d.target?.note || d.target?.title) {
-                  return { title: d.target.title ? `+ ${d.target.title}` : '+ Personal', snippet: d.target.note, color: 'text-blue-700' };
+                  return { title: d.target.title || 'Personal', snippet: d.target.note, color: 'text-blue-700' };
                 }
                 return null;
               };
@@ -530,6 +552,16 @@ export default function TrackingDashboardPage() {
                   <div className="flex items-center justify-between mb-2 gap-2">
                     <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50">Training</p>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigate(`/coach/athletes/${profile.id}/volume`, { state: { athleteName: profile.full_name } })}
+                        className="w-7 h-7 rounded-lg bg-[#c0c1ff]/10 border border-[#c0c1ff]/20 flex items-center justify-center hover:bg-[#c0c1ff]/20 active:scale-95 transition shrink-0"
+                        aria-label="Open volume breakdown"
+                        title="Volume diagrams"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#c0c1ff" strokeWidth={1.6} className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                        </svg>
+                      </button>
                       <button
                         onClick={() => navigate(`/coach/athletes/${profile.id}/progress`, { state: { athleteName: profile.full_name } })}
                         className="flex items-center gap-1 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-semibold px-2.5 py-0.5 rounded-lg transition active:scale-95"
@@ -600,61 +632,77 @@ export default function TrackingDashboardPage() {
                                 onClick={() => setMonthExpanded(true)}
                                 className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
                               >
-                                ⛶ Expand monthly view
+                                 Expand monthly view
                               </button>
                             </NoiseBackground>
                             <div className="space-y-4">
-                              {profileMonth.weeks.map((week, wi) => (
-                                <div key={wi}>
-                                  <p className="text-xs text-white/45 mb-1 font-medium">
-                                    {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
-                                  </p>
-                                  <div className="grid grid-cols-7 gap-1">
-                                    {week.map((d) => {
-                                      const dayDate = new Date(d.date + 'T00:00');
-                                      const inMonth = isSameMonth(dayDate, profileMonthDate);
-                                      const isToday = d.date === todayStr;
-                                      const hasLog = d.log;
-                                      const hasWorkout = d.group_workout || d.target;
-                                      const activeType = d.target?.override_group
-                                        ? d.target?.workout_type
-                                        : d.group_workout?.workout_type;
-                                      const typeBadge = activeType ? TYPE_ABBR[activeType] : null;
-                                      const isRace = activeType === 'race';
-                                      return (
-                                        <button
-                                          key={d.date}
-                                          onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                                          className={`flex flex-col items-center p-1.5 rounded-lg text-xs transition hover:shadow-sm relative ${
-                                            !inMonth ? 'opacity-40' : ''
-                                          } ${isRace ? 'border-2 border-indigo-500 bg-indigo-50' :
-                                             isToday ? 'border border-blue-400 bg-blue-50' : 'border border-gray-200 bg-white'}`}
-                                        >
-                                          {isRace && (
-                                            <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
-                                          )}
-                                          {typeBadge && !isRace && (
-                                            <span className={`absolute top-0.5 right-0.5 text-[8px] px-1 py-px rounded font-semibold leading-none ${typeBadge.color}`}>
-                                              {typeBadge.abbr}
+                              {profileMonth.weeks.map((week, wi) => {
+                                const weekVolume = week.reduce((s, d) => s + (d.log?.distance_km || 0), 0);
+                                return (
+                                  <div key={wi}>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <p className="text-xs text-white/45 font-medium">
+                                        {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
+                                      </p>
+                                      <span className="text-xs font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                                    </div>
+                                    <div className="grid grid-cols-7 gap-2">
+                                      {week.map((d) => {
+                                        const dayDate = new Date(d.date + 'T00:00');
+                                        const inMonth = isSameMonth(dayDate, profileMonthDate);
+                                        const isToday = d.date === todayStr;
+                                        const hasLog = d.log;
+                                        const logStatus = hasLog?.status || (hasLog?.completed ? 'completed' : (hasLog?.missed ? 'missed' : null));
+                                        const activeType = d.target?.override_group
+                                          ? d.target?.workout_type
+                                          : d.group_workout?.workout_type;
+                                        const typeMap = {
+                                          simple: { abbr: 'Oth', color: 'bg-white/10 text-white/70' },
+                                          easy: { abbr: 'Easy', color: 'bg-emerald-400/20 text-emerald-200' },
+                                          rest: { abbr: 'Rest', color: 'bg-slate-400/20 text-slate-200' },
+                                          tempo: { abbr: 'Tmp', color: 'bg-orange-400/20 text-orange-200' },
+                                          long: { abbr: 'Long', color: 'bg-purple-400/20 text-purple-200' },
+                                          intervals: { abbr: 'Int', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
+                                          fartlek: { abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200' },
+                                          race: { abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+                                        };
+                                        const typeInfo = activeType ? typeMap[activeType] : null;
+                                        const isRace = activeType === 'race';
+                                        return (
+                                          <button
+                                            key={d.date}
+                                            onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
+                                            className={`flex flex-col items-center px-1 py-1.5 rounded-xl text-xs transition hover:shadow-sm relative ${
+                                              !inMonth ? 'opacity-40' : ''
+                                            } ${isRace ? 'border-2 border-[#8083ff]/45 bg-[#8083ff]/10' :
+                                               isToday ? 'border border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border border-white/10 bg-white/10'}`}
+                                          >
+                                            {isRace && (
+                                              <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
+                                            )}
+                                            {typeInfo && !isRace && (
+                                              <span className={`text-[8px] px-1 py-px rounded font-semibold leading-none ${typeInfo.color}`}>
+                                                {typeInfo.abbr}
+                                              </span>
+                                            )}
+                                            <span className="text-[10px] font-bold text-white">
+                                              {hasLog?.distance_km && hasLog.distance_km > 0 ? (hasLog.distance_km < 10 ? hasLog.distance_km.toFixed(1) : Math.round(hasLog.distance_km)) : '-'}
                                             </span>
-                                          )}
-                                          <span className="font-semibold text-gray-900">{format(dayDate, 'd')}</span>
-                                          <span className="text-[10px] text-gray-400">{format(dayDate, 'EEE')}</span>
-                                          <div className="flex gap-0.5 mt-1">
-                                            {hasWorkout && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
-                                            {hasLog && (
-                                              <span className={`w-1.5 h-1.5 rounded-full ${
-                                                (hasLog.status || (hasLog.completed ? 'completed' : 'missed')) === 'completed' ? 'bg-green-400' :
-                                                (hasLog.status || (hasLog.completed ? 'completed' : 'missed')) === 'partial' ? 'bg-yellow-400' : 'bg-red-400'
+                                            <span className="font-semibold text-white">{format(dayDate, 'd')}</span>
+                                            <span className="text-[10px] text-white/60">{format(dayDate, 'EEE')}</span>
+                                            {logStatus && (
+                                              <span className={`w-2 h-2 rounded-full mt-0.5 ${
+                                                logStatus === 'completed' ? 'bg-green-400' :
+                                                logStatus === 'partial' ? 'bg-yellow-400' : 'bg-red-400'
                                               }`} />
                                             )}
-                                          </div>
-                                        </button>
-                                      );
-                                    })}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         );
@@ -824,7 +872,7 @@ export default function TrackingDashboardPage() {
         )}
       </Modal>
 
-      <Modal open={!!selected} onClose={() => setSelected(null)}
+      <Modal open={!!selected} onClose={closeSelected}
         title={selected ? format(new Date(selected.day.date + 'T00:00'), 'EEEE, MMM d') : ''}
         panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
         {selected && (
@@ -963,6 +1011,11 @@ export default function TrackingDashboardPage() {
               {(() => {
                 const meta = typeMetaFor(personalForm.workout_type);
                 const setF = (k, v) => setPersonalForm(f => ({ ...f, [k]: v }));
+                const selectType = (value) => setPersonalForm(f => {
+                  const wasDefault = !f.title.trim() || DEFAULT_TITLES.has(f.title.trim());
+                  const nextTitle = wasDefault ? (value === 'simple' ? '' : typeMetaFor(value).label) : f.title;
+                  return { ...f, workout_type: value, title: nextTitle };
+                });
                 const hasAny = meta.structured
                   ? (personalForm.warmup.trim() || personalForm.main_session.trim() || personalForm.cooldown.trim() || personalForm.title.trim())
                   : (personalForm.note.trim() || personalForm.title.trim());
@@ -971,7 +1024,7 @@ export default function TrackingDashboardPage() {
                   <div className="space-y-2">
                     <div className="grid grid-cols-3 gap-1.5">
                       {WORKOUT_TYPES.map(t => (
-                        <button key={t.value} onClick={() => setF('workout_type', t.value)}
+                        <button key={t.value} onClick={() => selectType(t.value)}
                           className={`text-xs px-2 py-1 rounded-lg font-medium border transition ${
                             personalForm.workout_type === t.value
                               ? `${t.color} border-current`
@@ -1018,7 +1071,7 @@ export default function TrackingDashboardPage() {
                   className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition">
                   {saving ? 'Saving...' : 'Save'}
                 </button>
-                <button onClick={() => setSelected(null)}
+                <button onClick={closeSelected}
                   className="flex-1 border border-white/25 text-white/75 hover:text-white hover:bg-white/10 rounded-lg py-2.5 text-sm font-medium transition">
                   Cancel
                 </button>
@@ -1140,7 +1193,7 @@ export default function TrackingDashboardPage() {
                       return (
                         <button
                           key={d.date}
-                          onClick={() => { setMonthExpanded(false); openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d); }}
+                          onClick={() => { setMonthExpanded(false); openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d, true); }}
                           className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                           style={{ minHeight: `${cellHeight}px` }}
                         >

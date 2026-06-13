@@ -298,21 +298,24 @@ export default function CalendarPage() {
         ? s + (d.workout_log?.distance_km || 0) : s, 0);
     return (
       <div>
-        {/* Premium monthly volume card */}
-        <div className="rounded-2xl p-6 mb-4 border border-white/10" style={glass}>
-          <div className="flex justify-between items-end">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff] mb-1">Monthly volume</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-5xl font-bold text-white" style={{ textShadow: '0 0 15px rgba(192,193,255,0.4)' }}>{monthKm.toFixed(1)}</span>
-                <span className="text-sm text-white/50 mb-1">km</span>
-              </div>
-            </div>
-            <div className="w-16 h-16 rounded-full bg-[#c0c1ff]/10 border border-[#c0c1ff]/20 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#c0c1ff" strokeWidth={1.6} className="w-7 h-7">
+        {/* Monthly volume card — compact, matches the weekly view */}
+        <div className="flex items-center justify-between rounded-2xl px-5 py-3 mb-4 border border-white/10" style={glass}>
+          <span className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff]">
+            Monthly volume
+          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl font-bold text-[#c0c1ff]">
+              {monthKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
+            </span>
+            <Link
+              to="/calendar/volume"
+              aria-label="Open volume breakdown"
+              className="w-8 h-8 rounded-full bg-[#c0c1ff]/10 border border-[#c0c1ff]/20 flex items-center justify-center hover:bg-[#c0c1ff]/20 active:scale-95 transition shrink-0"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="#c0c1ff" strokeWidth={1.6} className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
               </svg>
-            </div>
+            </Link>
           </div>
         </div>
 
@@ -322,15 +325,20 @@ export default function CalendarPage() {
           style={glass}
           className="w-full rounded-xl py-4 mb-8 flex items-center justify-center gap-2 text-sm font-medium text-white/90 border border-[#c0c1ff]/20 hover:bg-[#c0c1ff]/5 active:scale-[0.98] transition"
         >
-          ⛶ Expand monthly view
+           Expand monthly view
         </button>
 
         <div className="space-y-6">
-        {weeks.map((week, wi) => (
+        {weeks.map((week, wi) => {
+          const weekKm = week.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
+          return (
           <div key={wi}>
-            <p className="text-[11px] font-bold uppercase tracking-widest text-white/55 mb-3 px-1">
-              {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
-            </p>
+            <div className="flex items-baseline justify-between mb-3 px-1">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-white/55">
+                {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
+              </p>
+              <span className="text-[10px] font-bold text-white">{weekKm.toFixed(1)} km</span>
+            </div>
             <div className="grid grid-cols-7 gap-2">
               {week.map((day) => {
                 const dayDate = new Date(day.date + 'T00:00');
@@ -347,26 +355,30 @@ export default function CalendarPage() {
                     key={day.date}
                     onClick={() => openDay(day)}
                     style={glass}
-                    className={`flex flex-col items-center justify-start py-2 px-1 rounded-xl relative transition active:scale-95 border ${
+                    className={`flex flex-col items-center justify-start py-1 px-1 rounded-xl relative transition active:scale-95 border ${
                       !inMonth ? 'opacity-40 border-white/10' :
                       isRace ? 'border-[#8083ff]/45 bg-[#8083ff]/10' :
                       isToday ? 'border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border-white/10'
                     }`}
                   >
                     {/* Workout-type tag at the top */}
-                    <span className="h-4 flex items-center">
+                    <span className="h-3 flex items-center">
                       {tag && (
                         <span className={`text-[8px] font-bold uppercase px-1 py-px rounded leading-none ${tag.color}`}>
                           {isRace ? '🏁' : tag.abbr}
                         </span>
                       )}
                     </span>
-                    <span className={`text-xl font-semibold leading-none mt-1 ${isToday ? 'text-[#c0c1ff]' : 'text-white'}`}>
+                    {/* Km run this day — "-" when zero */}
+                    <span className={`text-[10px] font-bold leading-none mt-0.5 ${hasLog?.distance_km ? 'text-[#c0c1ff]' : 'text-white/35'}`}>
+                      {hasLog?.distance_km ? Number(hasLog.distance_km).toFixed(1) : '-'}
+                    </span>
+                    <span className={`text-xl font-semibold leading-none mt-0.5 ${isToday ? 'text-[#c0c1ff]' : 'text-white'}`}>
                       {format(dayDate, 'd')}
                     </span>
                     <span className="text-[10px] text-white/45 mt-0.5">{format(dayDate, 'EEE')}</span>
                     {/* One dot — the report status */}
-                    <span className="h-1.5 mt-1.5 flex items-center">
+                    <span className="h-1.5 mt-1 flex items-center">
                       {hasLog && (
                         <span className={`w-1.5 h-1.5 rounded-full ${
                           hasLog.status === 'completed' ? 'bg-green-400' :
@@ -379,7 +391,8 @@ export default function CalendarPage() {
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
         </div>
       </div>
     );
@@ -431,19 +444,30 @@ export default function CalendarPage() {
 
       {!loading && view === 'weekly' && (() => {
         const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
-        return weekKm > 0 ? (
+        return (
           <div
             className="flex items-center justify-between rounded-2xl px-5 py-3 mb-4 border border-white/10"
             style={{ background: 'rgba(32,31,32,0.4)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
           >
-            <span className="text-[11px] font-bold uppercase tracking-widest text-white/55">
-              {view === 'weekly' ? 'Weekly' : 'Monthly'} volume
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff]">
+              Weekly volume
             </span>
-            <span className="text-2xl font-bold text-[#c0c1ff]">
-              {weekKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl font-bold text-[#c0c1ff]">
+                {weekKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
+              </span>
+              <Link
+                to="/calendar/volume"
+                aria-label="Open volume breakdown"
+                className="w-8 h-8 rounded-full bg-[#c0c1ff]/10 border border-[#c0c1ff]/20 flex items-center justify-center hover:bg-[#c0c1ff]/20 active:scale-95 transition shrink-0"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="#c0c1ff" strokeWidth={1.6} className="w-4 h-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                </svg>
+              </Link>
+            </div>
           </div>
-        ) : null;
+        );
       })()}
 
       {loading ? <Spinner /> : view === 'weekly' ? (

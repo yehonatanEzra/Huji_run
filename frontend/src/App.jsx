@@ -5,6 +5,7 @@ import ProtectedRoute from './components/layout/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CalendarPage from './pages/athlete/CalendarPage';
+import VolumePage from './pages/athlete/VolumePage';
 import ProgressPage from './pages/athlete/ProgressPage';
 import HomePage from './pages/athlete/HomePage';
 import FindCoachPage from './pages/athlete/FindCoachPage';
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/find-coach" element={<FindCoachPage />} />
         <Route path="/coach/requests" element={<ProtectedRoute requireCoach><CoachRequestsPage /></ProtectedRoute>} />
         <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/calendar/volume" element={<VolumePage />} />
         <Route path="/progress" element={<ProgressPage />} />
         <Route path="/feed" element={<FeedPage />} />
         <Route path="/races" element={<RaceArchivePage />} />

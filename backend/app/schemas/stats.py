@@ -14,6 +14,19 @@ class KmSeriesResponse(BaseModel):
     buckets: List[KmBucket]
 
 
+class WeeklyVolumeResponse(BaseModel):
+    # Every week from the athlete's first logged run to the current week,
+    # newest first (for an infinite-scroll list).
+    buckets: List[KmBucket]
+
+
+class MonthlyVolumeResponse(BaseModel):
+    year: int
+    earliest_year: int   # year of the athlete's first logged run
+    latest_year: int     # current year — back/forward arrow bounds
+    buckets: List[KmBucket]  # 12, Jan..Dec of `year`
+
+
 class PacePoint(BaseModel):
     race_date: date
     race_name: str

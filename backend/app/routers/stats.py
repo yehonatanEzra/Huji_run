@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user
@@ -9,6 +10,7 @@ from ..models.workout import WorkoutLog
 from ..models.race import Result, Heat, Race, CANONICAL_DISTANCES
 from ..schemas.stats import (
     KmBucket, KmSeriesResponse,
+    WeeklyVolumeResponse, MonthlyVolumeResponse,
     PacePoint, PaceDistanceSeries, PaceTrendsResponse,
     WeeklyActivityBucket, WeeklyActivityResponse,
 )
@@ -130,6 +132,118 @@ def get_km_series(
         for s in starts
     ]
     return KmSeriesResponse(period="month", buckets=buckets)
+
+
+@router.get("/{athlete_id}/weekly-volume", response_model=WeeklyVolumeResponse)
+def get_weekly_volume(
+    athlete_id: int,
+    db: Annotated[Session, Depends(get_db)] = ...,
+    current_user: Annotated[User, Depends(get_current_user)] = ...,
+):
+    """Every week (Sunday-anchored) from the athlete's first logged run to the
+    current week, newest first — full history for a scrollable list."""
+    athlete = _can_view_athlete(current_user, athlete_id, db)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    today = date.today()
+    cur_ws = _week_start(today)
+
+    first = (
+        db.query(func.min(WorkoutLog.date))
+        .filter(WorkoutLog.athlete_id == athlete.id, WorkoutLog.distance_km.isnot(None))
+        .scalar()
+    )
+    if not first:
+        return WeeklyVolumeResponse(
+            buckets=[KmBucket(start=cur_ws, label=cur_ws.strftime("%b %d, %Y"), km=0.0)]
+        )
+
+    first_ws = _week_start(first)
+    # Newest-first list of week starts from current week back to the first.
+    weeks: list[date] = []
+    s = cur_ws
+    while s >= first_ws:
+        weeks.append(s)
+        s -= timedelta(days=7)
+
+    bucket_for = {w: 0.0 for w in weeks}
+    rows = (
+        db.query(WorkoutLog.date, WorkoutLog.distance_km)
+        .filter(
+            WorkoutLog.athlete_id == athlete.id,
+            WorkoutLog.distance_km.isnot(None),
+            WorkoutLog.date >= first_ws,
+            WorkoutLog.date < cur_ws + timedelta(days=7),
+        )
+        .all()
+    )
+    for d, km in rows:
+        ws = _week_start(d)
+        if ws in bucket_for:
+            bucket_for[ws] += float(km or 0)
+
+    buckets = [
+        KmBucket(start=w, label=w.strftime("%b %d, %Y"), km=round(bucket_for[w], 1))
+        for w in weeks
+    ]
+    return WeeklyVolumeResponse(buckets=buckets)
+
+
+@router.get("/{athlete_id}/monthly-volume", response_model=MonthlyVolumeResponse)
+def get_monthly_volume(
+    athlete_id: int,
+    year: Optional[int] = Query(None),
+    db: Annotated[Session, Depends(get_db)] = ...,
+    current_user: Annotated[User, Depends(get_current_user)] = ...,
+):
+    """The 12 months (Jan..Dec) of `year` with km each. Returns the available
+    year range so the UI can bound its year arrows."""
+    athlete = _can_view_athlete(current_user, athlete_id, db)
+    if not athlete:
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    today = date.today()
+    first = (
+        db.query(func.min(WorkoutLog.date))
+        .filter(WorkoutLog.athlete_id == athlete.id, WorkoutLog.distance_km.isnot(None))
+        .scalar()
+    )
+    earliest_year = first.year if first else today.year
+    latest_year = today.year
+    if year is None:
+        year = latest_year
+    # Never the future; earlier (empty) years are browsable so the year arrows
+    # always work even when all data sits in a single year.
+    year = min(year, latest_year)
+
+    starts = [date(year, m, 1) for m in range(1, 13)]
+    bucket_for = {s: 0.0 for s in starts}
+    rows = (
+        db.query(WorkoutLog.date, WorkoutLog.distance_km)
+        .filter(
+            WorkoutLog.athlete_id == athlete.id,
+            WorkoutLog.distance_km.isnot(None),
+            WorkoutLog.date >= date(year, 1, 1),
+            WorkoutLog.date < date(year + 1, 1, 1),
+        )
+        .all()
+    )
+    for d, km in rows:
+        ms = date(d.year, d.month, 1)
+        if ms in bucket_for:
+            bucket_for[ms] += float(km or 0)
+
+    buckets = [
+        KmBucket(start=s, label=s.strftime("%b"), km=round(bucket_for[s], 1))
+        for s in starts
+    ]
+    return MonthlyVolumeResponse(
+        year=year,
+        earliest_year=earliest_year,
+        latest_year=latest_year,
+        buckets=buckets,
+    )
 
 
 @router.get("/{athlete_id}/pace-trends", response_model=PaceTrendsResponse)

@@ -131,6 +131,10 @@ export default function AppShell() {
         </div>
       </div>
 
+      {/* Bottom fade: content softly dissolves into the dark before it reaches
+          the floating dock, so scrolled cards never show sharply behind it. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 h-24 z-30 bg-gradient-to-t from-[#131314] via-[#131314]/85 to-transparent" />
+
       <BottomNav />
 
       {showSwitcher && (

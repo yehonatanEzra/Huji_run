@@ -338,7 +338,8 @@ export default function TrackingDashboardPage() {
 
   return (
     <div>
-      <div className="fixed inset-0 -z-10 bg-black" />
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
       <h2 className="text-xl font-bold mb-4 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Athletes Tracking</h2>
 
       <input
@@ -346,25 +347,25 @@ export default function TrackingDashboardPage() {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search member by name…"
-        className="w-full mb-4 bg-white/10 border border-white/20 placeholder-white/40 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+        className="w-full mb-4 bg-black/40 border border-white/15 placeholder-white/40 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
       />
 
       <div className="flex items-center justify-between mb-4">
-        <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-blue-300 hover:text-blue-200 text-sm transition">&larr; Prev</button>
+        <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-white hover:text-white/80 text-sm transition">&larr; Prev</button>
         <span className="text-sm font-medium text-white/85">
           {format(ws, 'MMM d')} - {format(addDays(ws, 6), 'MMM d')}
         </span>
-        <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-blue-300 hover:text-blue-200 text-sm transition">Next &rarr;</button>
+        <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-white hover:text-white/80 text-sm transition">Next &rarr;</button>
       </div>
 
       {loading ? <Spinner /> : !data ? (
         <p className="text-gray-500">Failed to load</p>
       ) : (
-        <div className="bg-blue-950/60 backdrop-blur-sm border border-white/15 rounded-xl overflow-x-auto">
+        <div className="bg-gradient-to-br from-[#201f20]/85 to-[#131314]/75 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="bg-blue-900/70 border-b border-white/10">
-                <th className="px-2 py-2 text-left text-white/65 font-medium sticky left-0 z-20 bg-blue-900/95 min-w-[140px] shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">Athlete</th>
+              <tr className="bg-white/[0.05] border-b border-white/10">
+                <th className="px-2 py-2 text-left text-white/65 font-medium sticky left-0 z-20 bg-[#201f20] min-w-[140px] shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">Athlete</th>
                 {weekDays.map((d) => (
                   <th key={format(d, 'yyyy-MM-dd')} className="px-2 py-2 text-center text-white/65 font-medium min-w-[48px]">
                     {format(d, 'EEE')}
@@ -378,7 +379,7 @@ export default function TrackingDashboardPage() {
                 .filter((a) => a.full_name.toLowerCase().includes(search.trim().toLowerCase()))
                 .map((athlete) => (
                 <tr key={athlete.id} className="border-t border-white/10">
-                  <td className="px-2 py-2 sticky left-0 z-10 bg-blue-950/95 shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">
+                  <td className="px-2 py-2 sticky left-0 z-10 bg-[#161516] shadow-[1px_0_0_0_rgba(255,255,255,0.1)]">
                     <button onClick={() => openProfile(athlete.id)} className="text-left">
                       <div className="font-medium truncate max-w-[140px] text-white hover:underline">{athlete.full_name}</div>
                       <div className="text-[10px] text-white/45">{athlete.group_name || 'No group'}</div>

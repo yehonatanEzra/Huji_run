@@ -40,7 +40,7 @@ export default function RaceArchivePage() {
   return (
     <div>
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg-races.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: (user?.role === 'coach' || user?.role === 'admin') ? 'linear-gradient(180deg, rgba(19,19,20,0.68) 20%, rgba(0,0,0,0.78) 80%)' : 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-[#e5e2e3]">Races</h2>

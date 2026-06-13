@@ -16,7 +16,7 @@ import { getReportingOverview, getLoadOverview } from '../../api/reporting';
 import GroupWorkoutsTab from './GroupWorkoutsTab';
 import AthleteLogModal from '../../components/coach/AthleteLogModal';
 
-const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
+const GLASS = 'bg-[#161616]/85 backdrop-blur-2xl border border-white/10';
 const GLASS_INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
 const TAB = 'flex-1 py-1.5 text-xs font-bold uppercase tracking-wider rounded-full transition';
 const TAB_ACTIVE = 'bg-[#c0c1ff] text-[#1000a9]';
@@ -126,8 +126,8 @@ export default function GroupHubPage() {
 function HubBackground() {
   return (
     <>
-      <div className="fixed inset-0 -z-10 bg-[#131314]" />
-      <div className="fixed inset-0 -z-10" style={{ background: 'radial-gradient(120% 80% at 50% -10%, rgba(192,193,255,0.10) 0%, rgba(19,19,20,0) 55%)' }} />
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
     </>
   );
 }
@@ -244,11 +244,11 @@ function AthletesTab({ group, onChanged, groups }) {
         ) : (
           <>
             <div className="flex items-center justify-between mb-2">
-              <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-[#c0c1ff] hover:text-white text-xs transition">&larr; Prev</button>
+              <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-white hover:text-white/80 text-xs transition">&larr; Prev</button>
               <span className="text-xs font-medium text-white/70">
                 {format(weekStart, 'MMM d')} – {format(addDays(weekStart, 6), 'MMM d')}
               </span>
-              <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-[#c0c1ff] hover:text-white text-xs transition">Next &rarr;</button>
+              <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-white hover:text-white/80 text-xs transition">Next &rarr;</button>
             </div>
             <div className={`${GLASS} rounded-xl overflow-x-auto ${weeksLoading ? 'opacity-60' : ''} transition`}>
               <table className="w-full text-xs">

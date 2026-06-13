@@ -21,7 +21,19 @@ const WORKOUT_TYPES = [
 ];
 const typeMeta = (t) => WORKOUT_TYPES.find((x) => x.value === t) || WORKOUT_TYPES[0];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// Backend keeps day_of_week 0=Mon..6=Sun; this is just the column display order
+// (Sunday first) — the stored day_of_week value is unchanged.
+const DOW_ORDER = [6, 0, 1, 2, 3, 4, 5];
 const cellKey = (w, d) => `${w}-${d}`;
+
+// Builder styling (glass panels + vivid grid cells)
+const PANEL = 'bg-slate-800/60 backdrop-blur-xl border border-white/5';
+const BUILDER_INPUT = 'w-full bg-slate-900/40 border border-slate-600/40 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-colors';
+const CELL_COLOR = {
+  simple: 'bg-slate-500/85', easy: 'bg-emerald-500/85', rest: 'bg-slate-400/80',
+  tempo: 'bg-orange-500/85', long: 'bg-purple-500/85', intervals: 'bg-red-500/85',
+  fartlek: 'bg-pink-500/85', race: 'bg-indigo-500/85',
+};
 
 export default function WorkoutTemplatesPage() {
   const [templates, setTemplates] = useState([]);
@@ -71,12 +83,13 @@ export default function WorkoutTemplatesPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-      <div className="fixed inset-0 -z-10 bg-black" />
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">Workout Plans</h2>
         <button
           onClick={openNew}
-          className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-blue-700"
+          className="bg-[#c0c1ff] text-[#1000a9] rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-[#a9aaff]"
         >
           + New plan
         </button>
@@ -103,7 +116,7 @@ export default function WorkoutTemplatesPage() {
               <div className="flex gap-1 shrink-0">
                 <button
                   onClick={() => setApplyTarget(t)}
-                  className="text-xs bg-blue-600 text-white px-2.5 py-1 rounded hover:bg-blue-700"
+                  className="text-xs bg-[#c0c1ff] text-[#1000a9] px-2.5 py-1 rounded hover:bg-[#a9aaff]"
                 >
                   Apply
                 </button>
@@ -115,7 +128,7 @@ export default function WorkoutTemplatesPage() {
                 </button>
                 <button
                   onClick={() => handleDelete(t)}
-                  className="text-xs text-red-600 border border-red-200 px-2.5 py-1 rounded hover:bg-red-50 flex items-center gap-1"
+                  className="text-xs text-red-300 bg-red-500/10 border border-red-400/30 px-2.5 py-1 rounded hover:bg-red-500/20 hover:text-red-200 active:scale-95 transition flex items-center gap-1.5"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -189,83 +202,94 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
-      <div className="fixed inset-0 -z-10 bg-black" />
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
+      {/* Top action bar */}
       <div className="flex items-center justify-between">
-        <button onClick={onClose} className="text-sm text-blue-200 hover:text-white">← Back</button>
+        <button onClick={onClose} className="text-white/60 hover:text-white flex items-center gap-2 transition-colors text-sm">
+          <span className="text-base leading-none">←</span> Back
+        </button>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-blue-600 text-white rounded-lg px-4 py-1.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="bg-[#c0c1ff] hover:bg-[#a9aaff] text-[#1000a9] px-5 py-2 rounded-lg font-medium shadow-lg shadow-[#c0c1ff]/30 transition active:scale-95 disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save plan'}
         </button>
       </div>
 
-      {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2">{error}</p>}
+      {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded-lg p-2">{error}</p>}
 
-      <input
-        type="text"
-        placeholder="Plan name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      <input
-        type="text"
-        placeholder="Description (optional)"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-gray-600">Weeks:</span>
-        <button
-          onClick={() => setWeeks((w) => Math.max(1, w - 1))}
-          className="w-7 h-7 rounded border text-gray-600 hover:bg-gray-50"
-        >−</button>
-        <span className="text-sm font-medium w-6 text-center">{weeks}</span>
-        <button
-          onClick={() => setWeeks((w) => Math.min(26, w + 1))}
-          className="w-7 h-7 rounded border text-gray-600 hover:bg-gray-50"
-        >+</button>
+      {/* Plan details */}
+      <div className="space-y-4">
+        <input
+          type="text"
+          placeholder="Plan name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={`${BUILDER_INPUT} px-4 py-3 text-lg font-medium`}
+        />
+        <input
+          type="text"
+          placeholder="Plan description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          className={`${BUILDER_INPUT} px-4 py-3`}
+        />
       </div>
 
-      {/* Grid */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
-          <thead>
-            <tr>
-              <th className="p-1 text-left text-gray-400 font-normal w-10"></th>
-              {DOW.map((d) => (
-                <th key={d} className="p-1 text-gray-500 font-medium">{d}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
+      {/* Weeks selector */}
+      <div className={`flex items-center gap-4 ${PANEL} rounded-2xl p-4 w-fit`}>
+        <span className="text-white/60 font-medium">Weeks:</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setWeeks((w) => Math.max(1, w - 1))}
+            className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-600 border border-slate-600/50 text-white flex items-center justify-center transition active:scale-95"
+          >−</button>
+          <span className="text-xl font-bold w-6 text-center text-white">{weeks}</span>
+          <button
+            onClick={() => setWeeks((w) => Math.min(26, w + 1))}
+            className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-600 border border-slate-600/50 text-white flex items-center justify-center transition active:scale-95"
+          >+</button>
+        </div>
+      </div>
+
+      {/* Training grid */}
+      <div className={`${PANEL} rounded-2xl p-4 overflow-x-auto`}>
+        <div className="min-w-[330px]">
+          {/* Days header */}
+          <div className="grid grid-cols-[1.25rem_repeat(7,1fr)] gap-1 mb-1.5 px-1">
+            <div />
+            {DOW_ORDER.map((dow) => (
+              <div key={dow} className="text-center text-white/50 text-[9px] font-semibold uppercase tracking-wider">{DOW[dow]}</div>
+            ))}
+          </div>
+          {/* Week rows */}
+          <div className="space-y-1">
             {Array.from({ length: weeks }, (_, wi) => wi + 1).map((week) => (
-              <tr key={week}>
-                <td className="p-1 text-gray-400 align-middle">W{week}</td>
-                {DOW.map((_, dow) => {
+              <div key={week} className="grid grid-cols-[1.25rem_repeat(7,1fr)] gap-1 items-center px-1 py-0.5 hover:bg-white/5 rounded-lg transition-colors">
+                <div className="text-white/50 font-medium text-[10px]">W{week}</div>
+                {DOW_ORDER.map((dow) => {
                   const cell = dayMap[cellKey(week, dow)];
                   const meta = cell ? typeMeta(cell.workout_type) : null;
                   return (
-                    <td key={dow} className="p-0.5">
-                      <button
-                        onClick={() => setEditCell({ week, dow })}
-                        className={`w-full min-h-[44px] rounded border text-[10px] px-1 py-1 flex items-center justify-center text-center leading-tight transition-colors ${
-                          cell ? meta.color + ' border-transparent' : 'bg-gray-50 border-dashed border-gray-200 text-gray-300 hover:border-gray-300'
-                        }`}
-                      >
-                        {cell ? (cell.title || meta.label) : '+'}
-                      </button>
-                    </td>
+                    <button
+                      key={dow}
+                      onClick={() => setEditCell({ week, dow })}
+                      className={`h-9 rounded-lg text-[8px] font-medium px-0.5 flex items-center justify-center text-center leading-tight line-clamp-2 transition ${
+                        cell
+                          ? `${CELL_COLOR[cell.workout_type] || 'bg-slate-500/85'} text-white shadow-md`
+                          : 'bg-slate-700/40 border border-dashed border-slate-400/30 text-slate-400 hover:bg-slate-700/60 hover:border-slate-400/60'
+                      }`}
+                    >
+                      {cell ? (cell.title || meta.label) : '+'}
+                    </button>
                   );
                 })}
-              </tr>
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </div>
       </div>
 
       {editCell && (
@@ -352,7 +376,7 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
         <div className="flex gap-2 pt-1">
           <button
             onClick={() => onSave(form)}
-            className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700"
+            className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff]"
           >
             Set
           </button>
@@ -447,7 +471,7 @@ function ApplyModal({ template, onClose }) {
             Created {result.created} workouts from {result.start_monday} to {result.end_date}
             {result.replaced > 0 && `, replacing ${result.replaced} existing`}.
           </div>
-          <button onClick={onClose} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700">Done</button>
+          <button onClick={onClose} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff]">Done</button>
         </div>
       ) : step === 'diff' ? (
         <DiffCalendar
@@ -470,7 +494,7 @@ function ApplyModal({ template, onClose }) {
           </div>
           {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2">{error}</p>}
           <div className="flex gap-2">
-            <button onClick={() => setStep('diff')} className="px-4 border border-blue-300 text-blue-700 rounded-lg py-2 text-sm font-medium hover:bg-blue-50">See diff</button>
+            <button onClick={() => setStep('diff')} className="px-4 border border-[#c0c1ff]/50 text-[#c0c1ff] rounded-lg py-2 text-sm font-medium hover:bg-[#c0c1ff]/10">See diff</button>
             <button onClick={doApply} disabled={applying} className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50">
               {applying ? 'Applying…' : 'Apply & override'}
             </button>
@@ -489,7 +513,7 @@ function ApplyModal({ template, onClose }) {
             <label className="block text-xs font-medium text-gray-600 mb-1">Start date (week 1, Monday)</label>
             <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <button onClick={() => { if (groupId && startDate) setStep('confirm'); }} disabled={!groupId || !startDate} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+          <button onClick={() => { if (groupId && startDate) setStep('confirm'); }} disabled={!groupId || !startDate} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
             Apply to calendar
           </button>
         </div>

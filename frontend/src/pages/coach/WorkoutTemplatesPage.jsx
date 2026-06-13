@@ -71,7 +71,7 @@ export default function WorkoutTemplatesPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <div className="fixed inset-0 -z-10 bg-black" />
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">Workout Plans</h2>
         <button
@@ -189,7 +189,7 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <div className="fixed inset-0 -z-10 bg-black" />
       <div className="flex items-center justify-between">
         <button onClick={onClose} className="text-sm text-blue-200 hover:text-white">← Back</button>
         <button

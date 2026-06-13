@@ -1,0 +1,411 @@
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { format } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
+import Spinner from '../../components/ui/Spinner';
+import Modal from '../../components/ui/Modal';
+import { listPending, approveRace, rejectRace, approveResult, rejectResult } from '../../api/adminReview';
+import { listAllUsers, patchUser, deleteUser } from '../../api/adminUsers';
+
+const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
+const GLASS_INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
+const TAB = 'flex-1 py-1.5 text-xs font-bold uppercase tracking-wider rounded-full transition flex items-center justify-center gap-1.5';
+const TAB_ACTIVE = 'bg-[#c0c1ff] text-[#1000a9]';
+const TAB_INACTIVE = 'text-white/55 hover:text-white';
+
+function AdminBackground() {
+  return (
+    <>
+      <div className="fixed inset-0 -z-10 bg-[#131314]" />
+      <div className="fixed inset-0 -z-10" style={{ background: 'radial-gradient(120% 80% at 50% -10%, rgba(192,193,255,0.10) 0%, rgba(19,19,20,0) 55%)' }} />
+    </>
+  );
+}
+
+export default function AdminPage() {
+  const [tab, setTab] = useState('review');
+  const [pending, setPending] = useState({ races: [], results: [] });
+
+  const refreshPending = useCallback(() => {
+    return listPending().then(({ data }) => setPending(data)).catch(() => {});
+  }, []);
+  useEffect(() => { refreshPending(); }, [refreshPending]);
+
+  const pendingCount = (pending.races?.length || 0) + (pending.results?.length || 0);
+
+  return (
+    <>
+      <AdminBackground />
+
+      <h2 className="text-xl font-bold text-[#e5e2e3] mb-3">Admin</h2>
+
+      <div className={`flex gap-1 p-1 rounded-full mb-4 ${GLASS}`}>
+        <button onClick={() => setTab('review')} className={`${TAB} ${tab === 'review' ? TAB_ACTIVE : TAB_INACTIVE}`}>
+          Review
+          {pendingCount > 0 && (
+            <span className={`text-[10px] font-bold rounded-full px-1.5 py-px ${tab === 'review' ? 'bg-[#1000a9] text-[#c0c1ff]' : 'bg-[#c0c1ff] text-[#1000a9]'}`}>{pendingCount}</span>
+          )}
+        </button>
+        <button onClick={() => setTab('users')} className={`${TAB} ${tab === 'users' ? TAB_ACTIVE : TAB_INACTIVE}`}>Users</button>
+      </div>
+
+      {tab === 'review' && <ReviewTab pending={pending} onChanged={refreshPending} />}
+      {tab === 'users' && <UsersTab />}
+    </>
+  );
+}
+
+// ── Review tab: approve/reject pending races + results ────────────────────────
+function ReviewTab({ pending, onChanged }) {
+  const [acting, setActing] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState(null); // { kind, item, note }
+
+  const handleApprove = async (kind, item) => {
+    setActing(true);
+    try {
+      if (kind === 'race') await approveRace(item.id);
+      else await approveResult(item.id);
+      await onChanged();
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not approve');
+    } finally { setActing(false); }
+  };
+
+  const submitReject = async () => {
+    if (!rejectTarget) return;
+    setActing(true);
+    try {
+      const { kind, item, note } = rejectTarget;
+      if (kind === 'race') await rejectRace(item.id, note || null);
+      else await rejectResult(item.id, note || null);
+      setRejectTarget(null);
+      await onChanged();
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not reject');
+    } finally { setActing(false); }
+  };
+
+  const empty = pending.races.length === 0 && pending.results.length === 0;
+
+  return (
+    <div>
+      <p className="text-xs text-white/55 mb-4">
+        Approve coach submissions before they go live in the race archive and Hall of Fame.
+      </p>
+
+      {empty ? (
+        <p className="text-center py-12 text-sm text-white/45">No pending items right now.</p>
+      ) : (
+        <>
+          {pending.races.length > 0 && (
+            <section className="mb-6">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff] mb-2">
+                Races · {pending.races.length}
+              </p>
+              <div className="space-y-2">
+                {pending.races.map((r) => (
+                  <div key={r.id} className={`${GLASS} rounded-xl p-4`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-white truncate">{r.name}</p>
+                        <p className="text-xs text-white/50 mt-0.5">
+                          {format(new Date(r.race_date + 'T00:00'), 'MMM d, yyyy')} · proposed by {r.proposer_name}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => setRejectTarget({ kind: 'race', item: r, note: '' })} disabled={acting}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-white/15 text-white/80 hover:bg-white/10 disabled:opacity-50 transition">Reject</button>
+                        <button onClick={() => handleApprove('race', r)} disabled={acting}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-[#c0c1ff] text-[#1000a9] font-bold hover:scale-[1.02] active:scale-95 disabled:opacity-50 transition">Approve</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {pending.results.length > 0 && (
+            <section>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff] mb-2">
+                Results · {pending.results.length}
+              </p>
+              <div className="space-y-2">
+                {pending.results.map((res) => (
+                  <div key={res.id} className={`${GLASS} rounded-xl p-4`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-white truncate">{res.athlete_name}</p>
+                        <p className="text-sm text-white/90 font-mono mt-0.5">{res.time_display} · {res.distance_m}m</p>
+                        <p className="text-xs text-white/50 mt-1">
+                          {res.race_name} · {res.heat_label}
+                          {res.proposer_name && <> · proposed by {res.proposer_name}</>}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button onClick={() => setRejectTarget({ kind: 'result', item: res, note: '' })} disabled={acting}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-white/15 text-white/80 hover:bg-white/10 disabled:opacity-50 transition">Reject</button>
+                        <button onClick={() => handleApprove('result', res)} disabled={acting}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-[#c0c1ff] text-[#1000a9] font-bold hover:scale-[1.02] active:scale-95 disabled:opacity-50 transition">Approve</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      {/* Reject sheet */}
+      <Modal open={!!rejectTarget} onClose={() => !acting && setRejectTarget(null)} panelClassName="bg-[#131314] border-t border-white/10">
+        {rejectTarget && (
+          <div>
+            <h3 className="text-base font-bold text-white mb-1">
+              Reject {rejectTarget.kind === 'race' ? 'race' : 'result'}?
+            </h3>
+            <p className="text-sm text-white/55 mb-3">
+              The proposer will see your note in their drafts. They can edit and resubmit.
+            </p>
+            <textarea
+              value={rejectTarget.note}
+              onChange={(e) => setRejectTarget({ ...rejectTarget, note: e.target.value })}
+              placeholder="Reason (optional)"
+              rows={3}
+              className={`${GLASS_INPUT} mb-4`}
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setRejectTarget(null)} disabled={acting}
+                className="flex-1 py-2.5 rounded-xl border border-white/15 text-white/80 font-medium hover:bg-white/5 disabled:opacity-50">Cancel</button>
+              <button onClick={submitReject} disabled={acting}
+                className="flex-1 py-2.5 rounded-xl bg-red-500/80 hover:bg-red-500 text-white font-bold disabled:opacity-50">{acting ? 'Rejecting…' : 'Reject'}</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+const ROLE_BADGE = {
+  athlete: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30',
+  coach: 'bg-blue-500/20 text-blue-200 border-blue-400/30',
+  admin: 'bg-[#c0c1ff]/20 text-[#c0c1ff] border-[#c0c1ff]/30',
+};
+
+const FILTER_OPTIONS = [
+  { key: 'all', label: 'All' },
+  { key: 'athlete', label: 'Athletes' },
+  { key: 'coach', label: 'Coaches' },
+];
+
+// ── Users tab: list / search / filter / edit / delete ─────────────────────────
+function UsersTab() {
+  const { user: me } = useAuth();
+  const [users, setUsers] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState(null);
+
+  const fetchUsers = () => {
+    setLoading(true);
+    listAllUsers()
+      .then(({ data }) => { setUsers(data.users); setError(null); })
+      .catch((err) => setError(err?.response?.data?.detail || 'Failed to load users'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { fetchUsers(); }, []);
+
+  const adminCount = useMemo(() => (users || []).filter((u) => u.role === 'admin').length, [users]);
+
+  const filtered = useMemo(() => {
+    if (!users) return [];
+    const q = search.trim().toLowerCase();
+    return users.filter((u) => {
+      if (filter !== 'all' && u.role !== filter) return false;
+      if (!q) return true;
+      return u.full_name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q);
+    });
+  }, [users, filter, search]);
+
+  return (
+    <div>
+      <div className="flex gap-1.5 mb-3">
+        {FILTER_OPTIONS.map((opt) => (
+          <button key={opt.key} onClick={() => setFilter(opt.key)}
+            className={`flex-1 py-1.5 text-sm font-semibold rounded-xl border transition ${
+              filter === opt.key
+                ? 'bg-[#c0c1ff] text-[#1000a9] border-transparent'
+                : 'bg-[#1c1b1c]/60 text-white/60 border-white/10 hover:text-white'
+            }`}>{opt.label}</button>
+        ))}
+      </div>
+
+      <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search name or username…" className={`${GLASS_INPUT} mb-3`} />
+
+      {error && <p className="text-sm text-red-300 mb-3">{error}</p>}
+
+      {loading ? (
+        <div className="py-10 flex justify-center"><Spinner /></div>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm text-white/45 italic text-center py-8">No matching users</p>
+      ) : (
+        <div className="space-y-1.5">
+          {filtered.map((u) => (
+            <UserRow key={u.id} user={u} isSelf={me?.id === u.id} onEdit={() => setEditing(u)} />
+          ))}
+        </div>
+      )}
+
+      <UserEditModal
+        target={editing}
+        isSelf={editing && me?.id === editing.id}
+        adminCount={adminCount}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); fetchUsers(); }}
+      />
+    </div>
+  );
+}
+
+function UserRow({ user, isSelf, onEdit }) {
+  const subLine = user.role === 'athlete'
+    ? [user.coach_name && `Coached by ${user.coach_name}`, user.training_group_name].filter(Boolean).join(' · ')
+    : (user.role === 'coach' || user.role === 'admin')
+      ? `${user.athletes_count} ${user.athletes_count === 1 ? 'athlete' : 'athletes'}`
+      : '';
+
+  return (
+    <div className={`flex items-center gap-3 ${GLASS} rounded-xl px-3 py-2.5`}>
+      <div className="w-9 h-9 rounded-full bg-[#c0c1ff]/20 border border-[#c0c1ff]/30 flex items-center justify-center overflow-hidden shrink-0">
+        {user.photo_url ? (
+          <img src={user.photo_url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-[#c0c1ff] font-bold">{user.full_name.charAt(0).toUpperCase()}</span>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="font-medium text-white truncate">{user.full_name}</p>
+          <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border ${ROLE_BADGE[user.role]}`}>{user.role}</span>
+          {isSelf && <span className="text-[10px] text-white/40 italic">(you)</span>}
+        </div>
+        <p className="text-[11px] text-white/50 truncate">@{user.username}{subLine ? ` · ${subLine}` : ''}</p>
+      </div>
+      <button onClick={onEdit}
+        className="text-xs font-semibold text-white bg-white/10 hover:bg-white/20 border border-white/15 rounded-lg px-2.5 py-1 transition">Edit</button>
+    </div>
+  );
+}
+
+function UserEditModal({ target, isSelf, adminCount, onClose, onSaved }) {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('athlete');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    if (target) {
+      setName(target.full_name);
+      setRole(target.role);
+      setErr(null);
+      setConfirmDelete(false);
+    }
+  }, [target]);
+
+  const lastAdminLock = target?.role === 'admin' && adminCount <= 1;
+
+  const save = async (patch) => {
+    setBusy(true); setErr(null);
+    try {
+      await patchUser(target.id, patch);
+      onSaved();
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Save failed');
+    } finally { setBusy(false); }
+  };
+
+  const handleRename = () => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === target.full_name) return;
+    save({ full_name: trimmed });
+  };
+
+  const handleRoleSave = () => {
+    if (role === target.role) return;
+    save({ role });
+  };
+
+  const handleDelete = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await deleteUser(target.id);
+      onSaved();
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Delete failed');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open={!!target} onClose={onClose} title={target ? `Edit ${target.full_name}` : ''}
+      panelClassName="bg-[#131314] border-t border-white/10">
+      {target && (
+        <div className="space-y-4 text-white">
+          {err && <p className="text-sm text-red-300">{err}</p>}
+
+          <div>
+            <label className="text-[11px] uppercase tracking-wider font-semibold text-white/55">Name</label>
+            <div className="flex gap-2 mt-1">
+              <input value={name} onChange={(e) => setName(e.target.value)} className={GLASS_INPUT} />
+              <button onClick={handleRename} disabled={busy || !name.trim() || name.trim() === target.full_name}
+                className="text-sm font-bold bg-[#c0c1ff] text-[#1000a9] disabled:opacity-40 rounded-xl px-4">Save</button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] uppercase tracking-wider font-semibold text-white/55">Role</label>
+            <div className="flex gap-2 mt-1">
+              <select value={role} onChange={(e) => setRole(e.target.value)} disabled={isSelf || lastAdminLock}
+                className={`${GLASS_INPUT} disabled:opacity-50`}>
+                <option value="athlete" className="bg-[#1c1b1c]">Athlete</option>
+                <option value="coach" className="bg-[#1c1b1c]">Coach</option>
+                <option value="admin" className="bg-[#1c1b1c]">Admin</option>
+              </select>
+              <button onClick={handleRoleSave} disabled={busy || role === target.role || isSelf || lastAdminLock}
+                className="text-sm font-bold bg-[#c0c1ff] text-[#1000a9] disabled:opacity-40 rounded-xl px-4">Save</button>
+            </div>
+            {(isSelf || lastAdminLock) && (
+              <p className="text-[11px] text-white/50 italic mt-1">
+                {isSelf ? "You can't change your own role." : "Can't demote the last admin."}
+              </p>
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-white/10">
+            {!confirmDelete ? (
+              <button onClick={() => setConfirmDelete(true)} disabled={busy || isSelf || lastAdminLock}
+                className="w-full text-sm font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 border border-red-400/30 rounded-xl px-3 py-2 disabled:opacity-40">Delete account…</button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-sm text-white/85">
+                  Permanently delete <strong>{target.full_name}</strong>? All their workout logs,
+                  kudos, feed activity, and race results will be wiped. This cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={handleDelete} disabled={busy}
+                    className="flex-1 text-sm font-bold bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-xl py-2">{busy ? 'Deleting…' : 'Delete forever'}</button>
+                  <button onClick={() => setConfirmDelete(false)} disabled={busy}
+                    className="flex-1 text-sm font-semibold bg-white/10 hover:bg-white/15 border border-white/15 rounded-xl py-2">Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}

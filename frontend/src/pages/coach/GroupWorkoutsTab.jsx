@@ -18,6 +18,9 @@ const WORKOUT_TYPES = [
 ];
 
 const typeMeta = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
+// Titles we auto-fill from the type — used to tell an auto-default apart from a
+// title the coach actually typed (which must never be overwritten).
+const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
 
 const workoutSnippet = (gw) => {
   if (!gw) return '';
@@ -325,7 +328,7 @@ export default function GroupWorkoutsTab({ group }) {
             onClick={() => setMonthExpanded(true)}
             className="w-full rounded-[10px] bg-black/70 hover:bg-black/55 backdrop-blur-sm py-3 text-sm font-semibold tracking-wide text-white transition active:scale-[0.98]"
           >
-            ⛶ Expand monthly view
+             Expand monthly view
           </button>
         </NoiseBackground>
         <div className="space-y-4">
@@ -507,6 +510,13 @@ export default function GroupWorkoutsTab({ group }) {
         {selectedDay && editingId != null && (() => {
           const meta = typeMeta(form.workout_type);
           const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+          // Picking a type auto-titles the workout with that type's name, unless
+          // the coach already typed a custom title. 'Other' stays untitled.
+          const selectType = (value) => setForm((f) => {
+            const wasDefault = !f.title.trim() || DEFAULT_TITLES.has(f.title.trim());
+            const nextTitle = wasDefault ? (value === 'simple' ? '' : typeMeta(value).label) : f.title;
+            return { ...f, workout_type: value, title: nextTitle };
+          });
           const hasPublishedContent = meta.structured
             ? (form.warmup.trim() || form.main_session.trim() || form.cooldown.trim())
             : form.content.trim();
@@ -550,7 +560,7 @@ export default function GroupWorkoutsTab({ group }) {
                   {WORKOUT_TYPES.map(t => (
                     <button
                       key={t.value}
-                      onClick={() => setField('workout_type', t.value)}
+                      onClick={() => selectType(t.value)}
                       className={`text-xs px-2 py-1.5 rounded-lg font-medium border transition ${
                         form.workout_type === t.value
                           ? `${t.color} border-current`

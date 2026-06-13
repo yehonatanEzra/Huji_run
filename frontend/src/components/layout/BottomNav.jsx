@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { incomingRequests } from '../../api/coaching';
 import { pendingApprovalsCount } from '../../api/coach';
@@ -44,13 +44,12 @@ const adminItems = [
   { to: '/coach/group',        label: 'Group',       icon: '👥', image: '/icons/group.jpg', isGroupApprovals: true },
   { to: '/coach/plans',        label: 'Plans',       icon: '🗓️', image: '/icons/plans.jpg' },
   { to: '/coach/requests',     label: 'Requests',    icon: '📥', image: '/icons/requests.jpg', isRequests: true },
-  { to: '/admin/pending',      label: 'Review',      icon: '⚖️', image: '/icons/review.jpg', isPending: true },
-  { to: '/admin/users',        label: 'Users',       icon: '👥', image: '/icons/users.jpg' },
   { to: '/feed',               label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
   { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
   { to: '/profile',            label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
+  { to: '/admin',              label: 'Admin',       icon: '⚖️', image: '/icons/review.jpg', isPending: true },
 ];
 
 export default function BottomNav() {
@@ -65,38 +64,47 @@ export default function BottomNav() {
     ? `/api/v1/profile/photo/${user.id}?v=${photoVersion}`
     : null;
 
-  useEffect(() => {
+  const fetchRequests = useCallback(() => {
     if (!isCoachOrAdmin) return;
-    let alive = true;
-    const fetchCount = () => incomingRequests()
-      .then(({ data }) => alive && setPendingCount(data.length))
-      .catch(() => {});
-    fetchCount();
-    const intv = setInterval(fetchCount, 30_000);
-    return () => { alive = false; clearInterval(intv); };
+    incomingRequests().then(({ data }) => setPendingCount(data.length)).catch(() => {});
   }, [isCoachOrAdmin]);
 
-  useEffect(() => {
+  const fetchReview = useCallback(() => {
     if (!isAdmin) return;
-    let alive = true;
-    const fetchCount = () => listPending()
-      .then(({ data }) => alive && setReviewCount((data.races?.length || 0) + (data.results?.length || 0)))
-      .catch(() => {});
-    fetchCount();
-    const intv = setInterval(fetchCount, 30_000);
-    return () => { alive = false; clearInterval(intv); };
+    listPending().then(({ data }) => setReviewCount((data.races?.length || 0) + (data.results?.length || 0))).catch(() => {});
   }, [isAdmin]);
 
-  useEffect(() => {
+  const fetchGroupApprovals = useCallback(() => {
     if (!isCoachOrAdmin) return;
-    let alive = true;
-    const fetchCount = () => pendingApprovalsCount()
-      .then(({ data }) => alive && setGroupApprovalCount(data.count || 0))
-      .catch(() => {});
-    fetchCount();
-    const intv = setInterval(fetchCount, 30_000);
-    return () => { alive = false; clearInterval(intv); };
+    pendingApprovalsCount().then(({ data }) => setGroupApprovalCount(data.count || 0)).catch(() => {});
   }, [isCoachOrAdmin]);
+
+  useEffect(() => {
+    fetchRequests();
+    const intv = setInterval(fetchRequests, 30_000);
+    return () => clearInterval(intv);
+  }, [fetchRequests]);
+
+  useEffect(() => {
+    fetchReview();
+    const intv = setInterval(fetchReview, 30_000);
+    return () => clearInterval(intv);
+  }, [fetchReview]);
+
+  useEffect(() => {
+    fetchGroupApprovals();
+    const intv = setInterval(fetchGroupApprovals, 30_000);
+    return () => clearInterval(intv);
+  }, [fetchGroupApprovals]);
+
+  // Refresh badges immediately when a coach/admin acts (accept/decline a join
+  // request, approve a group add, moderate a race) instead of waiting for the
+  // 30s poll. The acting page dispatches `badges:refresh` after its own refresh.
+  useEffect(() => {
+    const h = () => { fetchRequests(); fetchReview(); fetchGroupApprovals(); };
+    window.addEventListener('badges:refresh', h);
+    return () => window.removeEventListener('badges:refresh', h);
+  }, [fetchRequests, fetchReview, fetchGroupApprovals]);
 
   const baseItems = isAdmin
     ? adminItems

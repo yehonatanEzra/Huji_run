@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { parseISO, format, getISOWeek, getISOWeekYear } from 'date-fns';
+import { useState, useEffect, useCallback } from 'react';
+import { parseISO, format, getISOWeek, getISOWeekYear, startOfWeek, addDays, addWeeks, subWeeks } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import {
   listGroups, getGroup, createGroup, renameGroup, deleteGroup,
   addMemberToGroup, removeMemberFromGroup, listAthletes,
-  listPendingAdds, approveAdd, rejectAdd,
+  listPendingAdds, approveAdd, rejectAdd, getAthleteWeek,
 } from '../../api/coach';
 import {
   listGroupCoaches, searchCoaches, addGroupCoach, removeGroupCoach, transferGroupOwnership,
@@ -106,7 +106,7 @@ export default function GroupHubPage() {
 
       {/* Tabs */}
       <div className={`flex gap-1 p-1 rounded-full mb-4 ${GLASS}`}>
-        {[['workouts', 'Workouts'], ['athletes', 'Athletes'], ['cocoaches', 'Co-coaches'], ['insights', 'Insights']].map(([k, label]) => (
+        {[['workouts', 'Workouts'], ['athletes', 'Athletes'], ['cocoaches', 'Staff'], ['insights', 'Insights']].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className={`${TAB} ${tab === k ? TAB_ACTIVE : TAB_INACTIVE}`}>{label}</button>
         ))}
       </div>
@@ -134,33 +134,21 @@ function HubBackground() {
 
 // ── Status strip: weekly operational signal surfaced above the tabs ───────────
 function StatusStrip({ group }) {
-  const [report, setReport] = useState(null);
   const [load, setLoad] = useState(null);
   const week = toIsoWeekStr(new Date());
 
   useEffect(() => {
-    const params = { week, group_id: group.id };
-    getReportingOverview(params).then(({ data }) => setReport(data)).catch(() => setReport(null));
-    getLoadOverview(params).then(({ data }) => setLoad(data)).catch(() => setLoad(null));
+    getLoadOverview({ week, group_id: group.id }).then(({ data }) => setLoad(data)).catch(() => setLoad(null));
   }, [group.id]);
 
-  const notLogged = report ? report.athletes.filter((a) => a.response_rate < 1).length : null;
   const spikes = load ? load.athletes.filter((a) => a.is_spike).length : null;
-  if (notLogged === null && spikes === null) return null;
-  if (!notLogged && !spikes) return null;
+  if (!spikes) return null;
 
   return (
     <div className="flex gap-2 mb-3">
-      {notLogged > 0 && (
-        <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-amber-400/15 text-amber-200 border border-amber-400/25">
-          {notLogged} not logged
-        </span>
-      )}
-      {spikes > 0 && (
-        <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-red-400/15 text-red-200 border border-red-400/25">
-          {spikes} load spike{spikes !== 1 ? 's' : ''}
-        </span>
-      )}
+      <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-red-400/15 text-red-200 border border-red-400/25">
+        {spikes} load spike{spikes !== 1 ? 's' : ''}
+      </span>
     </div>
   );
 }
@@ -174,6 +162,9 @@ function AthletesTab({ group, onChanged, groups }) {
   const [moveTarget, setMoveTarget] = useState(null);
   const [logAthlete, setLogAthlete] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [weekDate, setWeekDate] = useState(new Date());
+  const [weeks, setWeeks] = useState({}); // athleteId -> days[]
+  const [weeksLoading, setWeeksLoading] = useState(false);
   const isMain = group.role === 'main';
 
   const load = useCallback(() => {
@@ -182,6 +173,19 @@ function AthletesTab({ group, onChanged, groups }) {
     listAthletes().then(({ data }) => setMyAthletes(data)).catch(() => setMyAthletes([]));
   }, [group.id]);
   useEffect(() => { load(); }, [load]);
+
+  // Per-member weekly grid (status + volume). getAthleteWeek works for any
+  // group coach (main or assistant), unlike the personal-roster dashboard.
+  useEffect(() => {
+    if (!detail) return;
+    const members = detail.members;
+    if (members.length === 0) { setWeeks({}); return; }
+    setWeeksLoading(true);
+    const dayStr = format(weekDate, 'yyyy-MM-dd');
+    Promise.all(members.map((m) =>
+      getAthleteWeek(m.id, dayStr).then(({ data }) => [m.id, data.days]).catch(() => [m.id, null])
+    )).then((entries) => setWeeks(Object.fromEntries(entries))).finally(() => setWeeksLoading(false));
+  }, [detail, weekDate]);
 
   const handleApprove = async (rid) => { setBusy(true); try { await approveAdd(group.id, rid); load(); onChanged(); } finally { setBusy(false); } };
   const handleReject  = async (rid) => { setBusy(true); try { await rejectAdd(group.id, rid); load(); } finally { setBusy(false); } };
@@ -196,6 +200,9 @@ function AthletesTab({ group, onChanged, groups }) {
   const memberIds = new Set(detail.members.map((m) => m.id));
   const pendingIds = new Set(pending.map((p) => p.athlete_id));
   const addable = myAthletes.filter((a) => !memberIds.has(a.id) && !pendingIds.has(a.id));
+
+  const weekStart = startOfWeek(weekDate, { weekStartsOn: 0 });
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
     <div className="space-y-4">
@@ -226,7 +233,7 @@ function AthletesTab({ group, onChanged, groups }) {
         </div>
       )}
 
-      {/* Members */}
+      {/* Members — weekly tracking grid */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <p className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff]">Members · {detail.members.length}</p>
@@ -235,17 +242,57 @@ function AthletesTab({ group, onChanged, groups }) {
         {detail.members.length === 0 ? (
           <p className="text-sm text-white/45 italic py-4 text-center">No athletes in this group yet. Add one of your athletes above.</p>
         ) : (
-          <div className="space-y-2">
-            {detail.members.map((m) => (
-              <div key={m.id} className={`${GLASS} rounded-xl px-4 py-2.5 flex items-center gap-2`}>
-                <button onClick={() => setLogAthlete(m)} className="flex-1 min-w-0 text-left group">
-                  <p className="text-sm font-semibold text-white truncate group-hover:text-[#c0c1ff] transition">{m.full_name}</p>
-                  <p className="text-[10px] text-white/35">Tap to open workout log</p>
-                </button>
-                <MemberMenu onMove={() => setMoveTarget(m)} onRemove={() => handleRemove(m.id)} canMove={groups.length > 1} />
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <button onClick={() => setWeekDate(subWeeks(weekDate, 1))} className="text-[#c0c1ff] hover:text-white text-xs transition">&larr; Prev</button>
+              <span className="text-xs font-medium text-white/70">
+                {format(weekStart, 'MMM d')} – {format(addDays(weekStart, 6), 'MMM d')}
+              </span>
+              <button onClick={() => setWeekDate(addWeeks(weekDate, 1))} className="text-[#c0c1ff] hover:text-white text-xs transition">Next &rarr;</button>
+            </div>
+            <div className={`${GLASS} rounded-xl overflow-x-auto ${weeksLoading ? 'opacity-60' : ''} transition`}>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th className="px-2 py-2 text-left text-white/55 font-semibold sticky left-0 z-10 bg-[#201f20] min-w-[120px]">Athlete</th>
+                    {weekDays.map((d) => (
+                      <th key={format(d, 'yyyy-MM-dd')} className="px-1 py-2 text-center text-white/55 font-semibold min-w-[40px]">{format(d, 'EEEEE')}</th>
+                    ))}
+                    <th className="px-2 py-2 text-center text-[#c0c1ff] font-semibold min-w-[44px]">km</th>
+                    <th className="w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.members.map((m) => {
+                    const days = weeks[m.id];
+                    const total = days ? days.reduce((s, d) => s + (d.log?.distance_km || 0), 0) : 0;
+                    return (
+                      <tr key={m.id} className="border-t border-white/[0.07]">
+                        <td className="px-2 py-2 sticky left-0 z-10 bg-[#201f20]">
+                          <button onClick={() => setLogAthlete(m)} className="text-left">
+                            <span className="font-medium text-white hover:text-[#c0c1ff] transition truncate block max-w-[110px]">{m.full_name}</span>
+                          </button>
+                        </td>
+                        {(days || Array(7).fill(null)).map((d, i) => (
+                          <td key={d?.date || i} className="px-1 py-1.5 text-center">
+                            <button onClick={() => setLogAthlete(m)} className="inline-flex items-center justify-center w-8 h-8 align-middle">
+                              <DayDot day={d} />
+                            </button>
+                          </td>
+                        ))}
+                        <td className="px-2 py-2 text-center">
+                          {total > 0 ? <span className="font-bold text-[#c0c1ff]">{total.toFixed(1)}</span> : <span className="text-white/25">–</span>}
+                        </td>
+                        <td className="pr-1">
+                          <MemberMenu onMove={() => setMoveTarget(m)} onRemove={() => handleRemove(m.id)} canMove={groups.length > 1} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -278,6 +325,29 @@ function AthletesTab({ group, onChanged, groups }) {
   );
 }
 
+// One day cell in the weekly grid: colored dot reflecting log status, with km
+// (or V/~/X) inside. A periwinkle ring marks a race-day workout.
+function DayDot({ day }) {
+  if (!day) return <span className="inline-block w-8 h-8 rounded-full bg-white/[0.06]" />;
+  const log = day.log;
+  const isRace = day.target?.override_group
+    ? day.target?.workout_type === 'race'
+    : day.group_workout?.workout_type === 'race';
+  let bg = 'bg-white/[0.06]', txt = 'text-white/25', text = '·';
+  if (log) {
+    const st = log.status || (log.completed ? 'completed' : 'missed');
+    bg = st === 'completed' ? 'bg-emerald-400/25' : st === 'partial' ? 'bg-amber-400/25' : 'bg-red-400/25';
+    txt = st === 'completed' ? 'text-emerald-100' : st === 'partial' ? 'text-amber-100' : 'text-red-100';
+    if (log.distance_km > 0) text = log.distance_km < 10 ? log.distance_km.toFixed(1) : Math.round(log.distance_km).toString();
+    else text = st === 'completed' ? 'V' : st === 'partial' ? '~' : 'X';
+  }
+  return (
+    <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-[10px] ${bg} ${txt} hover:ring-2 hover:ring-[#c0c1ff]/50 transition ${isRace ? 'ring-2 ring-[#c0c1ff]' : ''}`}>
+      {text}
+    </span>
+  );
+}
+
 function AddRow({ athlete, groupId, onDone }) {
   const [state, setState] = useState('idle'); // idle | added | pending
   const [busy, setBusy] = useState(false);
@@ -304,24 +374,19 @@ function AddRow({ athlete, groupId, onDone }) {
 }
 
 function MemberMenu({ onMove, onRemove, canMove }) {
+  // Bottom-sheet rather than an absolute dropdown — the grid's overflow-x-auto
+  // container would otherwise clip a dropdown.
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
   return (
-    <div className="relative shrink-0" ref={ref}>
-      <button onClick={() => setOpen((v) => !v)} className="w-8 h-8 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition">⋯</button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-[#1c1b1c] border border-white/10 rounded-xl shadow-2xl py-1 w-44">
-          {canMove && <button onClick={() => { setOpen(false); onMove(); }} className="block w-full text-left px-4 py-2 text-sm text-white/80 hover:bg-white/10">Move to another group →</button>}
-          <button onClick={() => { setOpen(false); onRemove(); }} className="block w-full text-left px-4 py-2 text-sm text-red-300 hover:bg-white/10">Remove from group</button>
+    <>
+      <button onClick={() => setOpen(true)} className="w-8 h-8 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition">⋯</button>
+      <Modal open={open} onClose={() => setOpen(false)} panelClassName="bg-[#131314] border-t border-white/10">
+        <div className="space-y-2">
+          {canMove && <button onClick={() => { setOpen(false); onMove(); }} className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] text-sm text-white/85 hover:bg-white/10 transition">Move to another group →</button>}
+          <button onClick={() => { setOpen(false); onRemove(); }} className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] text-sm text-red-300 hover:bg-white/10 transition">Remove from group</button>
         </div>
-      )}
-    </div>
+      </Modal>
+    </>
   );
 }
 

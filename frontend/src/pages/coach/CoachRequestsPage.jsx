@@ -27,6 +27,7 @@ export default function CoachRequestsPage() {
     try {
       await acceptRequest(id);
       await refresh();
+      window.dispatchEvent(new Event('badges:refresh'));
     } catch (err) {
       alert(err?.response?.data?.detail || 'Could not accept');
     } finally {
@@ -41,6 +42,7 @@ export default function CoachRequestsPage() {
       await declineRequest(declineTarget.id);
       setDeclineTarget(null);
       await refresh();
+      window.dispatchEvent(new Event('badges:refresh'));
     } catch (err) {
       alert(err?.response?.data?.detail || 'Could not decline');
     } finally {
@@ -54,7 +56,7 @@ export default function CoachRequestsPage() {
 
   return (
     <div>
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <div className="fixed inset-0 -z-10 bg-black" />
       <h2 className="text-xl font-bold mb-4 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Join requests</h2>
       {requests.length === 0 ? (
         <div className="text-center py-12 text-sm text-white/60">

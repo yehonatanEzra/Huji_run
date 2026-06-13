@@ -65,6 +65,16 @@ def register(body: RegisterRequest, db: Annotated[Session, Depends(get_db)]):
     db.add(user)
     db.commit()
     db.refresh(user)
+    # Coaches join the default team so they're visible to team-scoped flows
+    # (e.g. being added as an assistant coach). Single-team for now; a proper
+    # team-invite flow replaces this when multi-team lands.
+    if user.role == "coach":
+        default_team = db.query(Team).order_by(Team.id).first()
+        if default_team is not None and not db.query(TeamMembership).filter(
+            TeamMembership.user_id == user.id, TeamMembership.team_id == default_team.id
+        ).first():
+            db.add(TeamMembership(user_id=user.id, team_id=default_team.id, role="main"))
+            db.commit()
     return _token_response(db, user)
 
 

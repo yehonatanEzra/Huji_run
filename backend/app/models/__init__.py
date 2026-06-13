@@ -11,3 +11,4 @@ from .coach_request import CoachRequest
 from .notification import Notification
 from .team import Team, TeamMembership  # noqa: F401
 from .group_coach import GroupCoach  # noqa: F401
+from .group_add_request import GroupAddRequest  # noqa: F401

@@ -1,6 +1,6 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -8,10 +8,14 @@ from ..database import get_db
 from ..dependencies import require_coach, get_active_team_id
 from ..models.user import User
 from ..models.training_group import TrainingGroup
+from ..models.group_coach import GroupCoach
+from ..models.group_add_request import GroupAddRequest
 from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
 from ..models.race import Race, Heat, Result
 from ..schemas.auth import UserOut
 from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut, IndividualTargetOut, GroupWorkoutOut
+from ..services.coach_scope import coach_groups_with_role, can_coach_target_athlete
+from ..services.notifications import notify, notify_many
 
 
 def _athlete_in_scope(coach: User, athlete: Optional[User]) -> bool:
@@ -23,27 +27,11 @@ def _athlete_in_scope(coach: User, athlete: Optional[User]) -> bool:
     return athlete.coach_id == coach.id
 
 
-def _group_in_scope(coach: User, group: Optional[TrainingGroup]) -> bool:
-    """True if `group` is owned by this coach. Admins see all."""
-    if not group:
-        return False
-    if coach.role == "admin":
-        return True
-    return group.coach_id == coach.id
-
-
 def _athletes_query(coach: User, db: Session):
     """Base query for the athletes visible to this coach (or all for admin)."""
     q = db.query(User).filter(User.role == "athlete")
     if coach.role != "admin":
         q = q.filter(User.coach_id == coach.id)
-    return q
-
-
-def _groups_query(coach: User, db: Session):
-    q = db.query(TrainingGroup)
-    if coach.role != "admin":
-        q = q.filter(TrainingGroup.coach_id == coach.id)
     return q
 
 
@@ -55,6 +43,7 @@ class TrainingGroupOut(BaseModel):
     id: int
     name: str
     member_count: int = 0
+    role: Optional[str] = None  # this coach's role in the group: 'main' | 'assistant'
     model_config = {"from_attributes": True}
 
 
@@ -62,11 +51,34 @@ class TrainingGroupDetail(BaseModel):
     id: int
     name: str
     members: list[UserOut]
+    role: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
 class AssignAthleteBody(BaseModel):
     athlete_id: int
+
+
+class MemberAddResult(BaseModel):
+    status: str  # 'added' (immediate) | 'pending' (awaiting main-coach approval)
+
+
+class PendingAddOut(BaseModel):
+    id: int
+    athlete_id: int
+    athlete_name: str
+    requested_by_id: int
+    requested_by_name: str
+    created_at: datetime
+
+
+def _discard_pending_for_athlete(db: Session, athlete_id: int) -> None:
+    """Clear every pending group-add request for an athlete — called whenever the
+    athlete lands in a group (direct add or approval) so competing requests can't
+    later resolve and silently override one-group-per-athlete."""
+    db.query(GroupAddRequest).filter(GroupAddRequest.athlete_id == athlete_id).delete(
+        synchronize_session=False
+    )
 
 
 router = APIRouter(prefix="/coach", tags=["coach"])
@@ -77,15 +89,26 @@ def _week_start(d: date) -> date:
 
 
 # ── Training Groups ──────────────────────────────────────────────────────────
+# Group scoping is driven by GroupCoach (main/assistant), not the legacy
+# TrainingGroup.coach_id. coach_id is still written (main coach) for back-compat.
 
 @router.get("/groups", response_model=list[TrainingGroupOut])
 def list_groups(
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
-    groups = _groups_query(coach, db).order_by(TrainingGroup.name).all()
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    if not roles:
+        return []
+    groups = (
+        db.query(TrainingGroup)
+        .filter(TrainingGroup.id.in_(roles.keys()))
+        .order_by(TrainingGroup.name)
+        .all()
+    )
     return [
-        TrainingGroupOut(id=g.id, name=g.name, member_count=len(g.members))
+        TrainingGroupOut(id=g.id, name=g.name, member_count=len(g.members), role=roles.get(g.id))
         for g in groups
     ]
 
@@ -98,9 +121,12 @@ def create_group(
 ):
     g = TrainingGroup(name=body.name.strip(), created_by=coach.id, coach_id=coach.id)
     db.add(g)
+    db.flush()
+    # The creator becomes the main coach — GroupCoach is the source of truth.
+    db.add(GroupCoach(user_id=coach.id, group_id=g.id, role="main"))
     db.commit()
     db.refresh(g)
-    return TrainingGroupOut(id=g.id, name=g.name, member_count=0)
+    return TrainingGroupOut(id=g.id, name=g.name, member_count=0, role="main")
 
 
 @router.get("/groups/{group_id}", response_model=TrainingGroupDetail)
@@ -108,11 +134,13 @@ def get_group(
     group_id: int,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
-    g = db.get(TrainingGroup, group_id)
-    if not _group_in_scope(coach, g):
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    if group_id not in roles:
         raise HTTPException(status_code=404, detail="Group not found")
-    return TrainingGroupDetail(id=g.id, name=g.name, members=g.members)
+    g = db.get(TrainingGroup, group_id)
+    return TrainingGroupDetail(id=g.id, name=g.name, members=g.members, role=roles.get(group_id))
 
 
 @router.patch("/groups/{group_id}", response_model=TrainingGroupOut)
@@ -121,14 +149,18 @@ def rename_group(
     body: TrainingGroupCreate,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
-    g = db.get(TrainingGroup, group_id)
-    if not _group_in_scope(coach, g):
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    if group_id not in roles:
         raise HTTPException(status_code=404, detail="Group not found")
+    if roles[group_id] != "main":
+        raise HTTPException(status_code=403, detail="Only the main coach can rename this group")
+    g = db.get(TrainingGroup, group_id)
     g.name = body.name.strip()
     db.commit()
     db.refresh(g)
-    return TrainingGroupOut(id=g.id, name=g.name, member_count=len(g.members))
+    return TrainingGroupOut(id=g.id, name=g.name, member_count=len(g.members), role="main")
 
 
 @router.delete("/groups/{group_id}", status_code=204)
@@ -136,32 +168,81 @@ def delete_group(
     group_id: int,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
-    g = db.get(TrainingGroup, group_id)
-    if not _group_in_scope(coach, g):
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    if group_id not in roles:
         raise HTTPException(status_code=404, detail="Group not found")
+    if roles[group_id] != "main":
+        raise HTTPException(status_code=403, detail="Only the main coach can delete this group")
+    g = db.get(TrainingGroup, group_id)
     for member in g.members:
         member.training_group_id = None
+    # GroupAddRequest rows cascade (FK); group_coaches + group_workouts have no
+    # cascade, so clear them first or the FK pragma blocks the delete.
+    db.query(GroupCoach).filter(GroupCoach.group_id == group_id).delete(synchronize_session=False)
+    db.query(GroupWorkout).filter(GroupWorkout.training_group_id == group_id).delete(synchronize_session=False)
     db.delete(g)
     db.commit()
 
 
-@router.post("/groups/{group_id}/members", status_code=200)
+@router.post("/groups/{group_id}/members", response_model=MemberAddResult)
 def add_member_to_group(
     group_id: int,
     body: AssignAthleteBody,
+    response: Response,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
+    """Add an athlete to a group. Only the athlete's personal coach may add, and
+    only to a group they coach. Main coach → immediate; assistant → pending the
+    main coach's approval. 'Move' is just an add to a different group."""
     g = db.get(TrainingGroup, group_id)
-    if not _group_in_scope(coach, g):
+    if g is None:
         raise HTTPException(status_code=404, detail="Group not found")
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    role = roles.get(group_id)
+    if role is None:
+        raise HTTPException(status_code=403, detail="You do not coach this group")
+
     athlete = db.get(User, body.athlete_id)
-    if not _athlete_in_scope(coach, athlete):
+    if athlete is None or athlete.role != "athlete":
         raise HTTPException(status_code=404, detail="Athlete not found")
-    athlete.training_group_id = group_id
-    db.commit()
-    return {"ok": True}
+    # Only the personal coach can add (admins bypass and act as main).
+    if coach.role != "admin" and athlete.coach_id != coach.id:
+        raise HTTPException(status_code=403, detail="You are not this athlete's coach")
+
+    if athlete.training_group_id == group_id:
+        return MemberAddResult(status="added")  # already there — idempotent
+
+    if role == "main" or coach.role == "admin":
+        athlete.training_group_id = group_id
+        _discard_pending_for_athlete(db, athlete.id)
+        notify(db, athlete.id, "group_added", f"You were added to the group “{g.name}”.", "/calendar")
+        db.commit()
+        return MemberAddResult(status="added")
+
+    # Assistant → pending main-coach approval (idempotent via uq).
+    existing = (
+        db.query(GroupAddRequest)
+        .filter(GroupAddRequest.athlete_id == athlete.id, GroupAddRequest.group_id == group_id)
+        .first()
+    )
+    if existing is None:
+        db.add(GroupAddRequest(athlete_id=athlete.id, group_id=group_id, requested_by_id=coach.id))
+        main_ids = [
+            r.user_id for r in db.query(GroupCoach)
+            .filter(GroupCoach.group_id == group_id, GroupCoach.role == "main").all()
+        ]
+        notify_many(
+            db, main_ids, "group_add_request",
+            f"{coach.full_name} wants to add {athlete.full_name} to “{g.name}”.",
+            "/coach/group",
+        )
+        db.commit()
+    response.status_code = status.HTTP_201_CREATED
+    return MemberAddResult(status="pending")
 
 
 @router.delete("/groups/{group_id}/members/{athlete_id}", status_code=204)
@@ -170,15 +251,135 @@ def remove_member_from_group(
     athlete_id: int,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
+    """Remove an athlete from a group (they stay coached). Allowed for the group's
+    main coach or the athlete's personal coach."""
     g = db.get(TrainingGroup, group_id)
-    if not _group_in_scope(coach, g):
+    if g is None:
         raise HTTPException(status_code=404, detail="Group not found")
     athlete = db.get(User, athlete_id)
     if not athlete or athlete.training_group_id != group_id:
         raise HTTPException(status_code=404, detail="Athlete not in this group")
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    is_main = roles.get(group_id) == "main"
+    is_personal = athlete.coach_id == coach.id
+    if not (is_main or is_personal or coach.role == "admin"):
+        raise HTTPException(status_code=403, detail="Not allowed to remove this athlete")
+
     athlete.training_group_id = None
+    db.query(GroupAddRequest).filter(
+        GroupAddRequest.athlete_id == athlete_id, GroupAddRequest.group_id == group_id
+    ).delete(synchronize_session=False)
+    notify(db, athlete.id, "group_removed", f"You were removed from the group “{g.name}”.", None)
+    # If someone other than the personal coach pulled them, tell the personal coach.
+    if athlete.coach_id and athlete.coach_id != coach.id:
+        notify(db, athlete.coach_id, "group_removed",
+               f"{athlete.full_name} was removed from “{g.name}”.", "/coach/group")
     db.commit()
+
+
+# ── Group-add approvals (assistant-initiated, main-coach-resolved) ───────────
+
+@router.get("/pending-approvals-count")
+def pending_approvals_count(
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    """Total pending group-add requests across every group this coach mains."""
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    main_ids = [gid for gid, r in roles.items() if r == "main"]
+    if not main_ids:
+        return {"count": 0}
+    count = db.query(GroupAddRequest).filter(GroupAddRequest.group_id.in_(main_ids)).count()
+    return {"count": count}
+
+
+@router.get("/groups/{group_id}/pending", response_model=list[PendingAddOut])
+def list_pending_adds(
+    group_id: int,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    role = roles.get(group_id)
+    if role is None:
+        raise HTTPException(status_code=403, detail="You do not coach this group")
+    q = db.query(GroupAddRequest).filter(GroupAddRequest.group_id == group_id)
+    if role != "main":
+        # Assistants see only the requests they raised (so they don't re-add).
+        q = q.filter(GroupAddRequest.requested_by_id == coach.id)
+    reqs = q.all()
+    out: list[PendingAddOut] = []
+    for r in reqs:
+        a = db.get(User, r.athlete_id)
+        rb = db.get(User, r.requested_by_id)
+        out.append(PendingAddOut(
+            id=r.id,
+            athlete_id=r.athlete_id,
+            athlete_name=a.full_name if a else "(unknown)",
+            requested_by_id=r.requested_by_id,
+            requested_by_name=rb.full_name if rb else "(unknown)",
+            created_at=r.created_at,
+        ))
+    return out
+
+
+@router.post("/groups/{group_id}/pending/{req_id}/approve", response_model=MemberAddResult)
+def approve_pending_add(
+    group_id: int,
+    req_id: int,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    if roles.get(group_id) != "main":
+        raise HTTPException(status_code=403, detail="Only the main coach can approve")
+    req = db.get(GroupAddRequest, req_id)
+    if req is None or req.group_id != group_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    g = db.get(TrainingGroup, group_id)
+    athlete = db.get(User, req.athlete_id)
+    requester_id = req.requested_by_id
+    if athlete is None:
+        db.delete(req)
+        db.commit()
+        raise HTTPException(status_code=404, detail="Athlete no longer exists")
+    athlete.training_group_id = group_id
+    _discard_pending_for_athlete(db, athlete.id)  # removes this + any competing
+    notify(db, athlete.id, "group_added", f"You were added to the group “{g.name}”.", "/calendar")
+    notify(db, requester_id, "group_add_approved",
+           f"{athlete.full_name} was approved for “{g.name}”.", "/coach/group")
+    db.commit()
+    return MemberAddResult(status="added")
+
+
+@router.post("/groups/{group_id}/pending/{req_id}/reject", response_model=MemberAddResult)
+def reject_pending_add(
+    group_id: int,
+    req_id: int,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    roles = coach_groups_with_role(coach, db, active_team_id)
+    if roles.get(group_id) != "main":
+        raise HTTPException(status_code=403, detail="Only the main coach can reject")
+    req = db.get(GroupAddRequest, req_id)
+    if req is None or req.group_id != group_id:
+        raise HTTPException(status_code=404, detail="Request not found")
+    g = db.get(TrainingGroup, group_id)
+    athlete = db.get(User, req.athlete_id)
+    requester_id = req.requested_by_id
+    db.delete(req)
+    notify(db, requester_id, "group_add_rejected",
+           f"Your request to add {athlete.full_name if athlete else 'an athlete'} to "
+           f"“{g.name}” was declined.", "/coach/group")
+    db.commit()
+    return MemberAddResult(status="rejected")
 
 
 # ── Athletes ─────────────────────────────────────────────────────────────────
@@ -446,7 +647,7 @@ def get_athlete_week(
     coach_user: User = Depends(require_coach),
 ):
     athlete = db.get(User, athlete_id)
-    if not _athlete_in_scope(coach_user, athlete):
+    if not can_coach_target_athlete(coach_user, athlete, db):
         raise HTTPException(status_code=404, detail="Athlete not found")
 
     ws = _week_start(day)

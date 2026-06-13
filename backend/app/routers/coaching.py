@@ -10,6 +10,7 @@ from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from ..models.coach_request import CoachRequest
 from ..models.workout import IndividualTarget
+from ..models.group_add_request import GroupAddRequest
 
 router = APIRouter(tags=["coaching"])
 
@@ -187,6 +188,10 @@ def leave_coach(
         IndividualTarget.athlete_id == current_user.id,
         IndividualTarget.date >= date.today(),
     ).delete(synchronize_session=False)
+    # The personal-coach relationship is ending → any pending group-add is stale.
+    db.query(GroupAddRequest).filter(
+        GroupAddRequest.athlete_id == current_user.id
+    ).delete(synchronize_session=False)
     current_user.coach_id = None
     current_user.training_group_id = None
     db.commit()
@@ -284,6 +289,10 @@ def remove_athlete_from_roster(
     db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete.id,
         IndividualTarget.date >= date.today(),
+    ).delete(synchronize_session=False)
+    # Relationship ending → drop any pending group-add for this athlete.
+    db.query(GroupAddRequest).filter(
+        GroupAddRequest.athlete_id == athlete.id
     ).delete(synchronize_session=False)
     athlete.coach_id = None
     athlete.training_group_id = None

@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getCoachGroupWeek, createGroupWorkout, updateGroupWorkoutById, deleteGroupWorkoutById } from '../../api/calendar';
-import { listGroups, createGroup, getGroup, renameGroup, deleteGroup, addMemberToGroup, removeMemberFromGroup, listAthletes } from '../../api/coach';
+import { getGroup, listAthletes } from '../../api/coach';
 import Modal from '../../components/ui/Modal';
 import { NoiseBackground } from '../../components/ui/NoiseBackground';
 import Spinner from '../../components/ui/Spinner';
-import { Link } from 'react-router-dom';
 
 const WORKOUT_TYPES = [
   { value: 'simple',    label: 'Other',     abbr: 'Oth',  color: 'bg-gray-100 text-gray-700',       structured: false },
@@ -26,14 +25,9 @@ const workoutSnippet = (gw) => {
   return gw.content || gw.main_session || gw.warmup || '';
 };
 
-export default function WorkoutPublisherPage() {
-  const [groups, setGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(null);
+export default function GroupWorkoutsTab({ group }) {
   const [groupDetail, setGroupDetail] = useState(null);
   const [allAthletes, setAllAthletes] = useState([]);
-  const [showGroupManager, setShowGroupManager] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [creatingGroup, setCreatingGroup] = useState(false);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('weekly');
@@ -121,31 +115,21 @@ export default function WorkoutPublisherPage() {
     };
   }, [monthExpanded]);
 
-  const fetchGroups = async () => {
-    try {
-      const { data } = await listGroups();
-      setGroups(data);
-      if (!selectedGroup && data.length > 0) setSelectedGroup(data[0]);
-    } catch (err) { console.error(err); }
-  };
-
-  useEffect(() => { fetchGroups(); }, []);
-
   const fetchGroupDetail = async () => {
-    if (!selectedGroup) return;
+    if (!group) return;
     try {
-      const [detail, athletes] = await Promise.all([getGroup(selectedGroup.id), listAthletes()]);
+      const [detail, athletes] = await Promise.all([getGroup(group.id), listAthletes()]);
       setGroupDetail(detail.data);
       setAllAthletes(athletes.data);
     } catch (err) { console.error(err); }
   };
 
   const fetchData = async () => {
-    if (!selectedGroup) { setDays([]); return; }
+    if (!group) { setDays([]); return; }
     setLoading(true);
     try {
       if (view === 'weekly') {
-        const { data } = await getCoachGroupWeek(selectedGroup.id, format(currentDate, 'yyyy-MM-dd'));
+        const { data } = await getCoachGroupWeek(group.id, format(currentDate, 'yyyy-MM-dd'));
         setDays(data.days);
       } else {
         const monthStart = startOfMonth(currentDate);
@@ -155,7 +139,7 @@ export default function WorkoutPublisherPage() {
         const weeks = [];
         let ws = calStart;
         while (ws <= calEnd) {
-          weeks.push(getCoachGroupWeek(selectedGroup.id, format(ws, 'yyyy-MM-dd')));
+          weeks.push(getCoachGroupWeek(group.id, format(ws, 'yyyy-MM-dd')));
           ws = addDays(ws, 7);
         }
         const results = await Promise.all(weeks);
@@ -168,8 +152,8 @@ export default function WorkoutPublisherPage() {
   // Re-fetch a single day's workouts without disturbing the rest of the grid —
   // used after save/delete inside the modal so the "list view" updates live.
   const refetchDay = async (date) => {
-    if (!selectedGroup) return null;
-    const { data } = await getCoachGroupWeek(selectedGroup.id, date);
+    if (!group) return null;
+    const { data } = await getCoachGroupWeek(group.id, date);
     const updated = data.days.find(d => d.date === date);
     if (!updated) return null;
     setDays((prev) => prev.map(d => d.date === date ? updated : d));
@@ -177,7 +161,7 @@ export default function WorkoutPublisherPage() {
     return updated;
   };
 
-  useEffect(() => { fetchData(); }, [currentDate, view, selectedGroup]);
+  useEffect(() => { fetchData(); }, [currentDate, view, group?.id]);
 
   const emptyForm = {
     workout_type: 'simple',
@@ -195,7 +179,7 @@ export default function WorkoutPublisherPage() {
     setForm(emptyForm);
     setSelectedRecipientIds([]);
     setOverrideMode(null);
-    if (!groupDetail || groupDetail.id !== selectedGroup.id) {
+    if (!groupDetail || groupDetail.id !== group.id) {
       fetchGroupDetail();
     }
   };
@@ -266,7 +250,7 @@ export default function WorkoutPublisherPage() {
 
       // Save (create or update) THIS workout first.
       if (editingId === 'new' || editingId == null) {
-        await createGroupWorkout(selectedGroup.id, selectedDay.date, payload);
+        await createGroupWorkout(group.id, selectedDay.date, payload);
       } else {
         await updateGroupWorkoutById(editingId, payload);
       }
@@ -297,43 +281,6 @@ export default function WorkoutPublisherPage() {
     finally { setSaving(false); }
   };
 
-  const handleCreateGroup = async () => {
-    const name = newGroupName.trim().slice(0, 20);
-    if (!name) return;
-    setCreatingGroup(true);
-    try {
-      const { data } = await createGroup(name);
-      setNewGroupName('');
-      await fetchGroups();
-      setSelectedGroup(data);
-    } catch (err) { console.error(err); }
-    finally { setCreatingGroup(false); }
-  };
-
-  const handleDeleteGroup = async (id) => {
-    try {
-      await deleteGroup(id);
-      if (selectedGroup?.id === id) setSelectedGroup(null);
-      fetchGroups();
-      setShowGroupManager(false);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleAddMember = async (athleteId) => {
-    try {
-      await addMemberToGroup(selectedGroup.id, athleteId);
-      fetchGroupDetail();
-      fetchGroups();
-    } catch (err) { console.error(err); }
-  };
-
-  const handleRemoveMember = async (athleteId) => {
-    try {
-      await removeMemberFromGroup(selectedGroup.id, athleteId);
-      fetchGroupDetail();
-      fetchGroups();
-    } catch (err) { console.error(err); }
-  };
 
   const goBack = () => setCurrentDate(view === 'weekly' ? subWeeks(currentDate, 1) : subMonths(currentDate, 1));
   const goForward = () => setCurrentDate(view === 'weekly' ? addWeeks(currentDate, 1) : addMonths(currentDate, 1));
@@ -434,71 +381,12 @@ export default function WorkoutPublisherPage() {
     );
   };
 
-  const unassignedAthletes = groupDetail
-    ? allAthletes.filter(a => !groupDetail.members.some(m => m.id === a.id) && (!a.training_group_id || a.training_group_id === selectedGroup?.id))
-    : [];
-
-  const athletesInOtherGroups = groupDetail
-    ? allAthletes.filter(a => a.training_group_id && a.training_group_id !== selectedGroup?.id && !groupDetail.members.some(m => m.id === a.id))
-    : [];
+  if (!group) return null;
 
   return (
     <div>
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
-      <h2 className="text-xl font-bold mb-3 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Coach Panel</h2>
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <Link to="/coach/targets" className="text-sm text-blue-200 hover:text-white transition">Targets</Link>
-        <Link to="/coach/dashboard" className="text-sm text-blue-200 hover:text-white transition">Athletes Tracking</Link>
-        <Link to="/coach/race-wizard" className="text-sm text-blue-200 hover:text-white transition">New Race</Link>
-        <Link to="/coach/settings" className="text-sm text-blue-200 hover:text-white transition">Settings</Link>
-      </div>
-
-      <h3 className="text-base font-semibold mb-3 text-white/85">Training Groups</h3>
-
-      {groups.length === 0 && !newGroupName ? (
-        <div className="text-center py-8">
-          <p className="text-sm text-white/55 mb-3">No training groups yet. Create your first one.</p>
-        </div>
-      ) : (
-        <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-          {groups.map((g) => (
-            <button key={g.id} onClick={() => setSelectedGroup(g)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition ${
-                selectedGroup?.id === g.id ? 'bg-blue-500 text-white' : 'bg-white/10 backdrop-blur-sm border border-white/20 text-white/80 hover:bg-white/20'
-              }`}>
-              {g.name} ({g.member_count})
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-2 mb-4">
-        <input
-          value={newGroupName}
-          onChange={(e) => setNewGroupName(e.target.value.slice(0, 20))}
-          onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
-          placeholder="New group name..."
-          maxLength={20}
-          className="flex-1 min-w-[10rem] bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
-        />
-        <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
-          className="shrink-0 bg-white text-black rounded-lg px-4 py-1.5 text-sm font-semibold hover:bg-white/85 disabled:opacity-50">
-          Create
-        </button>
-      </div>
-
-      {selectedGroup && (
+      {group && (
         <>
-          <div className="flex items-center gap-2 mb-3">
-            <h3 className="text-base font-semibold text-white/85">Workouts: {selectedGroup.name}</h3>
-            <button
-              onClick={() => { fetchGroupDetail(); setShowGroupManager(true); }}
-              className="text-xs text-blue-200 hover:text-white hover:underline transition"
-              title="Edit group members and name"
-            >
-              Edit group
-            </button>
-          </div>
 
           <div className="flex items-center justify-between mb-4">
             <button onClick={goBack} className="text-blue-200 hover:text-white text-sm font-medium transition">&larr; Prev</button>
@@ -938,65 +826,6 @@ export default function WorkoutPublisherPage() {
         })()}
       </Modal>
 
-      {/* Group manager modal */}
-      <Modal open={showGroupManager} onClose={() => setShowGroupManager(false)} title={`Manage: ${selectedGroup?.name || ''}`}>
-        {selectedGroup && groupDetail && (
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs font-semibold text-gray-500 mb-2">Members ({groupDetail.members.length})</p>
-              {groupDetail.members.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No members yet</p>
-              ) : (
-                <div className="space-y-1">
-                  {groupDetail.members.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
-                      <span className="text-sm">{m.full_name} <span className="text-xs text-gray-400">({m.gender})</span></span>
-                      <button onClick={() => handleRemoveMember(m.id)} className="text-xs text-red-500 hover:underline">Remove</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {unassignedAthletes.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">Add Athletes</p>
-                <div className="space-y-1">
-                  {unassignedAthletes.map((a) => (
-                    <div key={a.id} className="flex items-center justify-between p-2 rounded-lg bg-gray-50">
-                      <span className="text-sm">{a.full_name}</span>
-                      <button onClick={() => handleAddMember(a.id)} className="text-xs text-blue-600 hover:underline">Add</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {athletesInOtherGroups.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-gray-500 mb-2">In Other Groups (will be moved)</p>
-                <div className="space-y-1">
-                  {athletesInOtherGroups.map((a) => {
-                    const otherGroup = groups.find(g => g.id === a.training_group_id);
-                    return (
-                      <div key={a.id} className="flex items-center justify-between p-2 rounded-lg bg-orange-50">
-                        <span className="text-sm">{a.full_name} <span className="text-xs text-orange-500">({otherGroup?.name})</span></span>
-                        <button onClick={() => handleAddMember(a.id)} className="text-xs text-orange-600 hover:underline">Move here</button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div className="border-t pt-3">
-              <button onClick={() => handleDeleteGroup(selectedGroup.id)}
-                className="w-full text-red-500 text-sm hover:underline">Delete this group</button>
-            </div>
-          </div>
-        )}
-      </Modal>
-
       {/* Expanded month view (publisher) */}
       <Modal
         open={monthExpanded}
@@ -1005,9 +834,9 @@ export default function WorkoutPublisherPage() {
         fullScreen
         panelClassName="bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950"
       >
-        {selectedGroup && (
+        {group && (
           <div>
-            <p className="text-xs text-white/60 -mt-2 mb-3">{selectedGroup.name}</p>
+            <p className="text-xs text-white/60 -mt-2 mb-3">{group.name}</p>
 
             {/* Zoom controls */}
             <div className="flex items-center justify-end gap-2 mb-2">

@@ -9,18 +9,23 @@ from sqlalchemy import func as sa_func
 from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog, WorkoutLogComment
 from ..models.kudos import Kudos
 from ..models.training_group import TrainingGroup
+from ..models.group_coach import GroupCoach
+from ..services.coach_scope import can_coach_target_athlete
 from ..services.notifications import notify, notify_many
 from ..services.prescribed_workouts import backfill_missed
 
 
 def _coach_owns_group(coach: User, db: Session, group_id: int) -> bool:
-    """True if `coach` may act on `group_id`. Admin sees all."""
+    """True if `coach` may act on `group_id` — any coach of the group (main OR
+    assistant) via GroupCoach, not just the legacy owner. Admin sees all."""
     g = db.get(TrainingGroup, group_id)
     if not g:
         return False
     if coach.role == "admin":
         return True
-    return g.coach_id == coach.id
+    return db.query(GroupCoach).filter(
+        GroupCoach.group_id == group_id, GroupCoach.user_id == coach.id
+    ).first() is not None
 
 
 def _coach_owns_athlete(coach: User, db: Session, athlete_id: int) -> bool:
@@ -373,7 +378,8 @@ def upsert_individual_target(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
-    if not _coach_owns_athlete(coach, db, athlete_id):
+    athlete = db.get(User, athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
         raise HTTPException(status_code=404, detail="Athlete not found")
     ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
 
@@ -433,7 +439,8 @@ def delete_individual_target(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
-    if not _coach_owns_athlete(coach, db, athlete_id):
+    athlete = db.get(User, athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
         raise HTTPException(status_code=404, detail="Athlete not found")
     it = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete_id,

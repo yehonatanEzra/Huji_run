@@ -1,6 +1,7 @@
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach, get_active_team_id
@@ -8,6 +9,7 @@ from ..models.team import TeamMembership
 from ..models.user import User
 from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
+from ..models.group_add_request import GroupAddRequest
 
 router = APIRouter(prefix="/groups", tags=["group-coaches"])
 
@@ -47,10 +49,13 @@ def search_coaches(
     db: Annotated[Session, Depends(get_db)],
     active_team_id: Annotated[Optional[int], Depends(get_active_team_id)] = None,
 ):
-    """Search for coach/admin users by name, scoped to the active team."""
+    """Search coach/admin users by name OR username/email (substring), scoped to
+    the active team. Usernames currently hold email-style logins, so this doubles
+    as email search; point it at a dedicated email column once one exists."""
+    like = f"%{q}%"
     query = db.query(User).filter(
         User.role.in_(("coach", "admin")),
-        User.full_name.ilike(f"{q}%"),
+        or_(User.full_name.ilike(like), User.username.ilike(like)),
     )
     if active_team_id is not None:
         member_ids = db.query(TeamMembership.user_id).filter(
@@ -133,6 +138,11 @@ def remove_coach(
     if gc.role == "main":
         raise HTTPException(status_code=400, detail="Cannot remove the main coach; transfer ownership first")
 
+    # An assistant losing the group can no longer have pending adds awaiting approval there.
+    db.query(GroupAddRequest).filter(
+        GroupAddRequest.group_id == group_id,
+        GroupAddRequest.requested_by_id == user_id,
+    ).delete(synchronize_session=False)
     db.delete(gc)
     db.commit()
 

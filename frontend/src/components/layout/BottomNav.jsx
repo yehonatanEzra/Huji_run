@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { incomingRequests } from '../../api/coaching';
+import { pendingApprovalsCount } from '../../api/coach';
 import { listPending } from '../../api/adminReview';
 import { FloatingDock } from '../ui/FloatingDock';
 import { NAV_ICONS } from './navIcons';
@@ -28,12 +29,9 @@ const athleteUnpairedItems = [
 
 const coachItems = [
   { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
-  { to: '/coach/workouts',     label: 'Coach',       icon: '📋', image: '/icons/coach.jpg' },
+  { to: '/coach/group',        label: 'Group',       icon: '👥', image: '/icons/group.jpg', isGroupApprovals: true },
   { to: '/coach/plans',        label: 'Plans',       icon: '🗓️', image: '/icons/plans.jpg' },
   { to: '/coach/requests',     label: 'Requests',    icon: '📥', image: '/icons/requests.jpg', isRequests: true },
-  { to: '/coach/reporting',    label: 'Reporting',   icon: '📈', image: '/icons/reporting.jpg' },
-  { to: '/coach/analytics',    label: 'Analytics',   icon: '📉', image: '/icons/analytics.jpg' },
-  { to: '/coach/group-coaches',label: 'Co-coaches',  icon: '👥', image: '/icons/group-coaches.jpg' },
   { to: '/feed',               label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
@@ -43,12 +41,9 @@ const coachItems = [
 
 const adminItems = [
   { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
-  { to: '/coach/workouts',     label: 'Coach',       icon: '📋', image: '/icons/coach.jpg' },
+  { to: '/coach/group',        label: 'Group',       icon: '👥', image: '/icons/group.jpg', isGroupApprovals: true },
   { to: '/coach/plans',        label: 'Plans',       icon: '🗓️', image: '/icons/plans.jpg' },
   { to: '/coach/requests',     label: 'Requests',    icon: '📥', image: '/icons/requests.jpg', isRequests: true },
-  { to: '/coach/reporting',    label: 'Reporting',   icon: '📈', image: '/icons/reporting.jpg' },
-  { to: '/coach/analytics',    label: 'Analytics',   icon: '📉', image: '/icons/analytics.jpg' },
-  { to: '/coach/group-coaches',label: 'Co-coaches',  icon: '👥', image: '/icons/group-coaches.jpg' },
   { to: '/admin/pending',      label: 'Review',      icon: '⚖️', image: '/icons/review.jpg', isPending: true },
   { to: '/admin/users',        label: 'Users',       icon: '👥', image: '/icons/users.jpg' },
   { to: '/feed',               label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
@@ -64,6 +59,7 @@ export default function BottomNav() {
   const isAdmin = user?.role === 'admin';
   const [pendingCount, setPendingCount] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
+  const [groupApprovalCount, setGroupApprovalCount] = useState(0);
 
   const profilePhotoUrl = user?.id && user?.has_photo
     ? `/api/v1/profile/photo/${user.id}?v=${photoVersion}`
@@ -91,6 +87,17 @@ export default function BottomNav() {
     return () => { alive = false; clearInterval(intv); };
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!isCoachOrAdmin) return;
+    let alive = true;
+    const fetchCount = () => pendingApprovalsCount()
+      .then(({ data }) => alive && setGroupApprovalCount(data.count || 0))
+      .catch(() => {});
+    fetchCount();
+    const intv = setInterval(fetchCount, 30_000);
+    return () => { alive = false; clearInterval(intv); };
+  }, [isCoachOrAdmin]);
+
   const baseItems = isAdmin
     ? adminItems
     : isCoachOrAdmin
@@ -102,7 +109,7 @@ export default function BottomNav() {
     svg: NAV_ICONS[item.to],
     // Line icons everywhere; keep the athlete's real photo only on the Profile tab.
     image: item.to === '/profile' ? profilePhotoUrl : undefined,
-    badge: item.isRequests ? pendingCount : item.isPending ? reviewCount : 0,
+    badge: item.isRequests ? pendingCount : item.isPending ? reviewCount : item.isGroupApprovals ? groupApprovalCount : 0,
   }));
 
   return (

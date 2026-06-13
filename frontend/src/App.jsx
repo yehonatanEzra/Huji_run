@@ -16,16 +16,13 @@ import RaceArchivePage from './pages/athlete/RaceArchivePage';
 import RaceDetailPage from './pages/athlete/RaceDetailPage';
 import HallOfFamePage from './pages/athlete/HallOfFamePage';
 import ProfilePage from './pages/athlete/ProfilePage';
-import WorkoutPublisherPage from './pages/coach/WorkoutPublisherPage';
 import IndividualTargetsPage from './pages/coach/IndividualTargetsPage';
 import TrackingDashboardPage from './pages/coach/TrackingDashboardPage';
 import AthleteProgressPage from './pages/coach/AthleteProgressPage';
 import RaceWizardPage from './pages/coach/RaceWizardPage';
 import SettingsPage from './pages/coach/SettingsPage';
 import TeamSetupPage from './pages/coach/TeamSetupPage';
-import GroupCoachPage from './pages/coach/GroupCoachPage';
-import ReportingOverviewPage from './pages/coach/ReportingOverviewPage';
-import AnalyticsPage from './pages/coach/AnalyticsPage';
+import GroupHubPage from './pages/coach/GroupHubPage';
 import WorkoutTemplatesPage from './pages/coach/WorkoutTemplatesPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
@@ -60,7 +57,8 @@ export default function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/profile" element={<ProfilePage />} />
 
-        <Route path="/coach/workouts" element={<ProtectedRoute requireCoach><WorkoutPublisherPage /></ProtectedRoute>} />
+        {/* Workout authoring moved into the Group hub's Workouts tab */}
+        <Route path="/coach/workouts" element={<Navigate to="/coach/group" replace />} />
         <Route path="/coach/targets" element={<ProtectedRoute requireCoach><IndividualTargetsPage /></ProtectedRoute>} />
         <Route path="/coach/dashboard" element={<ProtectedRoute requireCoach><TrackingDashboardPage /></ProtectedRoute>} />
         <Route path="/coach/athletes/:athleteId/progress" element={<ProtectedRoute requireCoach><AthleteProgressPage /></ProtectedRoute>} />
@@ -69,9 +67,11 @@ export default function App() {
         <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UsersPage /></ProtectedRoute>} />
         <Route path="/coach/settings" element={<ProtectedRoute requireCoach><SettingsPage /></ProtectedRoute>} />
         <Route path="/team/setup" element={<ProtectedRoute requireCoach><TeamSetupPage /></ProtectedRoute>} />
-        <Route path="/coach/group-coaches" element={<ProtectedRoute requireCoach><GroupCoachPage /></ProtectedRoute>} />
-        <Route path="/coach/reporting" element={<ProtectedRoute requireCoach><ReportingOverviewPage /></ProtectedRoute>} />
-        <Route path="/coach/analytics" element={<ProtectedRoute requireCoach><AnalyticsPage /></ProtectedRoute>} />
+        <Route path="/coach/group" element={<ProtectedRoute requireCoach><GroupHubPage /></ProtectedRoute>} />
+        {/* Consolidated into the Group hub — keep old paths working as redirects */}
+        <Route path="/coach/group-coaches" element={<Navigate to="/coach/group" replace />} />
+        <Route path="/coach/reporting" element={<Navigate to="/coach/group" replace />} />
+        <Route path="/coach/analytics" element={<Navigate to="/coach/group" replace />} />
         <Route path="/coach/plans" element={<ProtectedRoute requireCoach><WorkoutTemplatesPage /></ProtectedRoute>} />
       </Route>
 

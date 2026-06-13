@@ -191,26 +191,26 @@ def apply_template(
         d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
         for d in days
     }
-    target_dates = set(targets.values())
-
-    # Idempotency: a prior apply (or manual workouts) on the plan's dates would
-    # otherwise stack duplicates, since GroupWorkout allows many per (group,date).
+    # Override scope: applying wipes EVERY group workout across the plan's whole
+    # weeks_count-week range (start Monday → end of the last week), then writes
+    # the plan fresh — a clean "override all", not just the days the plan fills.
+    range_end_excl = start_monday + timedelta(weeks=t.weeks_count)
+    existing = db.query(GroupWorkout).filter(
+        GroupWorkout.training_group_id == body.group_id,
+        GroupWorkout.date >= start_monday,
+        GroupWorkout.date < range_end_excl,
+    )
+    conflicts = existing.count()
     replaced = 0
-    if target_dates:
-        existing = db.query(GroupWorkout).filter(
-            GroupWorkout.training_group_id == body.group_id,
-            GroupWorkout.date.in_(target_dates),
+    if conflicts and not body.replace:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{conflicts} workout(s) in the plan's {t.weeks_count} week(s) "
+                   f"will be replaced; re-apply with replace=true to overwrite",
         )
-        conflicts = existing.count()
-        if conflicts and not body.replace:
-            raise HTTPException(
-                status_code=409,
-                detail=f"{conflicts} workout(s) already exist on these dates; "
-                       f"re-apply with replace=true to overwrite",
-            )
-        if conflicts:
-            existing.delete(synchronize_session=False)
-            replaced = conflicts
+    if conflicts:
+        existing.delete(synchronize_session=False)
+        replaced = conflicts
 
     created = 0
     last_date = start_monday

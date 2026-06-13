@@ -4,6 +4,8 @@ import {
   deleteTemplate, applyTemplate,
 } from '../../api/workoutTemplates';
 import { listGroups } from '../../api/coach';
+import { getCoachGroupWeek } from '../../api/calendar';
+import { addDays, format } from 'date-fns';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 
@@ -69,8 +71,9 @@ export default function WorkoutTemplatesPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">Workout Plans</h2>
+        <h2 className="text-xl font-bold text-white">Workout Plans</h2>
         <button
           onClick={openNew}
           className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-blue-700"
@@ -83,17 +86,17 @@ export default function WorkoutTemplatesPage() {
       {loading && <Spinner />}
 
       {!loading && templates.length === 0 && (
-        <p className="text-gray-500 text-sm">No plans yet. Create one to reuse a multi-week block across groups.</p>
+        <p className="text-white/70 text-sm">No plans yet. Create one to reuse a multi-week block across groups.</p>
       )}
 
       <div className="space-y-2">
         {templates.map((t) => (
-          <div key={t.id} className="bg-white border rounded-lg px-3 py-3">
+          <div key={t.id} className="bg-black/50 backdrop-blur-sm border border-white/10 rounded-lg px-3 py-3">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="font-medium truncate">{t.name}</p>
-                {t.description && <p className="text-xs text-gray-500 truncate">{t.description}</p>}
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="font-medium truncate text-white">{t.name}</p>
+                {t.description && <p className="text-xs text-white/50 truncate">{t.description}</p>}
+                <p className="text-xs text-white/40 mt-0.5">
                   {t.weeks_count} week{t.weeks_count !== 1 ? 's' : ''} · {t.day_count} workout{t.day_count !== 1 ? 's' : ''}
                 </p>
               </div>
@@ -106,15 +109,18 @@ export default function WorkoutTemplatesPage() {
                 </button>
                 <button
                   onClick={() => openEdit(t.id)}
-                  className="text-xs border border-gray-300 px-2.5 py-1 rounded hover:bg-gray-50"
+                  className="text-xs border border-white/20 text-white/80 px-2.5 py-1 rounded hover:bg-white/10"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(t)}
-                  className="text-xs text-red-500 px-1.5 py-1 rounded hover:bg-red-50"
+                  className="text-xs text-red-600 border border-red-200 px-2.5 py-1 rounded hover:bg-red-50 flex items-center gap-1"
                 >
-                  ✕
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                  Delete
                 </button>
               </div>
             </div>
@@ -183,8 +189,9 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
       <div className="flex items-center justify-between">
-        <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-800">← Back</button>
+        <button onClick={onClose} className="text-sm text-blue-200 hover:text-white">← Back</button>
         <button
           onClick={handleSave}
           disabled={saving}
@@ -365,16 +372,24 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
 
 // ── Apply ─────────────────────────────────────────────────────────────────────
 
+// Monday (week start) of a yyyy-MM-dd date string.
+function mondayOf(dateStr) {
+  const d = new Date(dateStr + 'T00:00');
+  return addDays(d, -((d.getDay() + 6) % 7));
+}
+
 function ApplyModal({ template, onClose }) {
   const [groups, setGroups] = useState([]);
   const [groupId, setGroupId] = useState('');
   const [startDate, setStartDate] = useState('');
+  const [step, setStep] = useState('form'); // form | confirm | diff | result
   const [applying, setApplying] = useState(false);
   const [result, setResult] = useState(null);
-  const [conflict, setConflict] = useState(null); // message when existing workouts would be overwritten
   const [error, setError] = useState('');
+  const [replaceCount, setReplaceCount] = useState(null); // existing workouts in the range
 
   const today = new Date().toISOString().slice(0, 10);
+  const groupName = groups.find((g) => String(g.id) === String(groupId))?.name || '';
 
   useEffect(() => {
     listGroups().then(({ data }) => {
@@ -383,30 +398,40 @@ function ApplyModal({ template, onClose }) {
     }).catch(() => {});
   }, []);
 
-  const doApply = async (replace) => {
+  // Count existing workouts across the plan's range when the confirm step opens.
+  useEffect(() => {
+    if (step !== 'confirm' || !groupId || !startDate) return;
+    setReplaceCount(null);
+    const sm = mondayOf(startDate);
+    const rangeEnd = addDays(sm, template.weeks_count * 7);
+    Promise.all(
+      Array.from({ length: template.weeks_count + 1 }, (_, w) =>
+        getCoachGroupWeek(Number(groupId), format(addDays(sm, w * 7), 'yyyy-MM-dd'))
+      )
+    ).then((res) => {
+      let n = 0;
+      res.forEach(({ data }) => data.days.forEach((day) => {
+        const dt = new Date(day.date + 'T00:00');
+        if (dt >= sm && dt < rangeEnd) n += (day.group_workouts || []).length;
+      }));
+      setReplaceCount(n);
+    }).catch(() => setReplaceCount(0));
+  }, [step, groupId, startDate]);
+
+  const doApply = async () => {
     setApplying(true);
     setError('');
     try {
       const { data } = await applyTemplate(template.id, {
-        group_id: Number(groupId), start_date: startDate, replace,
+        group_id: Number(groupId), start_date: startDate, replace: true,
       });
       setResult(data);
-      setConflict(null);
+      setStep('result');
     } catch (err) {
-      // 409 = existing workouts on the plan's dates; ask before overwriting.
-      if (err.response?.status === 409) {
-        setConflict(err.response.data?.detail || 'Existing workouts on these dates will be replaced.');
-      } else {
-        setError(err.response?.data?.detail || 'Failed to apply');
-      }
+      setError(err.response?.data?.detail || 'Failed to apply');
     } finally {
       setApplying(false);
     }
-  };
-
-  const handleApply = () => {
-    if (!groupId || !startDate) return;
-    doApply(false); // probe first; backend 409s if anything would be overwritten
   };
 
   return (
@@ -416,69 +441,151 @@ function ApplyModal({ template, onClose }) {
         {template.weeks_count} weeks · {template.day_count} workouts. The start date snaps to its Monday.
       </p>
 
-      {result ? (
+      {step === 'result' ? (
         <div className="space-y-3">
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-800">
             Created {result.created} workouts from {result.start_monday} to {result.end_date}
             {result.replaced > 0 && `, replacing ${result.replaced} existing`}.
           </div>
-          <button onClick={onClose} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700">
-            Done
-          </button>
+          <button onClick={onClose} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700">Done</button>
         </div>
-      ) : conflict ? (
+      ) : step === 'diff' ? (
+        <DiffCalendar
+          templateId={template.id}
+          weeksCount={template.weeks_count}
+          groupId={Number(groupId)}
+          startMonday={mondayOf(startDate)}
+          onBack={() => setStep('confirm')}
+          onApply={doApply}
+          applying={applying}
+        />
+      ) : step === 'confirm' ? (
         <div className="space-y-3">
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
-            {conflict} Replace them?
+            {replaceCount === null
+              ? 'Checking existing workouts…'
+              : replaceCount > 0
+                ? <>This <strong>replaces {replaceCount} existing workout{replaceCount !== 1 ? 's' : ''}</strong> in {groupName ? `“${groupName}”` : 'the group'} across the plan's {template.weeks_count} week{template.weeks_count !== 1 ? 's' : ''} (from the Monday of {startDate}), then writes the plan. This can't be undone.</>
+                : <>No existing workouts in {groupName ? `“${groupName}”` : 'the group'} over the plan's {template.weeks_count} week{template.weeks_count !== 1 ? 's' : ''} — the plan will be added cleanly.</>}
           </div>
+          {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2">{error}</p>}
           <div className="flex gap-2">
-            <button
-              onClick={() => doApply(true)}
-              disabled={applying}
-              className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-            >
-              {applying ? 'Replacing…' : 'Replace & apply'}
-            </button>
-            <button
-              onClick={() => setConflict(null)}
-              className="px-4 border border-gray-300 rounded-lg py-2 text-sm hover:bg-gray-50"
-            >
-              Cancel
+            <button onClick={() => setStep('diff')} className="px-4 border border-blue-300 text-blue-700 rounded-lg py-2 text-sm font-medium hover:bg-blue-50">See diff</button>
+            <button onClick={doApply} disabled={applying} className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+              {applying ? 'Applying…' : 'Apply & override'}
             </button>
           </div>
+          <button onClick={() => setStep('form')} className="w-full text-sm text-gray-500 hover:text-gray-700">Back</button>
         </div>
       ) : (
         <div className="space-y-3">
-          {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2">{error}</p>}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Group</label>
-            <select
-              value={groupId}
-              onChange={(e) => setGroupId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+            <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Start date (week 1, Monday)</label>
-            <input
-              type="date"
-              value={startDate}
-              min={today}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <button
-            onClick={handleApply}
-            disabled={applying || !groupId || !startDate}
-            className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {applying ? 'Applying…' : 'Apply to calendar'}
+          <button onClick={() => { if (groupId && startDate) setStep('confirm'); }} disabled={!groupId || !startDate} className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            Apply to calendar
           </button>
         </div>
       )}
     </Modal>
+  );
+}
+
+// Now / After comparison for a plan apply. "After" = only the plan's workouts
+// (the whole range is wiped first); changed days are flagged.
+function DiffCalendar({ templateId, weeksCount, groupId, startMonday, onBack, onApply, applying }) {
+  const [oldMap, setOldMap] = useState(null);
+  const [newMap, setNewMap] = useState(null);
+  const [view, setView] = useState('after'); // now | after
+
+  useEffect(() => {
+    let alive = true;
+    // NEW: materialize the template days onto calendar dates.
+    getTemplate(templateId).then(({ data }) => {
+      if (!alive) return;
+      const m = {};
+      data.days.forEach((d) => {
+        const dt = addDays(startMonday, (d.week_number - 1) * 7 + d.day_of_week);
+        m[format(dt, 'yyyy-MM-dd')] = { workout_type: d.workout_type, title: d.title || typeMeta(d.workout_type).label };
+      });
+      setNewMap(m);
+    }).catch(() => setNewMap({}));
+
+    // OLD: current group workouts across the plan's weeks. getCoachGroupWeek
+    // returns Sun–Sat weeks while the plan is Mon–Sun, so fetch one extra week
+    // to cover the plan's trailing Sundays (extra dates are simply ignored).
+    Promise.all(
+      Array.from({ length: weeksCount + 1 }, (_, w) =>
+        getCoachGroupWeek(groupId, format(addDays(startMonday, w * 7), 'yyyy-MM-dd'))
+      )
+    ).then((res) => {
+      if (!alive) return;
+      const m = {};
+      res.forEach(({ data }) => data.days.forEach((day) => {
+        const list = day.group_workouts || [];
+        if (list.length) {
+          const gw = list[list.length - 1]; // newest shown
+          m[day.date] = { workout_type: gw.workout_type, title: gw.title || typeMeta(gw.workout_type).label };
+        }
+      }));
+      setOldMap(m);
+    }).catch(() => setOldMap({}));
+
+    return () => { alive = false; };
+  }, [templateId, weeksCount, groupId, startMonday]);
+
+  if (!oldMap || !newMap) return <div className="py-8"><Spinner /></div>;
+
+  const active = view === 'now' ? oldMap : newMap;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+        {[['now', 'Now'], ['after', 'After applying']].map(([k, label]) => (
+          <button key={k} onClick={() => setView(k)} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${view === k ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{label}</button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-[10px] text-gray-400 text-center font-medium">
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i}>{d}</div>)}
+      </div>
+      <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+        {Array.from({ length: weeksCount }, (_, w) => (
+          <div key={w} className="grid grid-cols-7 gap-1">
+            {Array.from({ length: 7 }, (_, i) => {
+              const dt = addDays(startMonday, w * 7 + i);
+              const key = format(dt, 'yyyy-MM-dd');
+              const cell = active[key];
+              const oldC = oldMap[key];
+              const newC = newMap[key];
+              const changed = (!!oldC !== !!newC) || (oldC && newC && (oldC.workout_type !== newC.workout_type || oldC.title !== newC.title));
+              const tm = cell ? typeMeta(cell.workout_type) : null;
+              return (
+                <div key={key} className={`rounded-md border p-1 min-h-[3.2rem] ${changed ? 'border-amber-400 ring-1 ring-amber-300' : 'border-gray-200'} ${cell ? 'bg-white' : 'bg-gray-50'}`}>
+                  <div className="text-[9px] text-gray-400">{format(dt, 'd')}</div>
+                  {tm && <span className={`inline-block text-[8px] px-1 rounded ${tm.color} font-medium`}>{tm.label}</span>}
+                  {cell?.title && <p className="text-[8px] text-gray-600 leading-tight line-clamp-2 mt-0.5">{cell.title}</p>}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-gray-400">Amber-outlined days change. “After” shows only the plan’s workouts — everything else in these weeks is cleared.</p>
+
+      <div className="flex gap-2">
+        <button onClick={onBack} className="px-4 border border-gray-300 rounded-lg py-2 text-sm hover:bg-gray-50">Back</button>
+        <button onClick={onApply} disabled={applying} className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+          {applying ? 'Applying…' : 'Apply & override'}
+        </button>
+      </div>
+    </div>
   );
 }

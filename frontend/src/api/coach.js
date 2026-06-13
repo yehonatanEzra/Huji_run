@@ -30,6 +30,19 @@ export const addMemberToGroup = (groupId, athleteId) =>
 export const removeMemberFromGroup = (groupId, athleteId) =>
   client.delete(`/coach/groups/${groupId}/members/${athleteId}`);
 
+// Group-add approvals (assistant-initiated, main-coach-resolved)
+export const listPendingAdds = (groupId) =>
+  client.get(`/coach/groups/${groupId}/pending`);
+
+export const approveAdd = (groupId, reqId) =>
+  client.post(`/coach/groups/${groupId}/pending/${reqId}/approve`);
+
+export const rejectAdd = (groupId, reqId) =>
+  client.post(`/coach/groups/${groupId}/pending/${reqId}/reject`);
+
+export const pendingApprovalsCount = () =>
+  client.get('/coach/pending-approvals-count');
+
 export const getAthleteProfile = (athleteId) =>
   client.get(`/coach/athletes/${athleteId}/profile`);
 

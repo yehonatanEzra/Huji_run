@@ -60,7 +60,7 @@ def upgrade() -> None:
     if existing is None:
         bind.execute(text(
             "INSERT INTO teams (name, description, is_public, created_by_id) "
-            "VALUES ('Huji Run', 'Hebrew University running team', 0, :owner_id)"
+            "VALUES ('Huji Run', 'Hebrew University running team', false, :owner_id)"
         ), {"owner_id": owner_id})
 
     team_row = bind.execute(text(

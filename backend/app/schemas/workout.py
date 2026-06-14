@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -78,6 +78,7 @@ class WorkoutLogOut(BaseModel):
     notes: Optional[str]
     manual_override: bool = False
     is_auto_marked: bool = False
+    logged_at: Optional[datetime] = None
     kudos_count: int = 0
     has_kudos: bool = False
     reactions: List[ReactionItem] = []

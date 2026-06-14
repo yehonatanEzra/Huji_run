@@ -28,6 +28,7 @@ const athleteUnpairedItems = [
 ];
 
 const coachItems = [
+  { to: '/coach/home',         label: 'Home',        icon: '🏠', image: '/icons/home.jpg' },
   { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
   { to: '/coach/group',        label: 'Group',       icon: '👥', image: '/icons/group.jpg', isGroupApprovals: true },
   { to: '/coach/plans',        label: 'Plans',       icon: '🗓️', image: '/icons/plans.jpg' },
@@ -40,6 +41,7 @@ const coachItems = [
 ];
 
 const adminItems = [
+  { to: '/coach/home',         label: 'Home',        icon: '🏠', image: '/icons/home.jpg' },
   { to: '/coach/dashboard',    label: 'Tracking',    icon: '📊', image: '/icons/tracking.jpg' },
   { to: '/coach/group',        label: 'Group',       icon: '👥', image: '/icons/group.jpg', isGroupApprovals: true },
   { to: '/coach/plans',        label: 'Plans',       icon: '🗓️', image: '/icons/plans.jpg' },

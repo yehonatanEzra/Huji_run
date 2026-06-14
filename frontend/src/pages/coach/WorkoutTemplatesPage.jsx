@@ -84,7 +84,7 @@ export default function WorkoutTemplatesPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">Workout Plans</h2>
         <button
@@ -203,7 +203,7 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
       {/* Top action bar */}
       <div className="flex items-center justify-between">
         <button onClick={onClose} className="text-white/60 hover:text-white flex items-center gap-2 transition-colors text-sm">

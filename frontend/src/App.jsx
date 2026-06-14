@@ -22,6 +22,7 @@ import RaceWizardPage from './pages/coach/RaceWizardPage';
 import SettingsPage from './pages/coach/SettingsPage';
 import TeamSetupPage from './pages/coach/TeamSetupPage';
 import GroupHubPage from './pages/coach/GroupHubPage';
+import CoachHomePage from './pages/coach/CoachHomePage';
 import WorkoutTemplatesPage from './pages/coach/WorkoutTemplatesPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
@@ -30,7 +31,7 @@ import AboutPage from './pages/AboutPage';
 export default function App() {
   const { user } = useAuth();
   const landingFor = (u) => {
-    if (u?.role === 'coach' || u?.role === 'admin') return '/coach/dashboard';
+    if (u?.role === 'coach' || u?.role === 'admin') return '/coach/home';
     // Athletes without a coach land on the pairing page.
     if (u?.role === 'athlete' && !u?.coach_id) return '/find-coach';
     return '/home';
@@ -59,6 +60,7 @@ export default function App() {
         {/* Workout authoring moved into the Group hub's Workouts tab */}
         <Route path="/coach/workouts" element={<Navigate to="/coach/group" replace />} />
         <Route path="/coach/targets" element={<ProtectedRoute requireCoach><IndividualTargetsPage /></ProtectedRoute>} />
+        <Route path="/coach/home" element={<ProtectedRoute requireCoach><CoachHomePage /></ProtectedRoute>} />
         <Route path="/coach/dashboard" element={<ProtectedRoute requireCoach><TrackingDashboardPage /></ProtectedRoute>} />
         <Route path="/coach/athletes/:athleteId/progress" element={<ProtectedRoute requireCoach><AthleteProgressPage /></ProtectedRoute>} />
         <Route path="/coach/athletes/:athleteId/volume" element={<ProtectedRoute requireCoach><VolumePage /></ProtectedRoute>} />

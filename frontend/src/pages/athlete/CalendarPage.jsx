@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, subYears, addYears, isSameMonth } from 'date-fns';
-import { getWeek, submitLog } from '../../api/calendar';
+import { getWeek, submitLog, deleteLog } from '../../api/calendar';
 import { getMyStravaActivities } from '../../api/strava';
 import { useAuth } from '../../contexts/AuthContext';
 import StravaActivityDetail from '../../components/StravaActivityDetail';
@@ -30,6 +30,7 @@ export default function CalendarPage() {
   // When a day is opened from the expanded month view, closing it should return
   // there rather than dropping back to the compact calendar.
   const [returnToExpanded, setReturnToExpanded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(0.75);
   const expandedScrollRef = useRef(null);
   const pinchRef = useRef({ startDist: 0, startZoom: 1 });
@@ -188,6 +189,21 @@ export default function CalendarPage() {
         payload.distance_km = parseFloat(logForm.distance_km);
       }
       await submitLog(payload);
+      closeDay();
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteLog = async () => {
+    if (!selectedDay?.workout_log) return;
+    setSaving(true);
+    try {
+      await deleteLog(selectedDay.date);
+      setConfirmDelete(false);
       closeDay();
       fetchData();
     } catch (err) {
@@ -540,6 +556,9 @@ export default function CalendarPage() {
                   ) : (
                     gw.content && <p className="text-sm whitespace-pre-wrap text-white/85">{gw.content}</p>
                   )}
+                  {gw.distance_km > 0 && (
+                    <p className="text-sm"><span className="text-xs uppercase tracking-wider text-white/40">Distance · </span><span className="font-semibold text-[#c0c1ff]">{Number(gw.distance_km.toFixed(1))} km</span></p>
+                  )}
                 </div>
               );
             })()}
@@ -579,6 +598,9 @@ export default function CalendarPage() {
                     </div>
                   ) : (
                     t.note && <p className="text-sm whitespace-pre-wrap text-white/85">{t.note}</p>
+                  )}
+                  {t.distance_km > 0 && (
+                    <p className="text-sm"><span className="text-xs uppercase tracking-wider text-white/40">Distance · </span><span className="font-semibold text-[#c0c1ff]">{Number(t.distance_km.toFixed(1))} km</span></p>
                   )}
                 </div>
               );
@@ -672,6 +694,15 @@ export default function CalendarPage() {
               >
                 {saving ? 'Saving...' : 'Save Report'}
               </button>
+              {selectedDay.workout_log && (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={saving}
+                  className="w-full mt-2 rounded-full border border-red-400/30 bg-red-500/10 text-red-300 py-2.5 text-sm font-semibold hover:bg-red-500/20 hover:text-red-200 active:scale-95 disabled:opacity-50 transition"
+                >
+                  Delete report
+                </button>
+              )}
             </div>
 
             {user?.strava_connected && (
@@ -698,6 +729,26 @@ export default function CalendarPage() {
             {selectedDay.workout_log?.id && (
               <WorkoutCommentThread workoutLogId={selectedDay.workout_log.id} />
             )}
+          </div>
+        )}
+
+        {/* Delete-report confirm dialog */}
+        {confirmDelete && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={() => !saving && setConfirmDelete(false)}>
+            <div className="bg-[#161616]/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl w-full max-w-xs p-5" onClick={(e) => e.stopPropagation()}>
+              <p className="text-base font-bold text-white">Delete report?</p>
+              <p className="text-sm text-white/55 mt-1">This removes your logged result for this day. You can report again anytime.</p>
+              <div className="flex gap-2 mt-4">
+                <button onClick={() => setConfirmDelete(false)} disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl border border-white/20 text-white/80 text-sm font-semibold hover:bg-white/10 disabled:opacity-50 transition">
+                  Cancel
+                </button>
+                <button onClick={handleDeleteLog} disabled={saving}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500/90 text-white text-sm font-bold hover:bg-red-500 active:scale-[0.98] disabled:opacity-50 transition">
+                  {saving ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </Modal>

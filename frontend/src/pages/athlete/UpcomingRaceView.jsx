@@ -130,45 +130,49 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
   return (
     <div className="space-y-4">
       {/* My registration card */}
-      <div className="bg-white border border-blue-100 rounded-xl p-4">
-        <p className="text-xs font-semibold text-gray-500 mb-2">Your registration</p>
+      <div className="bg-[#161616]/70 backdrop-blur-2xl border border-white/10 rounded-2xl p-4">
+        <p className="text-xs font-semibold text-white/50 mb-2">Your registration</p>
         {myReg ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm">
+              <p className="text-sm text-white/80">
                 Registered for:{' '}
-                <span className="font-semibold text-blue-700">
+                <span className="font-semibold text-[#c0c1ff]">
                   {myReg.heat_id ? race.heats.find(h => h.id === myReg.heat_id)?.label || '—' : 'No heat selected'}
                 </span>
               </p>
-              <button onClick={handleUnregisterMe} disabled={savingMine} className="text-xs text-red-600 underline">
+              <button onClick={handleUnregisterMe} disabled={savingMine} className="text-xs text-red-300 hover:text-red-200 underline">
                 Cancel
               </button>
             </div>
-            <select
-              value={myReg.heat_id || ''}
-              onChange={(e) => handleChangeMyHeat(e.target.value)}
-              disabled={savingMine}
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
-            >
-              <option value="">No specific heat</option>
-              {race.heats.map(h => <option key={h.id} value={h.id}>{heatTitle(h)}</option>)}
-            </select>
+            {race.heats.length > 0 && (
+              <select
+                value={myReg.heat_id || ''}
+                onChange={(e) => handleChangeMyHeat(e.target.value)}
+                disabled={savingMine}
+                className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
+              >
+                <option value="">No specific heat</option>
+                {race.heats.map(h => <option key={h.id} value={h.id}>{heatTitle(h)}</option>)}
+              </select>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
-            <select
-              value={selectedHeatId}
-              onChange={(e) => setSelectedHeatId(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm"
-            >
-              <option value="">No specific heat</option>
-              {race.heats.map(h => <option key={h.id} value={h.id}>{heatTitle(h)}</option>)}
-            </select>
+            {race.heats.length > 0 && (
+              <select
+                value={selectedHeatId}
+                onChange={(e) => setSelectedHeatId(e.target.value)}
+                className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
+              >
+                <option value="">No specific heat</option>
+                {race.heats.map(h => <option key={h.id} value={h.id}>{heatTitle(h)}</option>)}
+              </select>
+            )}
             <button
               onClick={handleRegisterSelf}
               disabled={savingMine}
-              className="w-full bg-blue-600 text-white text-sm py-2 rounded-lg font-medium disabled:opacity-50"
+              className="w-full bg-[#c0c1ff] text-[#1000a9] text-sm py-2 rounded-lg font-bold hover:bg-[#a9aaff] disabled:opacity-50 transition"
             >
               {savingMine ? 'Registering…' : "I'm in"}
             </button>

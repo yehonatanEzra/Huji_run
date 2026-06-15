@@ -6,6 +6,9 @@ export const getWeek = (date, groupId) =>
 export const submitLog = (data) =>
   client.post('/calendar/log', data);
 
+export const deleteLog = (day) =>
+  client.delete(`/calendar/log/${day}`);
+
 // Coach: full list of workouts for the week, grouped by day. Returns
 //   { week_start, days: [{date, group_workouts: [GroupWorkoutOut]}] }
 export const getCoachGroupWeek = (groupId, date) =>

@@ -213,6 +213,22 @@ def submit_log(
     return log
 
 
+@router.delete("/log/{day}", status_code=204)
+def delete_log(
+    day: date,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Athlete cancels their own report for a day (e.g. logged by mistake)."""
+    log = db.query(WorkoutLog).filter(
+        WorkoutLog.athlete_id == current_user.id,
+        WorkoutLog.date == day,
+    ).first()
+    if log:
+        db.delete(log)
+        db.commit()
+
+
 # ── Coach endpoints ───────────────────────────────────────────────────────────
 
 ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}

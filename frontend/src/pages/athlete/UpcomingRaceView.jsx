@@ -54,13 +54,20 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
     }
   }, [isCoach, showAddOther]);
 
+  // Athletes must pick a real heat — default the pickers to the first heat.
+  useEffect(() => {
+    if (race.heats.length) {
+      setSelectedHeatId((v) => v || String(race.heats[0].id));
+      setOtherHeatId((v) => v || String(race.heats[0].id));
+    }
+  }, [race.heats]);
+
   const myReg = regs.find(r => r.user_id === user.id);
 
   async function handleRegisterSelf() {
     setSavingMine(true);
     try {
       await register(race.id, { heat_id: selectedHeatId ? parseInt(selectedHeatId) : null });
-      setSelectedHeatId('');
       load();
     } finally {
       setSavingMine(false);
@@ -97,7 +104,6 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
         heat_id: otherHeatId ? parseInt(otherHeatId) : null,
       });
       setOtherUserId('');
-      setOtherHeatId('');
       setShowAddOther(false);
       load();
     } catch (err) {
@@ -152,7 +158,6 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
                 disabled={savingMine}
                 className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
               >
-                <option value="">No specific heat</option>
                 {race.heats.map(h => <option key={h.id} value={h.id}>{heatTitle(h)}</option>)}
               </select>
             )}
@@ -165,7 +170,6 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
                 onChange={(e) => setSelectedHeatId(e.target.value)}
                 className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-2 py-1.5 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
               >
-                <option value="">No specific heat</option>
                 {race.heats.map(h => <option key={h.id} value={h.id}>{heatTitle(h)}</option>)}
               </select>
             )}
@@ -202,7 +206,7 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
 
       {/* Registered athletes — grouped */}
       <div className="space-y-3">
-        <p className="text-xs font-semibold text-gray-500">Registered athletes ({regs.length})</p>
+        <p className="text-xs font-semibold text-white/50">Registered athletes ({regs.length})</p>
         {race.heats.map(h => (
           <GroupSection
             key={h.id}
@@ -212,12 +216,14 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
             onRemove={handleRemoveOther}
           />
         ))}
-        <GroupSection
-          title="No heat selected"
-          items={grouped['unassigned']}
-          isCoach={isCoach}
-          onRemove={handleRemoveOther}
-        />
+        {grouped['unassigned'].length > 0 && (
+          <GroupSection
+            title={race.heats.length ? 'No heat selected' : 'Registered'}
+            items={grouped['unassigned']}
+            isCoach={isCoach}
+            onRemove={handleRemoveOther}
+          />
+        )}
       </div>
 
       {/* Coach: register others modal */}
@@ -238,7 +244,6 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
             onChange={(e) => setOtherHeatId(e.target.value)}
             className="w-full border rounded-lg px-3 py-2 text-sm"
           >
-            <option value="">No specific heat</option>
             {race.heats.map(h => <option key={h.id} value={h.id}>{heatTitle(h)}</option>)}
           </select>
           <button
@@ -266,22 +271,22 @@ export default function UpcomingRaceView({ race, onResultsAdded, refreshRace }) 
 
 function GroupSection({ title, items, isCoach, onRemove }) {
   return (
-    <div className="bg-white border rounded-xl">
-      <div className="px-3 py-2 border-b bg-gray-50 flex items-center justify-between">
-        <p className="text-sm font-semibold">{title}</p>
-        <span className="text-xs text-gray-500">{items.length}</span>
+    <div className="bg-[#161616]/70 backdrop-blur-2xl border border-white/10 rounded-2xl overflow-hidden">
+      <div className="px-3 py-2 border-b border-white/10 bg-white/5 flex items-center justify-between">
+        <p className="text-sm font-semibold text-white">{title}</p>
+        <span className="text-xs text-white/50">{items.length}</span>
       </div>
       {items.length === 0 ? (
-        <p className="text-xs text-gray-400 italic px-3 py-2">No one yet</p>
+        <p className="text-xs text-white/40 italic px-3 py-2">No one yet</p>
       ) : (
-        <ul className="divide-y">
+        <ul className="divide-y divide-white/5">
           {items.map(r => (
-            <li key={r.id} className="px-3 py-2 text-sm flex items-center justify-between">
+            <li key={r.id} className="px-3 py-2 text-sm flex items-center justify-between text-white/85">
               <span>{r.athlete_name}</span>
               {isCoach && (
                 <button
                   onClick={() => onRemove(r.user_id)}
-                  className="text-xs text-red-500 hover:underline"
+                  className="text-xs text-red-300 hover:text-red-200 hover:underline"
                 >
                   Remove
                 </button>

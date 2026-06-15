@@ -13,6 +13,7 @@ class TemplateDayIn(BaseModel):
     warmup: Optional[str] = None
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
+    distance_km: Optional[float] = None
 
     @field_validator("day_of_week")
     @classmethod

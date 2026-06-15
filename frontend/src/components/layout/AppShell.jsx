@@ -8,7 +8,7 @@ import { getMyTeams } from '../../api/teams';
 
 const ROOT_PATHS = new Set([
   '/home', '/find-coach', '/calendar', '/races', '/hall-of-fame', '/health-wellness',
-  '/profile', '/feed', '/coach/dashboard', '/coach/requests', '/admin/pending',
+  '/profile', '/feed', '/coach/home', '/coach/dashboard', '/coach/requests', '/admin/pending',
 ]);
 
 function TeamSwitcherModal({ teams, currentTeamId, onSwitch, onClose }) {

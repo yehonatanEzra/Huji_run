@@ -757,6 +757,7 @@ def get_athlete_week(
                 "warmup": target.warmup,
                 "main_session": target.main_session,
                 "cooldown": target.cooldown,
+                "distance_km": target.distance_km,
             } if target else None,
             "group_workout": {
                 "content": gw.content,
@@ -765,6 +766,7 @@ def get_athlete_week(
                 "warmup": gw.warmup,
                 "main_session": gw.main_session,
                 "cooldown": gw.cooldown,
+                "distance_km": gw.distance_km,
             } if gw and (gw.content or gw.warmup or gw.main_session or gw.cooldown) else None,
         })
 

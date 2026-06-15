@@ -13,6 +13,7 @@ import {
 } from '../../api/groupCoach';
 import { getTeamVolume, getTeamCompletion, getTypeBreakdown } from '../../api/analytics';
 import { getReportingOverview, getLoadOverview } from '../../api/reporting';
+import { getMyTeams, updateTeam } from '../../api/teams';
 import GroupWorkoutsTab from './GroupWorkoutsTab';
 import AthleteLogModal from '../../components/coach/AthleteLogModal';
 
@@ -127,7 +128,7 @@ function HubBackground() {
   return (
     <>
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
     </>
   );
 }
@@ -685,8 +686,78 @@ function SettingsPanel({ group, onClose, onChanged }) {
         <p className="text-sm text-white/50">Only the main coach can rename or delete this group.</p>
       )}
       <div className="mt-6 pt-4 border-t border-white/10">
+        <TeamPublicSection />
+      </div>
+
+      <div className="mt-6 pt-4 border-t border-white/10">
         <CreateGroupButton onCreated={() => { onChanged(); onClose(); }} />
       </div>
+    </div>
+  );
+}
+
+function TeamPublicSection() {
+  const { user } = useAuth();
+  const teamId = user?.active_team_id;
+  const [isPublic, setIsPublic] = useState(null); // null = loading/unknown
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!teamId) return;
+    getMyTeams()
+      .then(({ data }) => {
+        const t = (data || []).find((x) => x.id === teamId);
+        setIsPublic(t ? !!t.is_public : false);
+      })
+      .catch(() => setIsPublic(false));
+  }, [teamId]);
+
+  const toggle = async () => {
+    if (busy || isPublic === null) return;
+    setBusy(true);
+    try {
+      const { data } = await updateTeam(teamId, { is_public: !isPublic });
+      setIsPublic(!!data.is_public);
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not update');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const link = `${window.location.origin}/t/${teamId}`;
+  const copy = () => {
+    navigator.clipboard?.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+
+  if (!teamId) return null;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">Public team profile</p>
+          <p className="text-[11px] text-white/45">A shareable page anyone can view (no login).</p>
+        </div>
+        <button
+          onClick={toggle}
+          disabled={busy || isPublic === null}
+          className={`shrink-0 w-12 h-7 rounded-full transition relative disabled:opacity-50 ${isPublic ? 'bg-[#c0c1ff]' : 'bg-white/15'}`}
+          aria-pressed={!!isPublic}
+        >
+          <span className={`absolute top-0.5 ${isPublic ? 'left-6' : 'left-0.5'} w-6 h-6 rounded-full bg-white transition-all`} />
+        </button>
+      </div>
+
+      {isPublic && (
+        <div className="mt-3 flex items-center gap-2">
+          <input readOnly value={link} className={`${GLASS_INPUT} text-[11px]`} onFocus={(e) => e.target.select()} />
+          <button onClick={copy} className="shrink-0 bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold px-3 py-2 rounded-xl transition">
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

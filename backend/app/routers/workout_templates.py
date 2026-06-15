@@ -60,6 +60,7 @@ def _write_days(db: Session, template: WorkoutTemplate, days) -> None:
             warmup=_clean(d.warmup),
             main_session=_clean(d.main_session),
             cooldown=_clean(d.cooldown),
+            distance_km=d.distance_km,
         ))
 
 
@@ -227,6 +228,7 @@ def apply_template(
             warmup=d.warmup,
             main_session=d.main_session,
             cooldown=d.cooldown,
+            distance_km=d.distance_km,
             created_by=coach.id,
         ))
         created += 1

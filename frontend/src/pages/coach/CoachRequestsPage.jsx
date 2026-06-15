@@ -57,7 +57,7 @@ export default function CoachRequestsPage() {
   return (
     <div>
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.65) 0%, rgba(0,0,0,0.72) 100%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
       <h2 className="text-xl font-bold mb-4 text-white [text-shadow:0_1px_6px_rgba(0,0,0,0.6)]">Join requests</h2>
       {requests.length === 0 ? (
         <div className="text-center py-12 text-sm text-white/60">
@@ -105,16 +105,16 @@ export default function CoachRequestsPage() {
           aria-modal="true"
         >
           <div
-            className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl p-5 sm:p-6"
+            className="bg-[#161616]/90 backdrop-blur-2xl border border-white/10 w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl p-5 sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xl shrink-0">✕</div>
+              <div className="w-10 h-10 rounded-full bg-red-500/15 text-red-300 border border-red-400/30 flex items-center justify-center text-xl shrink-0">✕</div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-white">
                   Decline {declineTarget.athlete_name}'s request?
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-white/60 mt-1">
                   They won't be added to your roster. They can send another request to you (or to a different coach) later.
                 </p>
               </div>
@@ -123,14 +123,14 @@ export default function CoachRequestsPage() {
               <button
                 onClick={() => setDeclineTarget(null)}
                 disabled={acting}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold active:bg-gray-50 disabled:opacity-50"
+                className="flex-1 py-3 rounded-xl border border-white/20 text-white/80 font-semibold hover:bg-white/10 disabled:opacity-50 transition"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDecline}
                 disabled={acting}
-                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-semibold active:bg-red-700 shadow-sm disabled:opacity-50"
+                className="flex-1 py-3 rounded-xl bg-red-500/90 text-white font-semibold hover:bg-red-500 active:scale-[0.98] disabled:opacity-50 transition"
               >
                 {acting ? 'Declining…' : 'Decline'}
               </button>

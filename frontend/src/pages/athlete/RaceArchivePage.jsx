@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { listRaces, listMyRaces } from '../../api/races';
 import Spinner from '../../components/ui/Spinner';
+import RaceCalendarView from './RaceCalendarView';
 
 const TAB = 'flex-1 py-1.5 text-xs font-bold uppercase tracking-wider transition rounded-full';
 const TAB_ACTIVE = 'bg-[#c0c1ff] text-[#1000a9]';
@@ -19,6 +20,7 @@ export default function RaceArchivePage() {
   const [statusTab, setStatusTab] = useState('upcoming');
   const [scopeTab, setScopeTab] = useState('all');
   const [moderationTab, setModerationTab] = useState('all');
+  const [viewMode, setViewMode] = useState('list'); // list | calendar
   const isCoachOrAdmin = user?.role === 'coach' || user?.role === 'admin';
 
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function RaceArchivePage() {
   return (
     <div>
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg-races.jpg)' }} />
-      <div className="fixed inset-0 -z-10" style={{ background: (user?.role === 'coach' || user?.role === 'admin') ? 'linear-gradient(180deg, rgba(19,19,20,0.68) 20%, rgba(0,0,0,0.78) 80%)' : 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: (user?.role === 'coach' || user?.role === 'admin') ? 'linear-gradient(180deg, rgba(19,19,20,0.43) 20%, rgba(0,0,0,0.54) 80%)' : 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-[#e5e2e3]">Races</h2>
@@ -54,6 +56,15 @@ export default function RaceArchivePage() {
           </button>
         )}
       </div>
+
+      {/* List / Calendar view toggle */}
+      <div className={TAB_ROW}>
+        <button onClick={() => setViewMode('list')} className={`${TAB} ${viewMode === 'list' ? TAB_ACTIVE : TAB_INACTIVE}`}>List</button>
+        <button onClick={() => setViewMode('calendar')} className={`${TAB} ${viewMode === 'calendar' ? TAB_ACTIVE : TAB_INACTIVE}`}>Calendar</button>
+      </div>
+
+      {viewMode === 'calendar' ? <RaceCalendarView /> : (
+        <>
 
       {/* Coach / admin: All races vs My drafts */}
       {isCoachOrAdmin && (
@@ -143,6 +154,8 @@ export default function RaceArchivePage() {
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );

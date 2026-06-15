@@ -11,6 +11,14 @@ import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 import PageBackground from '../../components/PageBackground';
 import { NoiseBackground } from '../../components/ui/NoiseBackground';
 
+// Planned km of the day's active workout (personal override wins, else group, else personal).
+const plannedKmForDay = (d) => {
+  const t = d.individual_target;
+  const active = t?.override_group ? t : (d.group_workout || t);
+  return active?.distance_km || 0;
+};
+const fmtKm = (n) => Number(n.toFixed(1)).toString();
+
 export default function CalendarPage() {
   const { user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -261,15 +269,16 @@ export default function CalendarPage() {
               {isRace && '🏁 '}{format(date, 'EEE, MMM d')}
             </p>
             {snippet ? (
-              <p className="text-[17px] leading-snug text-[#e5e2e3] mt-0.5 truncate">{snippet}</p>
+              <p className="text-[17px] leading-snug text-[#e5e2e3] mt-0.5 truncate">
+                {snippet}{plannedKmForDay(day) > 0 && <span className="text-sm text-white/45 font-normal"> · {fmtKm(plannedKmForDay(day))} km</span>}
+              </p>
             ) : (
               <p className="text-[17px] italic text-white/35 mt-0.5">No workout scheduled</p>
             )}
             {note && <p className="text-xs text-white/55 mt-1 truncate">{note}</p>}
-            {(km > 0 || kudos > 0) && (
+            {kudos > 0 && (
               <div className="flex items-center gap-3 mt-2">
-                {km > 0 && <span className="text-sm font-semibold text-[#c0c1ff]">{km.toFixed(1)} km</span>}
-                {kudos > 0 && <span className="text-sm text-[#ffb690]">👏 {kudos}</span>}
+                <span className="text-sm text-[#ffb690]">👏 {kudos}</span>
               </div>
             )}
           </div>
@@ -278,13 +287,16 @@ export default function CalendarPage() {
               <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${typeMeta.color}`}>{typeMeta.label}</span>
             )}
             {log && (
-              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                log.status === 'completed' ? 'bg-green-400/20 text-green-200' :
-                log.status === 'partial'   ? 'bg-yellow-400/20 text-yellow-100' :
-                                              'bg-red-400/20 text-red-200'
-              }`}>
-                {log.status === 'completed' ? 'Done' : log.status === 'partial' ? 'Partial' : 'Missed'}
-              </span>
+              <div className="flex items-center gap-1.5">
+                {km > 0 && <span className="text-sm font-semibold text-[#c0c1ff]">{km.toFixed(1)} km</span>}
+                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                  log.status === 'completed' ? 'bg-green-400/20 text-green-200' :
+                  log.status === 'partial'   ? 'bg-yellow-400/20 text-yellow-100' :
+                                                'bg-red-400/20 text-red-200'
+                }`}>
+                  {log.status === 'completed' ? 'Done' : log.status === 'partial' ? 'Partial' : 'Missed'}
+                </span>
+              </div>
             )}
             {log?.manual_override && (
               <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-500/80 text-white px-1.5 py-0.5 rounded" title="Manual — not overwritten by Strava">
@@ -341,13 +353,17 @@ export default function CalendarPage() {
         <div className="space-y-6">
         {weeks.map((week, wi) => {
           const weekKm = week.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
+          const expectedKm = week.reduce((s, d) => s + plannedKmForDay(d), 0);
           return (
           <div key={wi}>
             <div className="flex items-baseline justify-between mb-3 px-1">
               <p className="text-[11px] font-bold uppercase tracking-widest text-white/55">
                 {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
               </p>
-              <span className="text-[10px] font-bold text-white">{weekKm.toFixed(1)} km</span>
+              <div className="text-right">
+                <span className="text-xs font-bold text-white">{weekKm.toFixed(1)} km</span>
+                {expectedKm > 0 && <p className="text-[9px] text-white/75 font-normal mt-0.5">exp {fmtKm(expectedKm)} km</p>}
+              </div>
             </div>
             <div className="grid grid-cols-7 gap-2">
               {week.map((day) => {
@@ -771,9 +787,10 @@ export default function CalendarPage() {
                   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
                   return weeks;
                 })().map((week, wi) => {
-                  let wkKm = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
+                  let wkKm = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
                   for (const d of week) {
                     if (!isSameMonth(new Date(d.date + 'T00:00'), currentDate)) continue;
+                    wkExp += plannedKmForDay(d);
                     const log = d.workout_log;
                     if (!log) continue;
                     if (log.distance_km) wkKm += log.distance_km;
@@ -838,7 +855,7 @@ export default function CalendarPage() {
                           </div>
 
                           {/* Top half: planned workout */}
-                          <div className="flex-1 px-2 py-1 min-h-0">
+                          <div className="flex-1 px-2 py-1 min-h-0 flex flex-col">
                             {workoutTitle && (
                               <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-[#c0c1ff]' : 'text-white'} [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]`}>
                                 {cellIsRace && '🏁 '}{workoutTitle}
@@ -849,6 +866,9 @@ export default function CalendarPage() {
                             )}
                             {workoutBody && (
                               <p className="text-[10px] text-white/65 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>
+                            )}
+                            {plannedKmForDay(d) > 0 && (
+                              <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKmForDay(d))} km</p>
                             )}
                           </div>
 
@@ -885,6 +905,7 @@ export default function CalendarPage() {
                         <span className="text-yellow-300">~{wkPart}</span>
                         <span className="text-red-300">X{wkMiss}</span>
                       </div>
+                      {wkExp > 0 && <div className="text-[10px] text-white font-semibold mt-1">exp {fmtKm(wkExp)}k</div>}
                     </div>
                   </div>
                   );

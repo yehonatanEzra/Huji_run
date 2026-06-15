@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import Integer, String, Text, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import Integer, String, Text, Float, DateTime, ForeignKey, func, UniqueConstraint
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
@@ -40,5 +40,6 @@ class WorkoutTemplateDay(Base):
     warmup: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     main_session: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cooldown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    distance_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # planned distance
 
     template = relationship("WorkoutTemplate", back_populates="days")

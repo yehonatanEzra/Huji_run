@@ -40,8 +40,16 @@ class MyTeamOut(BaseModel):
     id: int
     name: str
     role: str
+    is_public: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class TeamUpdateRequest(BaseModel):
+    is_public: Optional[bool] = None
+    description: Optional[str] = None
+    sport: Optional[str] = None
+    location: Optional[str] = None
 
 
 @router.get("/my", response_model=list[MyTeamOut])
@@ -55,7 +63,42 @@ def my_teams(
         .filter(TeamMembership.user_id == current_user.id)
         .all()
     )
-    return [MyTeamOut(id=team.id, name=team.name, role=membership.role) for membership, team in rows]
+    return [MyTeamOut(id=team.id, name=team.name, role=membership.role, is_public=team.is_public) for membership, team in rows]
+
+
+@router.patch("/{team_id}", response_model=TeamOut)
+def update_team(
+    team_id: int,
+    body: TeamUpdateRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(status_code=404, detail="Team not found")
+    if current_user.role != "admin":
+        membership = (
+            db.query(TeamMembership)
+            .filter(
+                TeamMembership.team_id == team_id,
+                TeamMembership.user_id == current_user.id,
+                TeamMembership.role == "main",
+            )
+            .first()
+        )
+        if membership is None:
+            raise HTTPException(status_code=403, detail="Only the team's main coach can edit it")
+    if body.is_public is not None:
+        team.is_public = body.is_public
+    if body.description is not None:
+        team.description = body.description.strip() or None
+    if body.sport is not None:
+        team.sport = body.sport.strip() or None
+    if body.location is not None:
+        team.location = body.location.strip() or None
+    db.commit()
+    db.refresh(team)
+    return team
 
 
 @router.post("/", response_model=TeamCreateResponse, status_code=status.HTTP_201_CREATED)

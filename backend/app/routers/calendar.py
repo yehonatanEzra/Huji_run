@@ -248,6 +248,8 @@ def _apply_workout_fields(gw: GroupWorkout, body: GroupWorkoutUpsert):
         gw.cooldown = _clean(body.cooldown)
     if body.draft_content is not None:
         gw.draft_content = _clean(body.draft_content)
+    if body.distance_km is not None:
+        gw.distance_km = body.distance_km
 
 
 def _replace_recipients(db: Session, gw_id: int, recipient_ids):
@@ -310,6 +312,7 @@ def create_group_workout(
         main_session=_clean(body.main_session),
         cooldown=_clean(body.cooldown),
         draft_content=_clean(body.draft_content),
+        distance_km=body.distance_km,
         created_by=coach.id,
     )
     db.add(gw)
@@ -406,6 +409,8 @@ def upsert_individual_target(
             it.main_session = _clean(body.main_session)
         if body.cooldown is not None:
             it.cooldown = _clean(body.cooldown)
+        if body.distance_km is not None:
+            it.distance_km = body.distance_km
     else:
         wt = body.workout_type if (body.workout_type in ALLOWED_TYPES) else "simple"
         it = IndividualTarget(
@@ -418,6 +423,7 @@ def upsert_individual_target(
             warmup=_clean(body.warmup),
             main_session=_clean(body.main_session),
             cooldown=_clean(body.cooldown),
+            distance_km=body.distance_km,
             created_by=coach.id,
         )
         db.add(it)

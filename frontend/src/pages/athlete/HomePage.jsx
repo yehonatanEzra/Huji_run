@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getHomeSummary } from '../../api/home';
 import { useAuth } from '../../contexts/AuthContext';
 import TrainingTicket from '../../components/TrainingTicket';
+import NextRaceCard from '../../components/races/NextRaceCard';
 import Spinner from '../../components/ui/Spinner';
 
 export default function HomePage() {
@@ -141,6 +142,10 @@ export default function HomePage() {
         onOpenWorkout={handleOpen}
         hasBgImage={!!bgUrl}
       />
+
+      <div className="w-full max-w-md mx-auto mt-4">
+        <NextRaceCard />
+      </div>
     </div>
   );
 }

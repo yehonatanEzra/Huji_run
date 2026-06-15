@@ -17,8 +17,16 @@ const TYPES = [
 ];
 const typeMetaFor = (t) => TYPES.find((x) => x.value === t) || TYPES[0];
 const DEFAULT_TITLES = new Set(TYPES.map((t) => t.label));
+// Planned km of a day's active workout (personal override wins, else group, else personal).
+const plannedKmOf = (day) => {
+  if (!day) return 0;
+  const t = day.target;
+  const active = t?.override_group ? t : (day.group_workout || t);
+  return active?.distance_km || 0;
+};
+const fmtKm = (n) => Number(n.toFixed(1)).toString();
 
-const EMPTY = { workout_type: 'simple', title: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false };
+const EMPTY = { workout_type: 'simple', title: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false, distance_km: '' };
 const INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
 
 export default function AthleteLogModal({ athlete, onClose }) {
@@ -99,6 +107,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
       main_session: t?.main_session || '',
       cooldown: t?.cooldown || '',
       override_group: t?.override_group || false,
+      distance_km: t?.distance_km ?? '',
     });
     setEditDay(day);
   };
@@ -128,6 +137,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
           warmup: meta.structured ? form.warmup : '',
           main_session: meta.structured ? form.main_session : '',
           cooldown: meta.structured ? form.cooldown : '',
+          distance_km: (form.distance_km === '' || form.distance_km == null) ? null : parseFloat(form.distance_km),
         });
       } else {
         await deleteTarget(athlete.id, editDay.date);
@@ -178,6 +188,8 @@ export default function AthleteLogModal({ athlete, onClose }) {
 
             <input type="text" value={form.title} onChange={(e) => setField('title', e.target.value)} placeholder="Title (shown on calendar)" className={INPUT} />
 
+            <input type="number" inputMode="decimal" value={form.distance_km} onChange={(e) => setField('distance_km', e.target.value)} placeholder="Distance (km)" className={INPUT} />
+
             {meta.structured ? (
               <>
                 <textarea value={form.warmup} onChange={(e) => setField('warmup', e.target.value)} placeholder="Warm-up" rows={1} className={INPUT} />
@@ -222,11 +234,15 @@ export default function AthleteLogModal({ athlete, onClose }) {
                 <div className="space-y-4">
                   {weeks.map((week, wi) => {
                     const weekVolume = week.reduce((s, d) => s + (dayOf(d)?.log?.distance_km || 0), 0);
+                    const expectedKm = week.reduce((s, d) => s + plannedKmOf(dayOf(d)), 0);
                     return (
                       <div key={wi}>
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs text-white/45 font-medium">{format(week[0], 'MMM d')} - {format(week[6], 'MMM d')}</p>
-                          <span className="text-xs font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                          <div className="text-right">
+                            <span className="text-sm font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                            {expectedKm > 0 && <p className="text-[10px] text-white/75 font-normal">exp {fmtKm(expectedKm)} km</p>}
+                          </div>
                         </div>
                         <div className="grid grid-cols-7 gap-2">
                           {week.map((d) => {
@@ -299,9 +315,17 @@ export default function AthleteLogModal({ athlete, onClose }) {
                 <div className="grid grid-cols-7 gap-1 mb-1 text-xs text-white/60 text-center font-medium">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d}>{d}</div>)}
                 </div>
-                <div className="space-y-1">
-                  {weeks.map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 gap-1">
+                <div className="space-y-2">
+                  {weeks.map((week, wi) => {
+                    const weekVolume = week.reduce((s, d) => s + (dayOf(d)?.log?.distance_km || 0), 0);
+                    const expectedKm = week.reduce((s, d) => s + plannedKmOf(dayOf(d)), 0);
+                    return (
+                    <div key={wi}>
+                      <div className="flex items-center justify-between px-1 mb-0.5">
+                        <span className="text-[10px] text-white/40">{format(week[0], 'MMM d')} - {format(week[6], 'MMM d')}</span>
+                        <span className="text-[10px] text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km{expectedKm > 0 ? ` · exp ${fmtKm(expectedKm)}` : ''}</span>
+                      </div>
+                      <div className="grid grid-cols-7 gap-1">
                       {week.map((d) => {
                         const key = format(d, 'yyyy-MM-dd');
                         const day = dayOf(d);
@@ -319,7 +343,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
                           'bg-[#201f20]/50 border-white/15';
                         return (
                           <button key={key} onClick={() => day && (setExpanded(false), openEdit(day))}
-                            className={`text-left rounded-lg border p-1.5 transition hover:brightness-125 ${bg}`}
+                            className={`text-left rounded-lg border p-1.5 transition hover:brightness-125 flex flex-col ${bg}`}
                             style={{ height: 130 }}>
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-white">{format(d, 'd')}</span>
@@ -327,11 +351,14 @@ export default function AthleteLogModal({ athlete, onClose }) {
                             </div>
                             {title && <p className="text-[10px] text-white/85 mt-1 line-clamp-4 leading-tight">{title}</p>}
                             {!t && gw && <p className="text-[8px] text-white/40 mt-0.5">group</p>}
+                            {plannedKmOf(day) > 0 && <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKmOf(day))} km</p>}
                           </button>
                         );
                       })}
+                      </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

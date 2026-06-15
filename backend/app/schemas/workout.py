@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ class GroupWorkoutUpsert(BaseModel):
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
     draft_content: Optional[str] = None
+    distance_km: Optional[float] = None  # planned distance
     # None = leave unchanged. Empty list [] = broadcast to all (no targeting).
     # Non-empty list = only these athletes see this workout.
     recipient_ids: Optional[List[int]] = None
@@ -27,6 +28,7 @@ class GroupWorkoutOut(BaseModel):
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
     draft_content: Optional[str] = None
+    distance_km: Optional[float] = None
     recipient_ids: List[int] = []
     model_config = {"from_attributes": True}
 
@@ -39,6 +41,7 @@ class IndividualTargetUpsert(BaseModel):
     warmup: Optional[str] = None
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
+    distance_km: Optional[float] = None  # planned distance
 
 
 class IndividualTargetOut(BaseModel):
@@ -52,6 +55,7 @@ class IndividualTargetOut(BaseModel):
     warmup: Optional[str] = None
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
+    distance_km: Optional[float] = None
     model_config = {"from_attributes": True}
 
 
@@ -78,6 +82,7 @@ class WorkoutLogOut(BaseModel):
     notes: Optional[str]
     manual_override: bool = False
     is_auto_marked: bool = False
+    logged_at: Optional[datetime] = None
     kudos_count: int = 0
     has_kudos: bool = False
     reactions: List[ReactionItem] = []

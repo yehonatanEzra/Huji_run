@@ -16,6 +16,13 @@ const WORKOUT_TYPES = [
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
+// Planned km of a day's active workout (personal override wins, else group, else personal).
+const plannedKm = (d) => {
+  const t = d.target;
+  const active = t?.override_group ? t : (d.group_workout || t);
+  return active?.distance_km || 0;
+};
+const fmtKm = (n) => Number(n.toFixed(1)).toString();
 import { upsertTarget, deleteTarget } from '../../api/calendar';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
@@ -35,7 +42,7 @@ export default function TrackingDashboardPage() {
   const [selected, setSelected] = useState(null);
   const [personalForm, setPersonalForm] = useState({
     workout_type: 'simple', title: '', note: '',
-    warmup: '', main_session: '', cooldown: '',
+    warmup: '', main_session: '', cooldown: '', distance_km: '',
   });
   const [overrideGroup, setOverrideGroup] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -198,6 +205,7 @@ export default function TrackingDashboardPage() {
       warmup: t?.warmup || '',
       main_session: t?.main_session || '',
       cooldown: t?.cooldown || '',
+      distance_km: t?.distance_km ?? '',
     });
     setOverrideGroup(t?.override_group || false);
   };
@@ -226,6 +234,7 @@ export default function TrackingDashboardPage() {
           warmup: structured ? f.warmup : '',
           main_session: structured ? f.main_session : '',
           cooldown: structured ? f.cooldown : '',
+          distance_km: (f.distance_km === '' || f.distance_km == null) ? null : parseFloat(f.distance_km),
         };
         await upsertTarget(selected.athlete.id, selected.day.date, payload);
       } else {
@@ -359,7 +368,7 @@ export default function TrackingDashboardPage() {
       </div>
 
       {loading ? <Spinner /> : !data ? (
-        <p className="text-gray-500">Failed to load</p>
+        <p className="text-white/50">Failed to load</p>
       ) : (
         <div className="bg-gradient-to-br from-[#201f20]/85 to-[#131314]/75 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-x-auto">
           <table className="w-full text-xs">
@@ -527,13 +536,16 @@ export default function TrackingDashboardPage() {
                     className={`w-full text-left rounded-lg px-3 py-2 text-sm border hover:bg-white/10 transition ${cellBg} ${cellIsRace ? 'border-2' : ''}`}>
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-white/80 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}</span>
-                      <span className={`text-xs font-bold ${iconColor}`}>
-                        {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
+                      <span className="flex items-center gap-1.5">
+                        {d.log?.distance_km > 0 && <span className="text-xs font-semibold text-[#c0c1ff]">{Number(d.log.distance_km).toFixed(1)} km</span>}
+                        <span className={`text-xs font-bold ${iconColor}`}>
+                          {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
+                        </span>
                       </span>
                     </div>
                     {w && (w.title || w.snippet) && (
                       <div className="mt-1">
-                        {w.title && <p className={`text-xs font-semibold ${titleColor}`}>{w.title}</p>}
+                        {w.title && <p className={`text-xs font-semibold ${titleColor}`}>{w.title}{plannedKm(d) > 0 && <span className="text-white/45 font-normal"> · {fmtKm(plannedKm(d))} km</span>}</p>}
                         {w.snippet && <p className="text-xs text-white/65 whitespace-pre-wrap truncate">{w.snippet}</p>}
                       </div>
                     )}
@@ -638,13 +650,17 @@ export default function TrackingDashboardPage() {
                             <div className="space-y-4">
                               {profileMonth.weeks.map((week, wi) => {
                                 const weekVolume = week.reduce((s, d) => s + (d.log?.distance_km || 0), 0);
+                                const expectedKm = week.reduce((s, d) => s + plannedKm(d), 0);
                                 return (
                                   <div key={wi}>
                                     <div className="flex items-center justify-between mb-2">
                                       <p className="text-xs text-white/45 font-medium">
                                         {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
                                       </p>
-                                      <span className="text-xs font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                                      <div className="text-right">
+                                        <span className="text-sm font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                                        {expectedKm > 0 && <p className="text-[10px] text-white/75 font-normal">exp {fmtKm(expectedKm)} km</p>}
+                                      </div>
                                     </div>
                                     <div className="grid grid-cols-7 gap-2">
                                       {week.map((d) => {
@@ -1039,6 +1055,11 @@ export default function TrackingDashboardPage() {
                       placeholder="Title (shown on calendar)"
                       className={inputCls} />
 
+                    <input type="number" inputMode="decimal" value={personalForm.distance_km}
+                      onChange={(e) => setF('distance_km', e.target.value)}
+                      placeholder="Distance (km)"
+                      className={inputCls} />
+
                     {meta.structured ? (
                       <>
                         <textarea value={personalForm.warmup} onChange={(e) => setF('warmup', e.target.value)}
@@ -1143,9 +1164,10 @@ export default function TrackingDashboardPage() {
               <div className="space-y-1">
                 {profileMonth.weeks.map((week, wi) => {
                   // Compute week stats: only count days in this month, ignore overflow days
-                  let wkKm = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
+                  let wkKm = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
                   for (const d of week) {
                     if (!isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) continue;
+                    wkExp += plannedKm(d);
                     if (!d.log) continue;
                     if (d.log.distance_km) wkKm += d.log.distance_km;
                     const st = d.log.status || (d.log.completed ? 'completed' : 'missed');
@@ -1208,7 +1230,7 @@ export default function TrackingDashboardPage() {
                           </div>
 
                           {/* Top half: planned workout */}
-                          <div className="flex-1 px-2 py-1 min-h-0">
+                          <div className="flex-1 px-2 py-1 min-h-0 flex flex-col">
                             {workoutTitle ? (
                               <p className={`text-xs font-semibold leading-tight line-clamp-2 ${personalOverride ? 'text-blue-200' : 'text-white'} [text-shadow:0_1px_3px_rgba(0,0,0,0.5)]`}>
                                 {cellIsRace && '🏁 '}{workoutTitle}
@@ -1220,6 +1242,9 @@ export default function TrackingDashboardPage() {
                               <p className="text-[10px] text-white/65 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">
                                 {workoutBody}
                               </p>
+                            )}
+                            {plannedKm(d) > 0 && (
+                              <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKm(d))} km</p>
                             )}
                           </div>
 
@@ -1258,6 +1283,7 @@ export default function TrackingDashboardPage() {
                         <span className="text-yellow-300">~{wkPart}</span>
                         <span className="text-red-300">X{wkMiss}</span>
                       </div>
+                      {wkExp > 0 && <div className="text-[10px] text-white font-semibold mt-1">exp {fmtKm(wkExp)}k</div>}
                     </div>
                   </div>
                   );

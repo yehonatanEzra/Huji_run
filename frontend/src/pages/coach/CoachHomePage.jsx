@@ -6,6 +6,7 @@ import { getDashboardWeek, pendingApprovalsCount, listGroups } from '../../api/c
 import { getLoadOverview } from '../../api/reporting';
 import { incomingRequests } from '../../api/coaching';
 import Spinner from '../../components/ui/Spinner';
+import NextRaceCard from '../../components/races/NextRaceCard';
 
 function toIsoWeekStr(d) {
   return `${getISOWeekYear(d)}-W${String(getISOWeek(d)).padStart(2, '0')}`;
@@ -118,6 +119,8 @@ export default function CoachHomePage() {
               <SummaryStat value={data.groups} label="Groups" />
             </div>
           </div>
+
+          <NextRaceCard />
 
           {/* Latest reports today */}
           <section>

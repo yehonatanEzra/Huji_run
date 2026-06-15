@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import Spinner from '../../components/ui/Spinner';
 import { getAthleteProfile } from '../../api/coach';
+import GoalsPanel from '../../components/goals/GoalsPanel';
 
 const PerformanceGraphs = lazy(() => import('../../components/PerformanceGraphs'));
 
@@ -25,7 +26,8 @@ export default function AthleteProgressPage() {
 
   return (
     <div className="pb-8">
-      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950" />
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
 
       <div className="flex items-center justify-between mb-4">
         <button
@@ -44,9 +46,14 @@ export default function AthleteProgressPage() {
       </div>
 
       {idNum ? (
-        <Suspense fallback={<div className="py-10 flex justify-center"><Spinner /></div>}>
-          <PerformanceGraphs athleteId={idNum} />
-        </Suspense>
+        <>
+          <div className="mb-6">
+            <GoalsPanel athleteId={idNum} canEdit />
+          </div>
+          <Suspense fallback={<div className="py-10 flex justify-center"><Spinner /></div>}>
+            <PerformanceGraphs athleteId={idNum} />
+          </Suspense>
+        </>
       ) : (
         <div className="py-10 flex justify-center"><Spinner /></div>
       )}

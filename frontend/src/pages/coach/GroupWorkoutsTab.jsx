@@ -21,6 +21,9 @@ const typeMeta = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[
 // Titles we auto-fill from the type — used to tell an auto-default apart from a
 // title the coach actually typed (which must never be overwritten).
 const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
+const fmtKm = (n) => Number(n.toFixed(1)).toString();
+// Planned km the group is scheduled that day = sum of the day's group workouts' distance_km.
+const groupPlannedKm = (day) => (day.group_workouts || []).reduce((s, g) => s + (g.distance_km || 0), 0);
 
 const workoutSnippet = (gw) => {
   if (!gw) return '';
@@ -47,6 +50,7 @@ export default function GroupWorkoutsTab({ group }) {
     main_session: '',
     cooldown: '',
     draft_content: '',
+    distance_km: '',
   });
   const [selectedRecipientIds, setSelectedRecipientIds] = useState([]);
   // Snapshot of recipient_ids at the moment we opened the edit form. Used so
@@ -174,6 +178,7 @@ export default function GroupWorkoutsTab({ group }) {
     main_session: '',
     cooldown: '',
     draft_content: '',
+    distance_km: '',
   };
 
   const openDay = (day) => {
@@ -197,6 +202,7 @@ export default function GroupWorkoutsTab({ group }) {
       main_session: gw.main_session || '',
       cooldown: gw.cooldown || '',
       draft_content: gw.draft_content || '',
+      distance_km: gw.distance_km ?? '',
     });
     const recips = gw.recipient_ids || [];
     setSelectedRecipientIds(recips);
@@ -223,6 +229,7 @@ export default function GroupWorkoutsTab({ group }) {
     setSaving(true);
     try {
       const payload = { ...form, ...overrides };
+      payload.distance_km = (payload.distance_km === '' || payload.distance_km == null) ? null : parseFloat(payload.distance_km);
       if (['simple', 'easy', 'rest'].includes(payload.workout_type)) {
         payload.warmup = '';
         payload.main_session = '';
@@ -306,7 +313,7 @@ export default function GroupWorkoutsTab({ group }) {
             {gw.recipient_ids?.length > 0 && <span className="ml-1 opacity-70">·{gw.recipient_ids.length}</span>}
           </span>
         ))}
-        {extra > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">+{extra}</span>}
+        {extra > 0 && <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-white/10 text-white/70">+{extra}</span>}
         {list.some(g => g.draft_content) && (
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Draft</span>
         )}
@@ -332,11 +339,16 @@ export default function GroupWorkoutsTab({ group }) {
           </button>
         </NoiseBackground>
         <div className="space-y-4">
-        {weeks.map((week, wi) => (
+        {weeks.map((week, wi) => {
+          const expectedKm = week.reduce((s, day) => s + groupPlannedKm(day), 0);
+          return (
           <div key={wi}>
-            <p className="text-xs text-white/45 mb-1 font-medium">
-              {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
-            </p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-white/45 font-medium">
+                {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
+              </p>
+              {expectedKm > 0 && <span className="text-[10px] text-white font-semibold">exp {fmtKm(expectedKm)} km</span>}
+            </div>
             <div className="grid grid-cols-7 gap-1">
               {week.map((day) => {
                 const dayDate = new Date(day.date + 'T00:00');
@@ -378,7 +390,8 @@ export default function GroupWorkoutsTab({ group }) {
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
         </div>
       </div>
     );
@@ -459,10 +472,10 @@ export default function GroupWorkoutsTab({ group }) {
       )}
 
       {/* Workout edit modal */}
-      <Modal open={!!selectedDay} onClose={() => { setSelectedDay(null); cancelEdit(); }} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''}>
+      <Modal open={!!selectedDay} onClose={() => { setSelectedDay(null); cancelEdit(); }} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
         {selectedDay && editingId == null && (
           <div className="space-y-3">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-white/50">
               {(selectedDay.group_workouts || []).length === 0
                 ? 'No workouts yet for this day.'
                 : `${selectedDay.group_workouts.length} workout${selectedDay.group_workouts.length === 1 ? '' : 's'} scheduled`}
@@ -475,17 +488,17 @@ export default function GroupWorkoutsTab({ group }) {
                 : [];
               const snippet = workoutSnippet(gw);
               return (
-                <div key={gw.id} className={`rounded-lg p-3 border ${gw.workout_type === 'race' ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+                <div key={gw.id} className={`rounded-lg p-3 border ${gw.workout_type === 'race' ? 'border-[#8083ff]/40 bg-[#8083ff]/10' : 'border-white/10 bg-white/5'}`}>
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${tm.color}`}>{tm.label}</span>
-                        {gw.draft_content && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Draft</span>}
+                        {gw.draft_content && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-300">Draft</span>}
                       </div>
                       {(gw.title || snippet) && (
-                        <p className="text-sm font-medium text-gray-800 mt-1 truncate">{gw.title || snippet}</p>
+                        <p className="text-sm font-medium text-white/90 mt-1 truncate">{gw.title || snippet}</p>
                       )}
-                      <p className="text-[11px] text-gray-500 mt-1">
+                      <p className="text-[11px] text-white/50 mt-1">
                         {recCount === 0
                           ? '👥 All athletes (broadcast)'
                           : `👥 ${recCount}: ${recNames.length ? recNames.join(', ') : `${recCount} athlete${recCount === 1 ? '' : 's'}`}`}
@@ -493,16 +506,16 @@ export default function GroupWorkoutsTab({ group }) {
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <button onClick={() => openWorkoutForEdit(gw)}
-                        className="text-xs px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50">Edit</button>
+                        className="text-xs px-2 py-1 rounded border border-[#c0c1ff]/40 text-[#c0c1ff] hover:bg-[#c0c1ff]/10 transition">Edit</button>
                       <button onClick={() => handleDeleteOne(gw.id)} disabled={saving}
-                        className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50">Delete</button>
+                        className="text-xs px-2 py-1 rounded border border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50 transition">Delete</button>
                     </div>
                   </div>
                 </div>
               );
             })}
             <button onClick={openWorkoutForCreate}
-              className="w-full border-2 border-dashed border-blue-300 text-blue-700 rounded-lg py-3 text-sm font-medium hover:bg-blue-50 transition">
+              className="w-full border-2 border-dashed border-[#c0c1ff]/30 text-[#c0c1ff] rounded-lg py-3 text-sm font-medium hover:bg-[#c0c1ff]/5 transition">
               ➕ Add a workout
             </button>
           </div>
@@ -555,7 +568,7 @@ export default function GroupWorkoutsTab({ group }) {
             <div className="space-y-4">
               {/* Workout type selector */}
               <div>
-                <p className="text-xs font-semibold text-gray-600 mb-2">Type</p>
+                <p className="text-xs font-semibold text-white/60 mb-2">Type</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {WORKOUT_TYPES.map(t => (
                     <button
@@ -564,7 +577,7 @@ export default function GroupWorkoutsTab({ group }) {
                       className={`text-xs px-2 py-1.5 rounded-lg font-medium border transition ${
                         form.workout_type === t.value
                           ? `${t.color} border-current`
-                          : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                          : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10'
                       }`}
                     >
                       {t.label}
@@ -575,56 +588,69 @@ export default function GroupWorkoutsTab({ group }) {
 
               {/* Title */}
               <div>
-                <p className="text-xs font-semibold text-gray-600 mb-1">Title (shown on calendar)</p>
+                <p className="text-xs font-semibold text-white/60 mb-1">Title (shown on calendar)</p>
                 <input
                   type="text"
                   value={form.title}
                   onChange={(e) => setField('title', e.target.value)}
                   placeholder={meta.value === 'intervals' ? 'e.g., 6x800m @ threshold' : 'e.g., Park loop'}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
+                />
+              </div>
+
+              {/* Planned distance */}
+              <div>
+                <p className="text-xs font-semibold text-white/60 mb-1">Distance (km)</p>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={form.distance_km}
+                  onChange={(e) => setField('distance_km', e.target.value)}
+                  placeholder="e.g., 8"
+                  className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
                 />
               </div>
 
               {/* Published content — simple/easy/tempo (single field) OR long/intervals/fartlek (3 fields) */}
               {meta.structured ? (
-                <div className="space-y-2 border border-green-200 bg-green-50/30 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-green-700">Published — visible to athletes</p>
+                <div className="space-y-2 border border-emerald-400/25 bg-emerald-500/[0.07] rounded-lg p-3">
+                  <p className="text-xs font-semibold text-emerald-300">Published — visible to athletes</p>
                   <div>
-                    <p className="text-[11px] text-gray-500 mb-0.5">Warm-up</p>
+                    <p className="text-[11px] text-white/50 mb-0.5">Warm-up</p>
                     <textarea value={form.warmup} onChange={(e) => setField('warmup', e.target.value)}
                       placeholder="e.g., 15 min easy + drills" rows={2}
-                      className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
+                      className="w-full bg-[#1c1b1c]/60 border border-emerald-400/20 rounded px-2 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-emerald-400/40" />
                   </div>
                   <div>
-                    <p className="text-[11px] text-gray-500 mb-0.5">{meta.mainLabel || 'Main session'}</p>
+                    <p className="text-[11px] text-white/50 mb-0.5">{meta.mainLabel || 'Main session'}</p>
                     <textarea value={form.main_session} onChange={(e) => setField('main_session', e.target.value)}
                       placeholder={meta.value === 'race' ? 'e.g., 10K' : 'e.g., 6x800m @ 5k pace, 2 min rest'} rows={3}
-                      className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
+                      className="w-full bg-[#1c1b1c]/60 border border-emerald-400/20 rounded px-2 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-emerald-400/40" />
                   </div>
                   <div>
-                    <p className="text-[11px] text-gray-500 mb-0.5">Cool-down</p>
+                    <p className="text-[11px] text-white/50 mb-0.5">Cool-down</p>
                     <textarea value={form.cooldown} onChange={(e) => setField('cooldown', e.target.value)}
                       placeholder="e.g., 10 min easy + stretching" rows={2}
-                      className="w-full border border-green-200 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 bg-white" />
+                      className="w-full bg-[#1c1b1c]/60 border border-emerald-400/20 rounded px-2 py-1.5 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-1 focus:ring-emerald-400/40" />
                   </div>
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs font-semibold text-green-700 mb-1">Published — visible to athletes</p>
+                  <p className="text-xs font-semibold text-emerald-300 mb-1">Published — visible to athletes</p>
                   <textarea value={form.content} onChange={(e) => setField('content', e.target.value)}
                     placeholder="Write the workout..." rows={3}
-                    className="w-full border border-green-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-green-50/50" />
+                    className="w-full bg-[#1c1b1c]/60 border border-emerald-400/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/40" />
                 </div>
               )}
 
               {/* Recipients */}
-              <div className="border border-gray-200 rounded-lg p-3 space-y-2">
-                <p className="text-xs font-semibold text-gray-700">Choose athletes</p>
+              <div className="border border-white/10 rounded-lg p-3 space-y-2">
+                <p className="text-xs font-semibold text-white/70">Choose athletes</p>
 
                 {groupDetail && groupDetail.members.length > 0 && (
                   <>
                     {assignedCount > 0 && (
-                      <p className="text-[11px] italic text-gray-500">
+                      <p className="text-[11px] italic text-white/50">
                         {assignedCount} of {groupDetail.members.length} athlete{groupDetail.members.length === 1 ? '' : 's'} already have a workout today.
                       </p>
                     )}
@@ -635,7 +661,7 @@ export default function GroupWorkoutsTab({ group }) {
                         <button type="button"
                           onClick={() => setSelectedRecipientIds(prev => Array.from(new Set([...prev, ...unassignedIds])))}
                           disabled={unassignedIds.length === 0}
-                          className="text-[11px] px-2 py-1 rounded border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40">
+                          className="text-[11px] px-2 py-1 rounded border border-[#c0c1ff]/40 text-[#c0c1ff] hover:bg-[#c0c1ff]/10 disabled:opacity-40">
                           + Add all unassigned ({unassignedIds.length})
                         </button>
                         <button type="button"
@@ -652,7 +678,7 @@ export default function GroupWorkoutsTab({ group }) {
                               setOverrideMode('confirm');
                             }
                           }}
-                          className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">
+                          className="text-[11px] px-2 py-1 rounded border border-white/15 text-white/70 hover:bg-white/10">
                           + Add all athletes
                         </button>
                       </div>
@@ -686,7 +712,7 @@ export default function GroupWorkoutsTab({ group }) {
                           </button>
                           <button type="button"
                             onClick={() => setOverrideMode(null)}
-                            className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">
+                            className="text-[11px] px-2 py-1 rounded border border-white/15 text-white/70 hover:bg-white/10">
                             Cancel
                           </button>
                         </div>
@@ -710,8 +736,8 @@ export default function GroupWorkoutsTab({ group }) {
                                       e.target.checked ? [...prev, m.id] : prev.filter(id => id !== m.id)
                                     )}
                                     className="w-4 h-4 rounded" />
-                                  <span className="text-[12px] text-gray-800">{m.full_name}</span>
-                                  <span className="text-[10px] text-gray-500 italic">• on "{labels}"</span>
+                                  <span className="text-[12px] text-white/85">{m.full_name}</span>
+                                  <span className="text-[10px] text-white/50 italic">• on "{labels}"</span>
                                 </label>
                               );
                             })}
@@ -729,7 +755,7 @@ export default function GroupWorkoutsTab({ group }) {
                           </button>
                           <button type="button"
                             onClick={() => setOverrideMode('confirm')}
-                            className="text-[11px] px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50">
+                            className="text-[11px] px-2 py-1 rounded border border-white/15 text-white/70 hover:bg-white/10">
                             Back
                           </button>
                         </div>
@@ -748,7 +774,7 @@ export default function GroupWorkoutsTab({ group }) {
                       const otherAssignments = assignmentsByAthlete[m.id] || [];
                       const onOther = otherAssignments.length > 0;
                       return (
-                        <label key={m.id} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+                        <label key={m.id} className="flex items-start gap-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={checked}
@@ -777,7 +803,7 @@ export default function GroupWorkoutsTab({ group }) {
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className={`text-sm ${overridden ? 'text-gray-400 line-through' : ''}`}>{m.full_name}</span>
                               {onOther && (
-                                <span className="text-[10px] text-gray-500 italic">
+                                <span className="text-[10px] text-white/50 italic">
                                   • on "{otherAssignments.map(a => a.label).join('", "')}"
                                 </span>
                               )}
@@ -822,10 +848,10 @@ export default function GroupWorkoutsTab({ group }) {
               <div className="flex gap-2 pt-1">
                 <button onClick={() => handleSave()}
                   disabled={saving || (!hasPublishedContent && !form.title.trim() && !form.draft_content.trim())}
-                  className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2.5 text-sm font-bold hover:bg-[#a9aaff] disabled:opacity-50 disabled:cursor-not-allowed transition">
                   {saving ? 'Saving...' : (editingId === 'new' ? 'Create workout' : 'Save changes')}</button>
                 <button onClick={cancelEdit}
-                  className="flex-1 border border-gray-200 rounded-lg py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
+                  className="flex-1 border border-white/20 rounded-lg py-2.5 text-sm font-medium text-white/70 hover:bg-white/10 transition">
                   Back</button>
               </div>
               {editingId !== 'new' && typeof editingId === 'number' && (
@@ -899,8 +925,12 @@ export default function GroupWorkoutsTab({ group }) {
                     const weeks = [];
                     for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
                     return weeks;
-                  })().map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 gap-1">
+                  })().map((week, wi) => {
+                    const expectedKm = week.reduce((s, d) => s + groupPlannedKm(d), 0);
+                    return (
+                    <div key={wi}>
+                      {expectedKm > 0 && <div className="text-right px-1 mb-0.5"><span className="text-[10px] text-white font-semibold">exp {fmtKm(expectedKm)} km</span></div>}
+                      <div className="grid grid-cols-7 gap-1">
                       {week.map(d => {
                         const dayDate = new Date(d.date + 'T00:00');
                         const inMonth = isSameMonth(dayDate, currentDate);
@@ -955,11 +985,14 @@ export default function GroupWorkoutsTab({ group }) {
                                 <p className="text-[9px] text-white/60 mt-1">+{list.length - 1} more</p>
                               )}
                             </div>
+                            {groupPlannedKm(d) > 0 && <p className="text-[11px] text-white font-bold leading-none mt-auto self-end px-2 pb-1">{fmtKm(groupPlannedKm(d))} km</p>}
                           </button>
                         );
                       })}
+                      </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -976,18 +1009,18 @@ export default function GroupWorkoutsTab({ group }) {
           aria-modal="true"
         >
           <div
-            className="bg-white w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl p-5 sm:p-6"
+            className="bg-[#161616]/90 backdrop-blur-2xl border border-white/10 w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl p-5 sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xl shrink-0">↪</div>
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30 flex items-center justify-center text-xl shrink-0">↪</div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-white">
                   Move {transferPrompt.athleteName}?
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-white/60 mt-1">
                   Already has{' '}
-                  <span className="font-medium text-gray-800">
+                  <span className="font-medium text-white/85">
                     "{transferPrompt.fromLabels.join('", "')}"
                   </span>{' '}
                   scheduled today. Saving will move them to this workout.
@@ -997,7 +1030,7 @@ export default function GroupWorkoutsTab({ group }) {
             <div className="flex gap-2">
               <button
                 onClick={() => setTransferPrompt(null)}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold active:bg-gray-50"
+                className="flex-1 py-3 rounded-xl border border-white/20 text-white/80 font-semibold hover:bg-white/10 transition"
               >
                 Cancel
               </button>
@@ -1006,7 +1039,7 @@ export default function GroupWorkoutsTab({ group }) {
                   transferPrompt.onConfirm();
                   setTransferPrompt(null);
                 }}
-                className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-semibold active:bg-blue-700 shadow-sm"
+                className="flex-1 py-3 rounded-xl bg-[#c0c1ff] text-[#1000a9] font-semibold hover:bg-[#a9aaff] active:scale-[0.98] transition"
               >
                 Move
               </button>

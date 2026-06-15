@@ -95,7 +95,7 @@ export default function WorkoutTemplatesPage() {
         </button>
       </div>
 
-      {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2">{error}</p>}
+      {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded p-2">{error}</p>}
       {loading && <Spinner />}
 
       {!loading && templates.length === 0 && (
@@ -161,6 +161,7 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
       m[cellKey(d.week_number, d.day_of_week)] = {
         workout_type: d.workout_type, title: d.title || '', content: d.content || '',
         warmup: d.warmup || '', main_session: d.main_session || '', cooldown: d.cooldown || '',
+        distance_km: d.distance_km ?? '',
       };
     });
     return m;
@@ -185,7 +186,9 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
     const days = Object.entries(dayMap)
       .map(([k, v]) => {
         const [w, d] = k.split('-').map(Number);
-        return { week_number: w, day_of_week: d, ...v };
+        const day = { week_number: w, day_of_week: d, ...v };
+        day.distance_km = (day.distance_km === '' || day.distance_km == null) ? null : parseFloat(day.distance_km);
+        return day;
       })
       .filter((d) => d.week_number <= weeks);
     const body = { name: name.trim(), description: description.trim() || null, weeks_count: weeks, days };
@@ -256,18 +259,24 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
 
       {/* Training grid */}
       <div className={`${PANEL} rounded-2xl p-4 overflow-x-auto`}>
-        <div className="min-w-[330px]">
+        <div className="w-full">
           {/* Days header */}
-          <div className="grid grid-cols-[1.25rem_repeat(7,1fr)] gap-1 mb-1.5 px-1">
+          <div className="grid grid-cols-[1rem_repeat(7,1fr)_1.6rem] gap-1 mb-1.5 px-1">
             <div />
             {DOW_ORDER.map((dow) => (
               <div key={dow} className="text-center text-white/50 text-[9px] font-semibold uppercase tracking-wider">{DOW[dow]}</div>
             ))}
+            <div />
           </div>
           {/* Week rows */}
           <div className="space-y-1">
-            {Array.from({ length: weeks }, (_, wi) => wi + 1).map((week) => (
-              <div key={week} className="grid grid-cols-[1.25rem_repeat(7,1fr)] gap-1 items-center px-1 py-0.5 hover:bg-white/5 rounded-lg transition-colors">
+            {Array.from({ length: weeks }, (_, wi) => wi + 1).map((week) => {
+              const weekKm = DOW_ORDER.reduce((s, dow) => {
+                const c = dayMap[cellKey(week, dow)];
+                return s + (c?.distance_km ? (parseFloat(c.distance_km) || 0) : 0);
+              }, 0);
+              return (
+              <div key={week} className="grid grid-cols-[1rem_repeat(7,1fr)_1.6rem] gap-1 items-center px-1 py-0.5 hover:bg-white/5 rounded-lg transition-colors">
                 <div className="text-white/50 font-medium text-[10px]">W{week}</div>
                 {DOW_ORDER.map((dow) => {
                   const cell = dayMap[cellKey(week, dow)];
@@ -276,18 +285,27 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
                     <button
                       key={dow}
                       onClick={() => setEditCell({ week, dow })}
-                      className={`h-9 rounded-lg text-[8px] font-medium px-0.5 flex items-center justify-center text-center leading-tight line-clamp-2 transition ${
+                      className={`h-10 rounded-lg px-0.5 flex flex-col items-center justify-center text-center leading-none transition ${
                         cell
                           ? `${CELL_COLOR[cell.workout_type] || 'bg-slate-500/85'} text-white shadow-md`
                           : 'bg-slate-700/40 border border-dashed border-slate-400/30 text-slate-400 hover:bg-slate-700/60 hover:border-slate-400/60'
                       }`}
                     >
-                      {cell ? (cell.title || meta.label) : '+'}
+                      {cell ? (
+                        <>
+                          <span className="text-[7px] font-medium leading-tight line-clamp-2">{meta.label}</span>
+                          {parseFloat(cell.distance_km) > 0 && (
+                            <span className="text-[8px] font-bold mt-0.5">{Number(parseFloat(cell.distance_km).toFixed(1))} km</span>
+                          )}
+                        </>
+                      ) : '+'}
                     </button>
                   );
                 })}
+                <div className="text-[9px] font-bold text-white text-left pl-0.5">{weekKm > 0 ? Number(weekKm.toFixed(1)) : ''}</div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -308,14 +326,14 @@ function TemplateBuilder({ initial, onClose, onSaved }) {
 
 function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
   const [form, setForm] = useState(value || {
-    workout_type: 'easy', title: '', content: '', warmup: '', main_session: '', cooldown: '',
+    workout_type: 'easy', title: '', content: '', warmup: '', main_session: '', cooldown: '', distance_km: '',
   });
   const meta = typeMeta(form.workout_type);
   const upd = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
-    <Modal open onClose={onClose}>
-      <h3 className="font-semibold mb-1">Week {week} · {DOW[dow]}</h3>
+    <Modal open onClose={onClose} panelClassName="bg-[#131314] border-t border-white/10">
+      <h3 className="font-semibold mb-1 text-white">Week {week} · {DOW[dow]}</h3>
       <div className="space-y-3 mt-2">
         <div className="flex flex-wrap gap-1">
           {WORKOUT_TYPES.map((t) => (
@@ -323,7 +341,7 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
               key={t.value}
               onClick={() => upd('workout_type', t.value)}
               className={`text-xs px-2 py-1 rounded-full border ${
-                form.workout_type === t.value ? t.color + ' border-transparent font-medium' : 'bg-white border-gray-200 text-gray-500'
+                form.workout_type === t.value ? t.color + ' border-transparent font-medium' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
               }`}
             >
               {t.label}
@@ -336,7 +354,16 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
           placeholder="Title (optional)"
           value={form.title}
           onChange={(e) => upd('title', e.target.value)}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
+        />
+
+        <input
+          type="number"
+          inputMode="decimal"
+          placeholder="Distance (km)"
+          value={form.distance_km}
+          onChange={(e) => upd('distance_km', e.target.value)}
+          className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
         />
 
         {meta.structured ? (
@@ -346,21 +373,21 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
               value={form.warmup}
               onChange={(e) => upd('warmup', e.target.value)}
               rows={2}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
             />
             <textarea
               placeholder={meta.mainLabel || 'Main session'}
               value={form.main_session}
               onChange={(e) => upd('main_session', e.target.value)}
               rows={2}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
             />
             <textarea
               placeholder="Cool-down"
               value={form.cooldown}
               onChange={(e) => upd('cooldown', e.target.value)}
               rows={2}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
             />
           </>
         ) : (
@@ -369,7 +396,7 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
             value={form.content}
             onChange={(e) => upd('content', e.target.value)}
             rows={3}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
           />
         )}
 
@@ -383,7 +410,7 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
           {value && (
             <button
               onClick={onClear}
-              className="px-4 border border-red-200 text-red-500 rounded-lg py-2 text-sm hover:bg-red-50"
+              className="px-4 border border-red-400/30 bg-red-500/10 text-red-300 rounded-lg py-2 text-sm hover:bg-red-500/20 transition"
             >
               Clear
             </button>
@@ -459,15 +486,15 @@ function ApplyModal({ template, onClose }) {
   };
 
   return (
-    <Modal open onClose={onClose}>
-      <h3 className="font-semibold mb-1">Apply "{template.name}"</h3>
-      <p className="text-xs text-gray-500 mb-3">
+    <Modal open onClose={onClose} panelClassName="bg-[#131314] border-t border-white/10">
+      <h3 className="font-semibold mb-1 text-white">Apply "{template.name}"</h3>
+      <p className="text-xs text-white/50 mb-3">
         {template.weeks_count} weeks · {template.day_count} workouts. The start date snaps to its Monday.
       </p>
 
       {step === 'result' ? (
         <div className="space-y-3">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-sm text-emerald-800">
+          <div className="bg-emerald-500/15 border border-emerald-400/30 rounded-lg p-3 text-sm text-emerald-200">
             Created {result.created} workouts from {result.start_monday} to {result.end_date}
             {result.replaced > 0 && `, replacing ${result.replaced} existing`}.
           </div>
@@ -485,32 +512,32 @@ function ApplyModal({ template, onClose }) {
         />
       ) : step === 'confirm' ? (
         <div className="space-y-3">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900">
+          <div className="bg-amber-500/15 border border-amber-400/30 rounded-lg p-3 text-sm text-amber-100">
             {replaceCount === null
               ? 'Checking existing workouts…'
               : replaceCount > 0
                 ? <>This <strong>replaces {replaceCount} existing workout{replaceCount !== 1 ? 's' : ''}</strong> in {groupName ? `“${groupName}”` : 'the group'} across the plan's {template.weeks_count} week{template.weeks_count !== 1 ? 's' : ''} (from the Monday of {startDate}), then writes the plan. This can't be undone.</>
                 : <>No existing workouts in {groupName ? `“${groupName}”` : 'the group'} over the plan's {template.weeks_count} week{template.weeks_count !== 1 ? 's' : ''} — the plan will be added cleanly.</>}
           </div>
-          {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2">{error}</p>}
+          {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded p-2">{error}</p>}
           <div className="flex gap-2">
             <button onClick={() => setStep('diff')} className="px-4 border border-[#c0c1ff]/50 text-[#c0c1ff] rounded-lg py-2 text-sm font-medium hover:bg-[#c0c1ff]/10">See diff</button>
             <button onClick={doApply} disabled={applying} className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50">
               {applying ? 'Applying…' : 'Apply & override'}
             </button>
           </div>
-          <button onClick={() => setStep('form')} className="w-full text-sm text-gray-500 hover:text-gray-700">Back</button>
+          <button onClick={() => setStep('form')} className="w-full text-sm text-white/50 hover:text-white">Back</button>
         </div>
       ) : (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Group</label>
+            <label className="block text-xs font-medium text-white/60 mb-1">Group</label>
             <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Start date (week 1, Monday)</label>
+            <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Monday)</label>
             <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <button onClick={() => { if (groupId && startDate) setStep('confirm'); }} disabled={!groupId || !startDate} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
@@ -571,13 +598,13 @@ function DiffCalendar({ templateId, weeksCount, groupId, startMonday, onBack, on
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+      <div className="flex gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
         {[['now', 'Now'], ['after', 'After applying']].map(([k, label]) => (
-          <button key={k} onClick={() => setView(k)} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${view === k ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>{label}</button>
+          <button key={k} onClick={() => setView(k)} className={`flex-1 py-1.5 rounded-md text-sm font-medium transition ${view === k ? 'bg-[#c0c1ff] text-[#1000a9]' : 'text-white/50 hover:text-white'}`}>{label}</button>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-[10px] text-gray-400 text-center font-medium">
+      <div className="grid grid-cols-7 gap-1 text-[10px] text-white/40 text-center font-medium">
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i}>{d}</div>)}
       </div>
       <div className="space-y-1 max-h-[50vh] overflow-y-auto">
@@ -592,20 +619,20 @@ function DiffCalendar({ templateId, weeksCount, groupId, startMonday, onBack, on
               const changed = (!!oldC !== !!newC) || (oldC && newC && (oldC.workout_type !== newC.workout_type || oldC.title !== newC.title));
               const tm = cell ? typeMeta(cell.workout_type) : null;
               return (
-                <div key={key} className={`rounded-md border p-1 min-h-[3.2rem] ${changed ? 'border-amber-400 ring-1 ring-amber-300' : 'border-gray-200'} ${cell ? 'bg-white' : 'bg-gray-50'}`}>
-                  <div className="text-[9px] text-gray-400">{format(dt, 'd')}</div>
+                <div key={key} className={`rounded-md border p-1 min-h-[3.2rem] ${changed ? 'border-amber-400/70 ring-1 ring-amber-300/40' : 'border-white/10'} ${cell ? 'bg-white/10' : 'bg-white/[0.03]'}`}>
+                  <div className="text-[9px] text-white/40">{format(dt, 'd')}</div>
                   {tm && <span className={`inline-block text-[8px] px-1 rounded ${tm.color} font-medium`}>{tm.label}</span>}
-                  {cell?.title && <p className="text-[8px] text-gray-600 leading-tight line-clamp-2 mt-0.5">{cell.title}</p>}
+                  {cell?.title && <p className="text-[8px] text-white/60 leading-tight line-clamp-2 mt-0.5">{cell.title}</p>}
                 </div>
               );
             })}
           </div>
         ))}
       </div>
-      <p className="text-[10px] text-gray-400">Amber-outlined days change. “After” shows only the plan’s workouts — everything else in these weeks is cleared.</p>
+      <p className="text-[10px] text-white/40">Amber-outlined days change. “After” shows only the plan’s workouts — everything else in these weeks is cleared.</p>
 
       <div className="flex gap-2">
-        <button onClick={onBack} className="px-4 border border-gray-300 rounded-lg py-2 text-sm hover:bg-gray-50">Back</button>
+        <button onClick={onBack} className="px-4 border border-white/20 text-white/80 rounded-lg py-2 text-sm hover:bg-white/10 transition">Back</button>
         <button onClick={onApply} disabled={applying} className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-50">
           {applying ? 'Applying…' : 'Apply & override'}
         </button>

@@ -6,6 +6,7 @@ import { getMyPairing, leaveCoach } from '../../api/coaching';
 import { getStravaConnectUrl, disconnectStrava } from '../../api/strava';
 import Spinner from '../../components/ui/Spinner';
 import PageBackground from '../../components/PageBackground';
+import GoalsPanel from '../../components/goals/GoalsPanel';
 
 const DISTANCE_LABELS = {
   1500: '1,500m', 3000: '3,000m', 5000: '5,000m',
@@ -339,6 +340,13 @@ export default function ProfilePage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Goals (athletes only) */}
+      {!isCoach && (
+        <div className="mb-6">
+          <GoalsPanel athleteId={user?.id} canEdit />
         </div>
       )}
 

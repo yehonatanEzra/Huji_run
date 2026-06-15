@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createRace, addHeat, addResult } from '../../api/races';
+import { createRace, updateRace, addHeat, addResult } from '../../api/races';
 import { searchAthletes } from '../../api/coach';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -34,8 +34,13 @@ export default function RaceWizardPage() {
     setSaving(true);
     setError('');
     try {
-      const { data } = await createRace({ name: raceName.trim(), race_date: raceDate, scope: raceScope });
-      setRaceId(data.id);
+      if (raceId) {
+        // Coming back to edit — update the already-created race instead of duplicating it.
+        await updateRace(raceId, { name: raceName.trim(), race_date: raceDate, scope: raceScope });
+      } else {
+        const { data } = await createRace({ name: raceName.trim(), race_date: raceDate, scope: raceScope });
+        setRaceId(data.id);
+      }
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create race');
@@ -61,10 +66,12 @@ export default function RaceWizardPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-2">Create Race</h2>
+      <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
+      <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
+      <h2 className="text-xl font-bold mb-2 text-white">Create Race</h2>
       {isCoachOnly && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
-          <p className="text-xs text-amber-900">
+        <div className="bg-amber-500/15 border border-amber-400/30 rounded-lg p-3 mb-4">
+          <p className="text-xs text-amber-100">
             <span className="font-semibold">Pending admin approval.</span>{' '}
             This race will be visible only to you and an admin until an admin approves it.
           </p>
@@ -72,30 +79,31 @@ export default function RaceWizardPage() {
       )}
       <div className="flex gap-2 mb-6">
         {[1, 2, 3].map((s) => (
-          <div key={s} className={`flex-1 h-1.5 rounded-full ${step >= s ? 'bg-blue-600' : 'bg-gray-200'}`} />
+          <div key={s} className={`flex-1 h-1.5 rounded-full ${step >= s ? 'bg-[#c0c1ff]' : 'bg-white/15'}`} />
         ))}
       </div>
 
-      {error && <p className="text-red-500 text-sm bg-red-50 rounded p-2 mb-4">{error}</p>}
+      {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded p-2 mb-4">{error}</p>}
 
+      <div className="bg-[#161616]/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-4">
       {step === 1 && (
         <div className="space-y-4">
-          <h3 className="text-base font-semibold">Step 1: Race Info</h3>
+          <h3 className="text-base font-semibold text-white">Step 1: Race Info</h3>
           <input
             type="text"
             placeholder="Race Name"
             value={raceName}
             onChange={(e) => setRaceName(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
           />
           <input
             type="date"
             value={raceDate}
             onChange={(e) => setRaceDate(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
           />
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Visibility</label>
+            <label className="block text-xs font-medium text-white/60 mb-1">Visibility</label>
             <div className="flex gap-2">
               {[
                 { value: 'global', label: 'Global', desc: 'Everyone & Hall of Fame' },
@@ -108,8 +116,8 @@ export default function RaceWizardPage() {
                   onClick={() => setRaceScope(value)}
                   className={`flex-1 rounded-lg border px-2 py-2 text-center transition-colors ${
                     raceScope === value
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      ? 'border-[#c0c1ff]/50 bg-[#c0c1ff]/10 text-[#c0c1ff]'
+                      : 'border-white/10 text-white/60 hover:border-white/25'
                   }`}
                 >
                   <div className="text-xs font-semibold">{label}</div>
@@ -121,7 +129,7 @@ export default function RaceWizardPage() {
           <button
             onClick={handleStep1}
             disabled={saving || !raceName.trim() || !raceDate}
-            className="w-full bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2.5 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50"
           >
             {saving ? 'Creating...' : 'Next'}
           </button>
@@ -130,12 +138,12 @@ export default function RaceWizardPage() {
 
       {step === 2 && (
         <div className="space-y-4">
-          <h3 className="text-base font-semibold">Step 2: Add Heats</h3>
+          <h3 className="text-base font-semibold text-white">Step 2: Add Heats</h3>
           <div className="flex gap-2">
             <select
               value={newDist}
               onChange={(e) => setNewDist(parseInt(e.target.value))}
-              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
             >
               {DISTANCE_OPTIONS.map((d) => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -146,9 +154,9 @@ export default function RaceWizardPage() {
               placeholder="Heat label (e.g. Elite)"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
-              className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
             />
-            <button onClick={handleAddHeat} disabled={saving || !newLabel.trim()} className="bg-blue-600 text-white rounded-lg px-4 text-sm disabled:opacity-50">
+            <button onClick={handleAddHeat} disabled={saving || !newLabel.trim()} className="bg-[#c0c1ff] text-[#1000a9] rounded-lg px-4 text-sm disabled:opacity-50">
               Add
             </button>
           </div>
@@ -156,21 +164,29 @@ export default function RaceWizardPage() {
           {heats.length > 0 && (
             <div className="space-y-1">
               {heats.map((h, i) => (
-                <div key={h.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 text-sm">
-                  <span className="font-medium">{DISTANCE_OPTIONS.find((d) => d.value === h.distance_m)?.label}</span>
-                  <span className="text-gray-500">- {h.label}</span>
+                <div key={h.id} className="flex items-center gap-2 bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-sm text-white/85">
+                  <span className="font-medium text-white">{DISTANCE_OPTIONS.find((d) => d.value === h.distance_m)?.label}</span>
+                  <span className="text-white/50">- {h.label}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <button
-            onClick={() => { setActiveHeat(0); setStep(3); }}
-            disabled={heats.length === 0}
-            className="w-full bg-blue-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            Next: Enter Results
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStep(1)}
+              className="px-4 border border-white/20 text-white/80 rounded-lg py-2.5 text-sm font-medium hover:bg-white/10 transition"
+            >
+              ‹ Back
+            </button>
+            <button
+              onClick={() => { setActiveHeat(0); setStep(3); }}
+              disabled={heats.length === 0}
+              className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2.5 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50"
+            >
+              Next: Enter Results
+            </button>
+          </div>
         </div>
       )}
 
@@ -181,14 +197,16 @@ export default function RaceWizardPage() {
           setHeats={setHeats}
           activeHeat={activeHeat}
           setActiveHeat={setActiveHeat}
+          onBack={() => setStep(2)}
           onDone={() => navigate(`/races/${raceId}`)}
         />
       )}
+      </div>
     </div>
   );
 }
 
-function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
+function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onBack, onDone }) {
   const heat = heats[activeHeat];
   const [name, setName] = useState('');
   const [timeRaw, setTimeRaw] = useState('');
@@ -251,7 +269,7 @@ function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-base font-semibold">Step 3: Enter Results</h3>
+      <h3 className="text-base font-semibold text-white">Step 3: Enter Results</h3>
 
       <div className="flex gap-2 overflow-x-auto pb-2">
         {heats.map((h, i) => (
@@ -259,7 +277,7 @@ function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
             key={h.id}
             onClick={() => setActiveHeat(i)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
-              i === activeHeat ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
+              i === activeHeat ? 'bg-[#c0c1ff] text-[#1000a9]' : 'bg-white/10 text-white/70'
             }`}
           >
             {h.label} ({h.results.length})
@@ -269,25 +287,25 @@ function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
 
       {error && <p className="text-red-500 text-sm">{error}</p>}
 
-      <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+      <div className="bg-white/5 rounded-xl p-3 space-y-2">
         <div className="relative">
           <input
             type="text"
             placeholder="Athlete name"
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
           />
           {suggestions.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg">
+            <div className="absolute z-10 w-full mt-1 bg-[#1c1b1c] border border-white/10 rounded-lg shadow-2xl">
               {suggestions.map((s) => (
                 <button
                   key={s.id}
                   onClick={() => selectSuggestion(s)}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between"
+                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/10 flex items-center justify-between"
                 >
                   <span>{s.full_name}</span>
-                  <span className="text-xs text-gray-400">{s.gender === 'M' ? 'Male' : 'Female'}</span>
+                  <span className="text-xs text-white/40">{s.gender === 'M' ? 'Male' : 'Female'}</span>
                 </button>
               ))}
             </div>
@@ -300,17 +318,17 @@ function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
             placeholder="Time (MM:SS or H:MM:SS)"
             value={timeRaw}
             onChange={(e) => setTimeRaw(e.target.value)}
-            className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
           />
           {resolvedGender ? (
-            <span className="border rounded-lg px-3 py-2 text-sm bg-green-50 text-green-700">
+            <span className="border border-emerald-400/30 rounded-lg px-3 py-2 text-sm bg-emerald-500/15 text-emerald-300">
               {resolvedGender === 'M' ? 'Male' : 'Female'}
             </span>
           ) : (
             <select
               value={gender}
               onChange={(e) => setGender(e.target.value)}
-              className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
             >
               <option value="">Gender</option>
               <option value="M">Male</option>
@@ -322,17 +340,17 @@ function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
         <button
           onClick={handleAdd}
           disabled={saving || !name.trim() || !timeRaw.trim()}
-          className="w-full bg-blue-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50"
         >
           {saving ? 'Adding...' : 'Add Result'}
         </button>
       </div>
 
       {heat.results.length > 0 && (
-        <div className="bg-white border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-[#161616]/70 backdrop-blur-2xl border border-white/10 rounded-xl overflow-hidden">
+          <table className="w-full text-sm text-white/90">
             <thead>
-              <tr className="bg-gray-50 border-b text-gray-500">
+              <tr className="bg-white/5 border-b border-white/10 text-white/50">
                 <th className="px-3 py-1.5 text-left">#</th>
                 <th className="px-3 py-1.5 text-left">Name</th>
                 <th className="px-3 py-1.5 text-right">Time</th>
@@ -340,7 +358,7 @@ function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
             </thead>
             <tbody>
               {[...heat.results].sort((a, b) => a.time_seconds - b.time_seconds).map((r, i) => (
-                <tr key={r.id} className="border-t">
+                <tr key={r.id} className="border-t border-white/5">
                   <td className="px-3 py-2">{i + 1}</td>
                   <td className="px-3 py-2">{r.athlete_name}</td>
                   <td className="px-3 py-2 text-right font-mono">{r.time_display}</td>
@@ -351,12 +369,20 @@ function Step3({ raceId, heats, setHeats, activeHeat, setActiveHeat, onDone }) {
         </div>
       )}
 
-      <button
-        onClick={onDone}
-        className="w-full bg-green-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-green-700"
-      >
-        Finish Race
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={onBack}
+          className="px-4 border border-white/20 text-white/80 rounded-lg py-2.5 text-sm font-medium hover:bg-white/10 transition"
+        >
+          ‹ Back
+        </button>
+        <button
+          onClick={onDone}
+          className="flex-1 bg-green-600 text-white rounded-lg py-2.5 text-sm font-medium hover:bg-green-700"
+        >
+          Finish Race
+        </button>
+      </div>
     </div>
   );
 }

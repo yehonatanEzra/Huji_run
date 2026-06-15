@@ -130,6 +130,13 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
                 {wt === 'rest' ? 'Rest day — nothing scheduled.' : 'No workout scheduled for today.'}
               </p>
             )}
+
+            {/* Planned distance the coach set */}
+            {workout?.distance_km > 0 && (
+              <p className={`text-sm font-bold mt-2 ${bodyText}`}>
+                {Number(workout.distance_km.toFixed(1))} km
+              </p>
+            )}
           </div>
 
           {/* PERFORATION with side notches */}

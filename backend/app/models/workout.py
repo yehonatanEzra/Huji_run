@@ -35,6 +35,7 @@ class GroupWorkout(Base):
     main_session: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cooldown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     draft_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    distance_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # planned distance
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -59,6 +60,7 @@ class IndividualTarget(Base):
     warmup: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     main_session: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cooldown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    distance_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # planned distance
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

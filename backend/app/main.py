@@ -28,8 +28,9 @@ from .models.team import Team, TeamMembership  # noqa: F401
 from .models.group_coach import GroupCoach  # noqa: F401
 from .models.group_add_request import GroupAddRequest  # noqa: F401
 from .models.workout_template import WorkoutTemplate, WorkoutTemplateDay  # noqa: F401
+from .models.goal import Goal  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams, group_coach, reporting, analytics, workout_templates
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams, group_coach, reporting, analytics, workout_templates, goals, public
 
 Base.metadata.create_all(bind=engine)
 
@@ -111,6 +112,8 @@ app.include_router(group_coach.router, prefix=API_PREFIX)
 app.include_router(reporting.router, prefix=API_PREFIX)
 app.include_router(analytics.router, prefix=API_PREFIX)
 app.include_router(workout_templates.router, prefix=API_PREFIX)
+app.include_router(goals.router, prefix=API_PREFIX)
+app.include_router(public.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

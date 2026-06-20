@@ -419,6 +419,8 @@ def upsert_individual_target(
             it.workout_type = body.workout_type
         if body.title is not None:
             it.title = _clean(body.title)
+        if body.content is not None:
+            it.content = _clean(body.content)
         if body.warmup is not None:
             it.warmup = _clean(body.warmup)
         if body.main_session is not None:
@@ -436,6 +438,7 @@ def upsert_individual_target(
             override_group=body.override_group,
             workout_type=wt,
             title=_clean(body.title),
+            content=_clean(body.content),
             warmup=_clean(body.warmup),
             main_session=_clean(body.main_session),
             cooldown=_clean(body.cooldown),

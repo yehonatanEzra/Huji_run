@@ -3,7 +3,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func as sa_func
+from sqlalchemy import func as sa_func, or_
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach
@@ -11,8 +11,20 @@ from ..models.user import User
 from ..models.coach_request import CoachRequest
 from ..models.workout import IndividualTarget
 from ..models.group_add_request import GroupAddRequest
+from ..models.group_coach import GroupCoach
+from ..models.athlete_transfer import AthleteTransfer
+from ..services.notifications import notify
 
 router = APIRouter(tags=["coaching"])
+
+
+def _cancel_pending_transfers(db: Session, athlete_id: int) -> None:
+    """Mark any pending transfer for this athlete cancelled (relationship ending)."""
+    db.query(AthleteTransfer).filter(
+        AthleteTransfer.athlete_id == athlete_id,
+        AthleteTransfer.status == "pending",
+    ).update({AthleteTransfer.status: "cancelled", AthleteTransfer.decided_at: datetime.utcnow()},
+             synchronize_session=False)
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
@@ -192,6 +204,7 @@ def leave_coach(
     db.query(GroupAddRequest).filter(
         GroupAddRequest.athlete_id == current_user.id
     ).delete(synchronize_session=False)
+    _cancel_pending_transfers(db, current_user.id)
     current_user.coach_id = None
     current_user.training_group_id = None
     db.commit()
@@ -294,6 +307,218 @@ def remove_athlete_from_roster(
     db.query(GroupAddRequest).filter(
         GroupAddRequest.athlete_id == athlete.id
     ).delete(synchronize_session=False)
+    _cancel_pending_transfers(db, athlete.id)
     athlete.coach_id = None
     athlete.training_group_id = None
+    db.commit()
+
+
+# ── Athlete transfer (coach → co-coach, dual approval) ──────────────────────────
+
+
+class TransferCreate(BaseModel):
+    to_coach_id: int
+
+
+class TransferOut(BaseModel):
+    id: int
+    athlete_id: int
+    athlete_name: str
+    group_id: int
+    group_name: str
+    from_coach_id: int
+    from_coach_name: str
+    to_coach_id: int
+    to_coach_name: str
+    to_coach_approved: bool
+    athlete_approved: bool
+    status: str
+    created_at: datetime
+    you_approved: bool = False
+
+
+def _serialize_transfer(db: Session, t: AthleteTransfer, viewer_id: Optional[int] = None) -> TransferOut:
+    from ..models.training_group import TrainingGroup
+    athlete = db.get(User, t.athlete_id)
+    group = db.get(TrainingGroup, t.group_id)
+    frm = db.get(User, t.from_coach_id)
+    to = db.get(User, t.to_coach_id)
+    you_approved = False
+    if viewer_id == t.to_coach_id:
+        you_approved = t.to_coach_approved
+    elif viewer_id == t.athlete_id:
+        you_approved = t.athlete_approved
+    return TransferOut(
+        id=t.id,
+        athlete_id=t.athlete_id,
+        athlete_name=athlete.full_name if athlete else "(unknown)",
+        group_id=t.group_id,
+        group_name=group.name if group else "(unknown)",
+        from_coach_id=t.from_coach_id,
+        from_coach_name=frm.full_name if frm else "(unknown)",
+        to_coach_id=t.to_coach_id,
+        to_coach_name=to.full_name if to else "(unknown)",
+        to_coach_approved=t.to_coach_approved,
+        athlete_approved=t.athlete_approved,
+        status=t.status,
+        created_at=t.created_at,
+        you_approved=you_approved,
+    )
+
+
+@router.post("/coach/athletes/{athlete_id}/transfer", response_model=TransferOut, status_code=201)
+def create_transfer(
+    athlete_id: int,
+    body: TransferCreate,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    """The athlete's personal coach proposes handing them to a co-coach of the
+    same group. Completes only once the destination coach AND the athlete approve."""
+    athlete = db.get(User, athlete_id)
+    if not athlete or athlete.role != "athlete":
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    if coach.role != "admin" and athlete.coach_id != coach.id:
+        raise HTTPException(status_code=403, detail="Not your athlete")
+    if athlete.coach_id is None:
+        raise HTTPException(status_code=400, detail="Athlete has no personal coach to transfer from")
+    if athlete.training_group_id is None:
+        raise HTTPException(status_code=400, detail="Athlete is not in a group; transfer is within a group")
+    if body.to_coach_id == athlete.coach_id:
+        raise HTTPException(status_code=400, detail="Athlete already has this coach")
+
+    to_coach = db.get(User, body.to_coach_id)
+    if not to_coach or to_coach.role not in ("coach", "admin"):
+        raise HTTPException(status_code=404, detail="Destination coach not found")
+    is_co_coach = db.query(GroupCoach).filter(
+        GroupCoach.group_id == athlete.training_group_id,
+        GroupCoach.user_id == body.to_coach_id,
+    ).first()
+    if is_co_coach is None:
+        raise HTTPException(status_code=400, detail="Destination coach must co-coach the athlete's group")
+
+    existing = db.query(AthleteTransfer).filter(
+        AthleteTransfer.athlete_id == athlete_id, AthleteTransfer.status == "pending"
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="A transfer is already pending for this athlete")
+
+    t = AthleteTransfer(
+        athlete_id=athlete_id, group_id=athlete.training_group_id,
+        from_coach_id=athlete.coach_id, to_coach_id=body.to_coach_id, status="pending",
+    )
+    db.add(t)
+    db.flush()
+    notify(db, body.to_coach_id, "transfer_request",
+           f"{coach.full_name} wants to transfer {athlete.full_name} to you.", "/coach/requests")
+    notify(db, athlete_id, "transfer_request",
+           f"{coach.full_name} wants to transfer you to {to_coach.full_name}.", "/profile")
+    db.commit()
+    db.refresh(t)
+    return _serialize_transfer(db, t, coach.id)
+
+
+@router.get("/transfers/incoming", response_model=List[TransferOut])
+def incoming_transfers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Pending transfers the current user must act on — as destination coach or
+    as the athlete being transferred."""
+    rows = (
+        db.query(AthleteTransfer)
+        .filter(
+            AthleteTransfer.status == "pending",
+            or_(AthleteTransfer.to_coach_id == current_user.id,
+                AthleteTransfer.athlete_id == current_user.id),
+        )
+        .order_by(AthleteTransfer.created_at.asc())
+        .all()
+    )
+    return [_serialize_transfer(db, r, current_user.id) for r in rows]
+
+
+@router.post("/transfers/{transfer_id}/approve", response_model=TransferOut)
+def approve_transfer(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Destination coach or athlete approves. When both have approved, the
+    transfer completes: coach_id flips and the old coach's future personal
+    targets are wiped (group + group workouts untouched)."""
+    t = db.get(AthleteTransfer, transfer_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    if t.status != "pending":
+        raise HTTPException(status_code=400, detail="Transfer is not pending")
+    if current_user.id == t.to_coach_id:
+        t.to_coach_approved = True
+    elif current_user.id == t.athlete_id:
+        t.athlete_approved = True
+    else:
+        raise HTTPException(status_code=403, detail="Not a party to this transfer")
+
+    if t.to_coach_approved and t.athlete_approved:
+        athlete = db.get(User, t.athlete_id)
+        if not athlete:
+            raise HTTPException(status_code=404, detail="Athlete no longer exists")
+        athlete.coach_id = t.to_coach_id
+        # Old coach's future plan is wiped; group workouts are not personal → untouched.
+        db.query(IndividualTarget).filter(
+            IndividualTarget.athlete_id == t.athlete_id,
+            IndividualTarget.date >= date.today(),
+        ).delete(synchronize_session=False)
+        t.status = "completed"
+        t.decided_at = datetime.utcnow()
+        notify(db, t.from_coach_id, "transfer_completed",
+               f"{athlete.full_name} was transferred to another coach.", "/coach/group")
+        notify(db, t.to_coach_id, "transfer_completed",
+               f"{athlete.full_name} is now your athlete.", "/coach/group")
+        notify(db, t.athlete_id, "transfer_completed",
+               "Your coach transfer is complete.", "/profile")
+    db.commit()
+    db.refresh(t)
+    return _serialize_transfer(db, t, current_user.id)
+
+
+@router.post("/transfers/{transfer_id}/decline", status_code=204)
+def decline_transfer(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Destination coach or athlete declines → the transfer is cancelled."""
+    t = db.get(AthleteTransfer, transfer_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    if t.status != "pending":
+        raise HTTPException(status_code=400, detail="Transfer is not pending")
+    if current_user.id not in (t.to_coach_id, t.athlete_id):
+        raise HTTPException(status_code=403, detail="Not a party to this transfer")
+    t.status = "declined"
+    t.decided_at = datetime.utcnow()
+    athlete = db.get(User, t.athlete_id)
+    notify(db, t.from_coach_id, "transfer_declined",
+           f"The transfer of {athlete.full_name if athlete else 'your athlete'} was declined.",
+           "/coach/group")
+    db.commit()
+
+
+@router.delete("/transfers/{transfer_id}", status_code=204)
+def cancel_transfer(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+):
+    """Initiating coach cancels a pending transfer they proposed."""
+    t = db.get(AthleteTransfer, transfer_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Transfer not found")
+    if coach.role != "admin" and t.from_coach_id != coach.id:
+        raise HTTPException(status_code=403, detail="Not your transfer")
+    if t.status != "pending":
+        raise HTTPException(status_code=400, detail="Transfer is not pending")
+    t.status = "cancelled"
+    t.decided_at = datetime.utcnow()
     db.commit()

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -10,6 +11,8 @@ from ..models.user import User
 from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
 from ..models.group_add_request import GroupAddRequest
+from ..models.group_coach_invite import GroupCoachInvite
+from ..services.notifications import notify
 
 router = APIRouter(prefix="/groups", tags=["group-coaches"])
 
@@ -26,8 +29,39 @@ class AddCoachRequest(BaseModel):
     role: str = "assistant"
 
 
+class CoachInviteOut(BaseModel):
+    id: int
+    group_id: int
+    group_name: str
+    invited_user_id: int
+    invited_user_name: str
+    invited_by_id: int
+    invited_by_name: str
+    role: str
+    status: str
+    created_at: datetime
+
+
 class TransferRequest(BaseModel):
     new_main_user_id: int
+
+
+def _serialize_invite(db: Session, inv: GroupCoachInvite) -> CoachInviteOut:
+    group = db.get(TrainingGroup, inv.group_id)
+    invited = db.get(User, inv.invited_user_id)
+    inviter = db.get(User, inv.invited_by_id)
+    return CoachInviteOut(
+        id=inv.id,
+        group_id=inv.group_id,
+        group_name=group.name if group else "(unknown)",
+        invited_user_id=inv.invited_user_id,
+        invited_user_name=invited.full_name if invited else "(unknown)",
+        invited_by_id=inv.invited_by_id,
+        invited_by_name=inviter.full_name if inviter else "(unknown)",
+        role=inv.role,
+        status=inv.status,
+        created_at=inv.created_at,
+    )
 
 
 def _require_main_coach(group: TrainingGroup, actor: User, db: Session) -> GroupCoach:
@@ -87,13 +121,15 @@ def list_coaches(
             for gc, u in rows]
 
 
-@router.post("/{group_id}/coaches", response_model=CoachOut, status_code=status.HTTP_201_CREATED)
+@router.post("/{group_id}/coaches", response_model=CoachInviteOut, status_code=status.HTTP_201_CREATED)
 def add_coach(
     group_id: int,
     body: AddCoachRequest,
     actor: Annotated[User, Depends(require_coach)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    """Invite a coach to co-coach this group. The invited coach must accept
+    before a GroupCoach row is created — this does not add them directly."""
     group = db.get(TrainingGroup, group_id)
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -112,10 +148,134 @@ def add_coach(
     if existing:
         raise HTTPException(status_code=409, detail="User is already a coach of this group")
 
-    gc = GroupCoach(user_id=body.user_id, group_id=group_id, role=body.role)
-    db.add(gc)
+    pending = db.query(GroupCoachInvite).filter(
+        GroupCoachInvite.group_id == group_id,
+        GroupCoachInvite.invited_user_id == body.user_id,
+        GroupCoachInvite.status == "pending",
+    ).first()
+    if pending:
+        raise HTTPException(status_code=409, detail="An invitation is already pending for this coach")
+
+    inv = GroupCoachInvite(
+        group_id=group_id, invited_user_id=body.user_id,
+        invited_by_id=actor.id, role=body.role, status="pending",
+    )
+    db.add(inv)
+    db.flush()
+    notify(db, target.id, "coach_invite",
+           f"{actor.full_name} invited you to co-coach “{group.name}”.", "/coach/requests")
     db.commit()
-    return CoachOut(user_id=target.id, full_name=target.full_name, username=target.username, role=gc.role)
+    db.refresh(inv)
+    return _serialize_invite(db, inv)
+
+
+@router.get("/coach-invites/incoming", response_model=list[CoachInviteOut])
+def incoming_coach_invites(
+    actor: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Pending co-coach invitations addressed to the current coach."""
+    rows = (
+        db.query(GroupCoachInvite)
+        .filter(GroupCoachInvite.invited_user_id == actor.id, GroupCoachInvite.status == "pending")
+        .order_by(GroupCoachInvite.created_at.asc())
+        .all()
+    )
+    return [_serialize_invite(db, r) for r in rows]
+
+
+@router.get("/{group_id}/coach-invites", response_model=list[CoachInviteOut])
+def list_group_coach_invites(
+    group_id: int,
+    actor: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Pending invitations for a group (main coach view)."""
+    group = db.get(TrainingGroup, group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    _require_main_coach(group, actor, db)
+    rows = (
+        db.query(GroupCoachInvite)
+        .filter(GroupCoachInvite.group_id == group_id, GroupCoachInvite.status == "pending")
+        .order_by(GroupCoachInvite.created_at.asc())
+        .all()
+    )
+    return [_serialize_invite(db, r) for r in rows]
+
+
+@router.post("/coach-invites/{invite_id}/accept", response_model=CoachOut)
+def accept_coach_invite(
+    invite_id: int,
+    actor: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Invited coach accepts → a GroupCoach row is created."""
+    inv = db.get(GroupCoachInvite, invite_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    if inv.invited_user_id != actor.id:
+        raise HTTPException(status_code=403, detail="Not your invitation")
+    if inv.status != "pending":
+        raise HTTPException(status_code=400, detail="Invitation is not pending")
+
+    existing = db.query(GroupCoach).filter(
+        GroupCoach.group_id == inv.group_id, GroupCoach.user_id == actor.id
+    ).first()
+    if existing is None:
+        db.add(GroupCoach(user_id=actor.id, group_id=inv.group_id, role=inv.role))
+    inv.status = "accepted"
+    inv.decided_at = datetime.utcnow()
+    group = db.get(TrainingGroup, inv.group_id)
+    notify(db, inv.invited_by_id, "coach_invite_accepted",
+           f"{actor.full_name} accepted your invitation to co-coach “{group.name if group else ''}”.",
+           "/coach/group")
+    db.commit()
+    return CoachOut(user_id=actor.id, full_name=actor.full_name, username=actor.username, role=inv.role)
+
+
+@router.post("/coach-invites/{invite_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
+def decline_coach_invite(
+    invite_id: int,
+    actor: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Invited coach declines the invitation."""
+    inv = db.get(GroupCoachInvite, invite_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    if inv.invited_user_id != actor.id:
+        raise HTTPException(status_code=403, detail="Not your invitation")
+    if inv.status != "pending":
+        raise HTTPException(status_code=400, detail="Invitation is not pending")
+    inv.status = "declined"
+    inv.decided_at = datetime.utcnow()
+    group = db.get(TrainingGroup, inv.group_id)
+    notify(db, inv.invited_by_id, "coach_invite_declined",
+           f"{actor.full_name} declined your invitation to co-coach “{group.name if group else ''}”.",
+           "/coach/group")
+    db.commit()
+
+
+@router.delete("/coach-invites/{invite_id}", status_code=status.HTTP_204_NO_CONTENT)
+def withdraw_coach_invite(
+    invite_id: int,
+    actor: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Main coach withdraws a pending invitation they sent."""
+    inv = db.get(GroupCoachInvite, invite_id)
+    if inv is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    group = db.get(TrainingGroup, inv.group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    _require_main_coach(group, actor, db)
+    if inv.status != "pending":
+        raise HTTPException(status_code=400, detail="Invitation is not pending")
+    inv.status = "withdrawn"
+    inv.decided_at = datetime.utcnow()
+    db.commit()
 
 
 @router.delete("/{group_id}/coaches/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

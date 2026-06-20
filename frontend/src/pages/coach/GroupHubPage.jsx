@@ -10,7 +10,9 @@ import {
 } from '../../api/coach';
 import {
   listGroupCoaches, searchCoaches, addGroupCoach, removeGroupCoach, transferGroupOwnership,
+  listGroupCoachInvites, withdrawCoachInvite,
 } from '../../api/groupCoach';
+import { removeAthleteFromRoster, createTransfer } from '../../api/coaching';
 import { getTeamVolume, getTeamCompletion, getTypeBreakdown } from '../../api/analytics';
 import { getReportingOverview, getLoadOverview } from '../../api/reporting';
 import { getMyTeams, updateTeam } from '../../api/teams';
@@ -133,11 +135,13 @@ function HubBackground() {
 
 // ── Athletes tab ──────────────────────────────────────────────────────────────
 function AthletesTab({ group, onChanged, groups }) {
+  const { user } = useAuth();
   const [detail, setDetail] = useState(null);
   const [pending, setPending] = useState([]);
   const [myAthletes, setMyAthletes] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [moveTarget, setMoveTarget] = useState(null);
+  const [transferTarget, setTransferTarget] = useState(null);
   const [logAthlete, setLogAthlete] = useState(null);
   const [busy, setBusy] = useState(false);
   const [weekDate, setWeekDate] = useState(new Date());
@@ -171,6 +175,11 @@ function AthletesTab({ group, onChanged, groups }) {
     if (!confirm('Remove from this group? They stay your athlete — just without a group.')) return;
     setBusy(true);
     try { await removeMemberFromGroup(group.id, athleteId); load(); onChanged(); } finally { setBusy(false); }
+  };
+  const handleRemoveConnection = async (athleteId, name) => {
+    if (!confirm(`Stop coaching ${name}? Their past data stays, but their future workouts are cleared and they leave the group.`)) return;
+    setBusy(true);
+    try { await removeAthleteFromRoster(athleteId); load(); onChanged(); } finally { setBusy(false); }
   };
 
   if (!detail) return <Spinner />;
@@ -262,7 +271,14 @@ function AthletesTab({ group, onChanged, groups }) {
                           {total > 0 ? <span className="font-bold text-[#c0c1ff]">{total.toFixed(1)}</span> : <span className="text-white/25">–</span>}
                         </td>
                         <td className="pr-1">
-                          <MemberMenu onMove={() => setMoveTarget(m)} onRemove={() => handleRemove(m.id)} canMove={groups.length > 1} />
+                          <MemberMenu
+                            onMove={() => setMoveTarget(m)} canMove={groups.length > 1}
+                            isMine={myAthletes.some((a) => a.id === m.id)}
+                            isMain={isMain}
+                            onRemove={() => handleRemove(m.id)}
+                            onRemoveConnection={() => handleRemoveConnection(m.id, m.full_name)}
+                            onTransfer={() => setTransferTarget(m)}
+                          />
                         </td>
                       </tr>
                     );
@@ -294,6 +310,14 @@ function AthletesTab({ group, onChanged, groups }) {
         {moveTarget && (
           <MovePanel athlete={moveTarget} fromGroup={group} groups={groups}
             onClose={() => setMoveTarget(null)} onDone={() => { setMoveTarget(null); load(); onChanged(); }} />
+        )}
+      </Modal>
+
+      {/* Transfer modal */}
+      <Modal open={!!transferTarget} onClose={() => setTransferTarget(null)} panelClassName="bg-[#131314] border-t border-white/10">
+        {transferTarget && (
+          <TransferPanel athlete={transferTarget} group={group} meId={user?.id}
+            onClose={() => setTransferTarget(null)} onDone={() => { setTransferTarget(null); load(); }} />
         )}
       </Modal>
 
@@ -351,20 +375,64 @@ function AddRow({ athlete, groupId, onDone }) {
   );
 }
 
-function MemberMenu({ onMove, onRemove, canMove }) {
+function MemberMenu({ onMove, onRemove, onRemoveConnection, onTransfer, canMove, isMine, isMain }) {
   // Bottom-sheet rather than an absolute dropdown — the grid's overflow-x-auto
   // container would otherwise clip a dropdown.
   const [open, setOpen] = useState(false);
+  const canRemoveGroup = isMain || isMine;
   return (
     <>
       <button onClick={() => setOpen(true)} className="w-8 h-8 rounded-full text-white/50 hover:text-white hover:bg-white/10 flex items-center justify-center transition">⋯</button>
       <Modal open={open} onClose={() => setOpen(false)} panelClassName="bg-[#131314] border-t border-white/10">
         <div className="space-y-2">
           {canMove && <button onClick={() => { setOpen(false); onMove(); }} className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] text-sm text-white/85 hover:bg-white/10 transition">Move to another group →</button>}
-          <button onClick={() => { setOpen(false); onRemove(); }} className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] text-sm text-red-300 hover:bg-white/10 transition">Remove from group</button>
+          {isMine && <button onClick={() => { setOpen(false); onTransfer(); }} className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] text-sm text-white/85 hover:bg-white/10 transition">Transfer to another coach →</button>}
+          {canRemoveGroup && <button onClick={() => { setOpen(false); onRemove(); }} className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] text-sm text-red-300 hover:bg-white/10 transition">Remove from group</button>}
+          {isMine && <button onClick={() => { setOpen(false); onRemoveConnection(); }} className="w-full text-left px-4 py-3 rounded-xl bg-white/[0.04] text-sm text-red-300 hover:bg-white/10 transition">Remove connection (stop coaching)</button>}
         </div>
       </Modal>
     </>
+  );
+}
+
+// Propose handing an athlete to a co-coach of the same group. Completes only
+// after both the destination coach and the athlete approve.
+function TransferPanel({ athlete, group, meId, onClose, onDone }) {
+  const [coaches, setCoaches] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  useEffect(() => {
+    listGroupCoaches(group.id)
+      .then(({ data }) => setCoaches(data.filter((c) => c.user_id !== meId)))
+      .catch(() => setCoaches([]));
+  }, [group.id, meId]);
+  const send = async (toId) => {
+    setBusy(true); setMsg('');
+    try {
+      await createTransfer(athlete.id, toId);
+      setMsg('Request sent — the athlete and the new coach both need to approve.');
+    } catch (e) {
+      setMsg(e?.response?.data?.detail || 'Could not start transfer');
+    } finally { setBusy(false); }
+  };
+  return (
+    <div>
+      <h3 className="text-base font-bold text-white mb-1">Transfer {athlete.full_name}</h3>
+      <p className="text-xs text-white/50 mb-3">To another coach of “{group.name}”. They stay in this group; only their personal coach changes once both they and the new coach approve.</p>
+      {coaches.length === 0 ? (
+        <p className="text-sm text-white/45 italic py-3 text-center">No other coaches in this group to transfer to.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {coaches.map((c) => (
+            <button key={c.user_id} disabled={busy} onClick={() => send(c.user_id)} className={`${GLASS} w-full text-left rounded-xl px-4 py-2.5 text-sm text-white hover:bg-white/[0.06] disabled:opacity-40`}>
+              {c.full_name} <span className="text-[11px] text-white/40">{c.role === 'main' ? '· Main coach' : '· Assistant'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {msg && <p className="text-xs text-amber-200 mt-3">{msg}</p>}
+      <button onClick={onDone} className="mt-4 w-full text-sm text-white/50 hover:text-white">{msg ? 'Done' : 'Cancel'}</button>
+    </div>
   );
 }
 
@@ -401,6 +469,7 @@ function MovePanel({ athlete, fromGroup, groups, onClose, onDone }) {
 function CoCoachesTab({ group }) {
   const { user } = useAuth();
   const [coaches, setCoaches] = useState([]);
+  const [invites, setInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -412,10 +481,12 @@ function CoCoachesTab({ group }) {
   const load = useCallback(() => {
     setLoading(true);
     listGroupCoaches(group.id).then(({ data }) => setCoaches(data)).catch(() => setCoaches([])).finally(() => setLoading(false));
+    listGroupCoachInvites(group.id).then(({ data }) => setInvites(data)).catch(() => setInvites([]));
   }, [group.id]);
   useEffect(() => { load(); }, [load]);
 
   const isMain = coaches.some((c) => c.user_id === user?.id && c.role === 'main');
+  const withdrawInvite = async (inv) => { if (!confirm(`Withdraw the invitation to ${inv.invited_user_name}?`)) return; await withdrawCoachInvite(inv.id); load(); };
 
   useEffect(() => {
     if (!searchQ.trim()) { setResults([]); return; }
@@ -428,7 +499,7 @@ function CoCoachesTab({ group }) {
     return () => clearTimeout(t);
   }, [searchQ, coaches]);
 
-  const add = async (u) => { setBusy(true); try { await addGroupCoach(group.id, u.id, 'assistant'); setSearchQ(''); setResults([]); setAddOpen(false); load(); } finally { setBusy(false); } };
+  const add = async (u) => { setBusy(true); try { await addGroupCoach(group.id, u.id, 'assistant'); setSearchQ(''); setResults([]); setAddOpen(false); load(); } catch (e) { alert(e?.response?.data?.detail || 'Could not send invitation'); } finally { setBusy(false); } };
   const remove = async (c) => { if (!confirm(`Remove ${c.full_name} as assistant?`)) return; await removeGroupCoach(group.id, c.user_id); load(); };
   const transfer = async () => { if (!transferTarget) return; setBusy(true); try { await transferGroupOwnership(group.id, transferTarget.user_id); setTransferOpen(false); setTransferTarget(null); load(); } finally { setBusy(false); } };
 
@@ -454,17 +525,37 @@ function CoCoachesTab({ group }) {
         <p className="text-sm text-white/45 italic py-3 text-center">You're coaching solo. Add an assistant to share the group.</p>
       )}
 
+      {invites.length > 0 && (
+        <div className="pt-1">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff] mb-2">Pending invitations</p>
+          <div className="space-y-2">
+            {invites.map((inv) => (
+              <div key={inv.id} className={`${GLASS} rounded-xl px-4 py-2.5 flex items-center gap-2`}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{inv.invited_user_name}</p>
+                  <p className="text-[11px] text-amber-200/80">Awaiting their acceptance</p>
+                </div>
+                {isMain && (
+                  <button onClick={() => withdrawInvite(inv)} className="text-xs text-red-300 hover:text-red-200 ml-1">Withdraw</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isMain && (
         <div className="flex gap-2 pt-1">
           <button onClick={() => setAddOpen(true)} className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-xl py-2 text-sm font-bold">Add assistant coach</button>
           {assistants.length > 0 && (
-            <button onClick={() => setTransferOpen(true)} className="flex-1 border border-white/15 text-white/80 rounded-xl py-2 text-sm font-medium hover:bg-white/5">Transfer ownership</button>
+            <button onClick={() => setTransferOpen(true)} className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-xl py-2 text-sm font-bold">Transfer ownership</button>
           )}
         </div>
       )}
 
       <Modal open={addOpen} onClose={() => { setAddOpen(false); setSearchQ(''); setResults([]); }} panelClassName="bg-[#131314] border-t border-white/10">
-        <h3 className="text-base font-bold text-white mb-3">Add assistant coach</h3>
+        <h3 className="text-base font-bold text-white mb-1">Add assistant coach</h3>
+        <p className="text-xs text-white/50 mb-3">An invitation is sent; they join once they accept it.</p>
         <input autoFocus value={searchQ} onChange={(e) => setSearchQ(e.target.value)} placeholder="Search by name or email…" className={`${GLASS_INPUT} mb-2`} />
         <div className="space-y-1 max-h-60 overflow-y-auto">
           {results.map((u) => (

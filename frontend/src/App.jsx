@@ -28,6 +28,7 @@ import WorkoutTemplatesPage from './pages/coach/WorkoutTemplatesPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
 import AboutPage from './pages/AboutPage';
+import InfoPage from './pages/InfoPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/hall-of-fame" element={<HallOfFamePage />} />
         <Route path="/health-wellness" element={<HealthWellnessPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/info" element={<InfoPage />} />
         <Route path="/profile" element={<ProfilePage />} />
 
         {/* Workout authoring moved into the Group hub's Workouts tab */}

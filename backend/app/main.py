@@ -27,10 +27,13 @@ from .models.notification import Notification  # noqa: F401
 from .models.team import Team, TeamMembership  # noqa: F401
 from .models.group_coach import GroupCoach  # noqa: F401
 from .models.group_add_request import GroupAddRequest  # noqa: F401
+from .models.group_coach_invite import GroupCoachInvite  # noqa: F401
+from .models.athlete_transfer import AthleteTransfer  # noqa: F401
+from .models.info_section import InfoSection  # noqa: F401
 from .models.workout_template import WorkoutTemplate, WorkoutTemplateDay  # noqa: F401
 from .models.goal import Goal  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams, group_coach, reporting, analytics, workout_templates, goals, public
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams, group_coach, reporting, analytics, workout_templates, goals, public, info
 
 Base.metadata.create_all(bind=engine)
 
@@ -62,10 +65,33 @@ def _bootstrap_admin_and_coach_ids():
         db.close()
 
 
+def _seed_info_sections():
+    """Seed the Info-page rulebook once, if empty. Idempotent — after the first
+    run the count is non-zero and this returns immediately."""
+    from .database import SessionLocal
+    from .models.info_section import InfoSection
+    from .services.info_seed import DEFAULT_SECTIONS
+    db = SessionLocal()
+    try:
+        if db.query(InfoSection).count() > 0:
+            return
+        for s in DEFAULT_SECTIONS:
+            db.add(InfoSection(**s))
+        db.commit()
+    finally:
+        db.close()
+
+
 try:
     _bootstrap_admin_and_coach_ids()
 except Exception as e:
     log.warning("bootstrap_admin_failed", error=str(e))
+
+
+try:
+    _seed_info_sections()
+except Exception as e:
+    log.warning("seed_info_sections_failed", error=str(e))
 
 
 
@@ -114,6 +140,7 @@ app.include_router(analytics.router, prefix=API_PREFIX)
 app.include_router(workout_templates.router, prefix=API_PREFIX)
 app.include_router(goals.router, prefix=API_PREFIX)
 app.include_router(public.router, prefix=API_PREFIX)
+app.include_router(info.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

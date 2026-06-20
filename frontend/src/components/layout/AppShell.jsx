@@ -98,6 +98,12 @@ export default function AppShell() {
           >
             About
           </button>
+          <button
+            onClick={() => navigate('/info')}
+            className={`text-xs font-medium rounded-full px-3 py-1 transition ${blueAbout ? 'bg-[#363a52] hover:bg-[#454a68]' : 'bg-[#353436] hover:bg-[#454446]'}`}
+          >
+            Info
+          </button>
         </div>
         <div className="flex items-center gap-3 text-sm">
           {teamName && (

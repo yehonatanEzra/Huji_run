@@ -28,11 +28,11 @@ def _athlete_in_scope(coach: User, athlete: Optional[User]) -> bool:
 
 
 def _athletes_query(coach: User, db: Session):
-    """Base query for the athletes visible to this coach (or all for admin)."""
-    q = db.query(User).filter(User.role == "athlete")
-    if coach.role != "admin":
-        q = q.filter(User.coach_id == coach.id)
-    return q
+    """Base query for this coach's personal roster (athletes whose coach_id is
+    them). Applies to admins too: the coach dashboard/roster is "my athletes",
+    while platform-wide user management lives in the admin Users page. Without
+    this, an admin keeps seeing athletes they've disconnected from."""
+    return db.query(User).filter(User.role == "athlete", User.coach_id == coach.id)
 
 
 class TrainingGroupCreate(BaseModel):

@@ -5,6 +5,7 @@ import { listCoaches, getMyPairing, requestCoach, withdrawRequest } from '../../
 import { useAuth } from '../../contexts/AuthContext';
 import { useOutsideClick } from '../../hooks/use-outside-click';
 import Spinner from '../../components/ui/Spinner';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
@@ -107,13 +108,14 @@ export default function FindCoachPage() {
     }
   };
 
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const handleWithdraw = async () => {
     if (!pairing?.pending_request) return;
-    if (!confirm('Withdraw your request?')) return;
     setActing(true);
     try {
       await withdrawRequest(pairing.pending_request.id);
       await refresh();
+      setConfirmWithdraw(false);
     } finally {
       setActing(false);
     }
@@ -141,14 +143,26 @@ export default function FindCoachPage() {
           <p className="text-xs uppercase tracking-wider text-amber-200 font-semibold mb-1">Request pending</p>
           <p className="text-sm text-white">Waiting for <span className="font-semibold text-amber-100">{pending.coach_name}</span> to accept.</p>
           <button
-            onClick={handleWithdraw}
+            onClick={() => setConfirmWithdraw(true)}
             disabled={acting}
             className="mt-3 text-xs px-3 py-1.5 rounded-lg border border-amber-300/50 text-amber-200 hover:bg-amber-400/10 disabled:opacity-50 transition"
           >
-            Withdraw request
+            Cancel request
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmWithdraw}
+        title="Cancel request?"
+        message={pending ? `Your pending request to ${pending.coach_name} will be withdrawn. You can send a new one afterwards.` : ''}
+        confirmLabel="Cancel request"
+        cancelLabel="Keep"
+        danger
+        busy={acting}
+        onConfirm={handleWithdraw}
+        onClose={() => setConfirmWithdraw(false)}
+      />
 
       {/* Expanded card overlay */}
       <AnimatePresence>

@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMyProfile, uploadPhoto, updateMyProfile } from '../../api/profile';
-import { getMyPairing, leaveCoach } from '../../api/coaching';
+import { getMyPairing, leaveCoach, withdrawRequest, incomingTransfers, approveTransfer, declineTransfer } from '../../api/coaching';
 import { getStravaConnectUrl, disconnectStrava } from '../../api/strava';
 import Spinner from '../../components/ui/Spinner';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageBackground from '../../components/PageBackground';
 import GoalsPanel from '../../components/goals/GoalsPanel';
 
@@ -34,6 +35,8 @@ export default function ProfilePage() {
   const [bioInput, setBioInput] = useState('');
   const [savingBio, setSavingBio] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [transfer, setTransfer] = useState(null);
+  const [transferActing, setTransferActing] = useState(false);
   const fileRef = useRef();
   const isAthlete = user?.role === 'athlete';
   const isCoach = user?.role === 'coach' || user?.role === 'admin';
@@ -46,10 +49,51 @@ export default function ProfilePage() {
 
   useEffect(() => { fetchProfile(); }, []);
 
+  const loadTransfer = () =>
+    incomingTransfers()
+      .then(({ data }) => setTransfer(data.find((t) => t.athlete_id === user?.id) || null))
+      .catch(() => {});
+
   useEffect(() => {
     if (!isAthlete) return;
     getMyPairing().then(({ data }) => setPairing(data)).catch(() => {});
+    loadTransfer();
   }, [isAthlete]);
+
+  const handleTransfer = async (accept) => {
+    if (!transfer) return;
+    setTransferActing(true);
+    try {
+      await (accept ? approveTransfer(transfer.id) : declineTransfer(transfer.id));
+      await loadTransfer();
+      if (accept) {
+        await refreshUser();
+        getMyPairing().then(({ data }) => setPairing(data)).catch(() => {});
+      }
+      window.dispatchEvent(new Event('badges:refresh'));
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not update transfer');
+    } finally {
+      setTransferActing(false);
+    }
+  };
+
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const doCancelRequest = async () => {
+    if (!pairing?.pending_request) return;
+    setCancelling(true);
+    try {
+      await withdrawRequest(pairing.pending_request.id);
+      const { data } = await getMyPairing();
+      setPairing(data);
+      setConfirmCancel(false);
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Could not cancel');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const handleLeaveCoach = async () => {
     if (!confirm('Leave your coach? Your past data stays. You can join another coach afterwards.')) return;
@@ -318,6 +362,21 @@ export default function ProfilePage() {
       {isAthlete && (
         <div className={`${GLASS_CARD} mb-4`}>
           <p className={`${SECTION_LABEL} mb-2`}>My coach</p>
+          {transfer && (
+            <div className="mb-3 rounded-lg p-3 bg-[#c0c1ff]/10 border border-[#c0c1ff]/30">
+              <p className="text-sm text-white/90">
+                <span className="font-semibold">{transfer.from_coach_name}</span> wants to transfer you to <span className="font-semibold">{transfer.to_coach_name}</span>.
+              </p>
+              {transfer.you_approved ? (
+                <p className="text-[11px] text-amber-200 mt-1">You approved — waiting for {transfer.to_coach_name} to confirm.</p>
+              ) : (
+                <div className="flex gap-2 mt-2">
+                  <button onClick={() => handleTransfer(true)} disabled={transferActing} className="text-xs px-3 py-1.5 rounded-lg bg-white text-black font-semibold hover:bg-white/80 disabled:opacity-50 transition">Accept</button>
+                  <button onClick={() => handleTransfer(false)} disabled={transferActing} className="text-xs px-3 py-1.5 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-400/15 disabled:opacity-50 transition">Decline</button>
+                </div>
+              )}
+            </div>
+          )}
           {pairing?.coach_id ? (
             <div className="flex items-center justify-between">
               <p className="text-base font-semibold text-white">{pairing.coach_name}</p>
@@ -327,6 +386,19 @@ export default function ProfilePage() {
                 className="text-xs px-3 py-1.5 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-400/15 disabled:opacity-50 transition"
               >
                 {leaving ? 'Leaving…' : 'Leave'}
+              </button>
+            </div>
+          ) : pairing?.pending_request ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-white/80">
+                Request pending — waiting for <span className="font-semibold text-white">{pairing.pending_request.coach_name}</span> to accept.
+              </p>
+              <button
+                onClick={() => setConfirmCancel(true)}
+                disabled={cancelling}
+                className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-400/15 disabled:opacity-50 transition"
+              >
+                Cancel
               </button>
             </div>
           ) : (
@@ -342,6 +414,18 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancel request?"
+        message={pairing?.pending_request ? `Your pending request to ${pairing.pending_request.coach_name} will be withdrawn. You can send a new one afterwards.` : ''}
+        confirmLabel="Cancel request"
+        cancelLabel="Keep"
+        danger
+        busy={cancelling}
+        onConfirm={doCancelRequest}
+        onClose={() => setConfirmCancel(false)}
+      />
 
       {/* Goals (athletes only) */}
       {!isCoach && (

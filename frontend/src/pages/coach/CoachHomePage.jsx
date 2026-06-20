@@ -115,8 +115,12 @@ export default function CoachHomePage() {
           <div className="w-full max-w-md mx-auto rounded-2xl shadow-xl ring-1 ring-white/25 overflow-hidden bg-white/25 backdrop-blur-md px-5 py-4">
             <p className="text-[11px] uppercase tracking-widest font-semibold text-white/80 [text-shadow:0_1px_3px_rgba(0,0,0,0.7)]">{dateStr}</p>
             <div className="grid grid-cols-2 gap-4 mt-3">
-              <SummaryStat value={data.athletes} label="Athletes" />
-              <SummaryStat value={data.groups} label="Groups" />
+              <button onClick={() => navigate('/coach/settings')} className="text-left active:scale-[0.98] transition">
+                <SummaryStat value={data.athletes} label="Athletes ›" />
+              </button>
+              <button onClick={() => navigate('/coach/group')} className="text-left active:scale-[0.98] transition">
+                <SummaryStat value={data.groups} label="Groups ›" />
+              </button>
             </div>
           </div>
 

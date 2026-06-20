@@ -38,6 +38,7 @@ class IndividualTargetUpsert(BaseModel):
     override_group: bool = False
     workout_type: Optional[str] = None
     title: Optional[str] = None
+    content: Optional[str] = None  # body for simple/easy/rest
     warmup: Optional[str] = None
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
@@ -52,6 +53,7 @@ class IndividualTargetOut(BaseModel):
     override_group: bool
     workout_type: str = "simple"
     title: Optional[str] = None
+    content: Optional[str] = None
     warmup: Optional[str] = None
     main_session: Optional[str] = None
     cooldown: Optional[str] = None

@@ -103,8 +103,6 @@ export default function GroupHubPage() {
         ))}
       </div>
 
-      {selected && <StatusStrip group={selected} />}
-
       {/* Tabs */}
       <div className={`flex gap-1 p-1 rounded-full mb-4 ${GLASS}`}>
         {[['workouts', 'Workouts'], ['athletes', 'Athletes'], ['cocoaches', 'Staff'], ['insights', 'Insights']].map(([k, label]) => (
@@ -130,27 +128,6 @@ function HubBackground() {
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
       <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
     </>
-  );
-}
-
-// ── Status strip: weekly operational signal surfaced above the tabs ───────────
-function StatusStrip({ group }) {
-  const [load, setLoad] = useState(null);
-  const week = toIsoWeekStr(new Date());
-
-  useEffect(() => {
-    getLoadOverview({ week, group_id: group.id }).then(({ data }) => setLoad(data)).catch(() => setLoad(null));
-  }, [group.id]);
-
-  const spikes = load ? load.athletes.filter((a) => a.is_spike).length : null;
-  if (!spikes) return null;
-
-  return (
-    <div className="flex gap-2 mb-3">
-      <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-red-400/15 text-red-200 border border-red-400/25">
-        {spikes} load spike{spikes !== 1 ? 's' : ''}
-      </span>
-    </div>
   );
 }
 

@@ -251,20 +251,15 @@ export default function CalendarPage() {
     const log = day.workout_log;
     const t = day.individual_target;
     const gw = day.group_workout;
-    const personalOverride = t?.override_group;
-    const activeType = personalOverride ? t?.workout_type : gw?.workout_type;
+    // Active workout = personal override OR no group workout → personal; else group.
+    const active = (t && (t.override_group || !gw)) ? t : gw;
+    const activeType = active?.workout_type;
     const isRace = activeType === 'race';
     const typeMeta = activeType ? TYPE_GLASS[activeType] : null;
 
-    // Workout text + optional coach note (personal override replaces the group workout).
-    let snippet, note;
-    if (personalOverride) {
-      snippet = t.title || t.note;
-      note = t.note && t.note !== snippet ? t.note : (t.main_session || t.warmup || null);
-    } else {
-      snippet = gw?.title || gw?.content || gw?.main_session || gw?.warmup;
-      note = t && (t.title || t.note) ? `Coach note: ${t.title || t.note}` : null;
-    }
+    // Overview shows the workout only; the coach note is detail-only (on day-click).
+    const snippet = active?.title || active?.content || active?.main_session || active?.warmup;
+    const note = null;
 
     const km = log?.distance_km;
     const kudos = log?.kudos_count;
@@ -387,9 +382,9 @@ export default function CalendarPage() {
                 const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
                 const hasLog = day.workout_log;
                 const inMonth = dayDate.getMonth() === currentDate.getMonth();
-                const activeType = day.individual_target?.override_group
-                  ? day.individual_target?.workout_type
-                  : day.group_workout?.workout_type;
+                const _it = day.individual_target;
+                const _active = (_it && (_it.override_group || !day.group_workout)) ? _it : day.group_workout;
+                const activeType = _active?.workout_type;
                 const isRace = activeType === 'race';
                 const tag = activeType ? TYPE_ABBR_GLASS[activeType] : null;
                 return (
@@ -486,6 +481,7 @@ export default function CalendarPage() {
 
       {!loading && view === 'weekly' && (() => {
         const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
+        const expectedKm = days.reduce((s, d) => s + plannedKmForDay(d), 0);
         return (
           <div
             className="flex items-center justify-between rounded-2xl px-5 py-3 mb-4 border border-white/10"
@@ -495,9 +491,14 @@ export default function CalendarPage() {
               Weekly volume
             </span>
             <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-[#c0c1ff]">
-                {weekKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
-              </span>
+              <div className="flex flex-col items-end leading-none">
+                <span className="text-2xl font-bold text-[#c0c1ff]">
+                  {weekKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
+                </span>
+                {expectedKm > 0 && (
+                  <span className="text-[11px] font-normal text-white/80 mt-1">expected {fmtKm(expectedKm)} km</span>
+                )}
+              </div>
               <Link
                 to="/calendar/volume"
                 aria-label="Open volume breakdown"
@@ -521,7 +522,7 @@ export default function CalendarPage() {
       <Modal open={!!selectedDay} onClose={closeDay} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
         {selectedDay && (
           <div className="space-y-4">
-            {selectedDay.group_workout && (() => {
+            {selectedDay.group_workout && !selectedDay.individual_target?.override_group && (() => {
               const gw = selectedDay.group_workout;
               const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
               const TYPE_COLOR = {
@@ -564,6 +565,9 @@ export default function CalendarPage() {
             })()}
             {selectedDay.individual_target && (() => {
               const t = selectedDay.individual_target;
+              const hasBody = t.title || t.content || t.warmup || t.main_session || t.cooldown || (t.distance_km > 0);
+              const isActive = t.override_group || !selectedDay.group_workout;
+              if (!hasBody || !isActive) return null;
               const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
               const TYPE_COLOR = {
                 simple: 'bg-white/10 text-white/70',
@@ -597,7 +601,7 @@ export default function CalendarPage() {
                       {t.cooldown && <p><span className="text-xs uppercase tracking-wider text-white/40">Cool-down · </span><span className="whitespace-pre-wrap text-white/85">{t.cooldown}</span></p>}
                     </div>
                   ) : (
-                    t.note && <p className="text-sm whitespace-pre-wrap text-white/85">{t.note}</p>
+                    t.content && <p className="text-sm whitespace-pre-wrap text-white/85">{t.content}</p>
                   )}
                   {t.distance_km > 0 && (
                     <p className="text-sm"><span className="text-xs uppercase tracking-wider text-white/40">Distance · </span><span className="font-semibold text-[#c0c1ff]">{Number(t.distance_km.toFixed(1))} km</span></p>
@@ -605,6 +609,13 @@ export default function CalendarPage() {
                 </div>
               );
             })()}
+
+            {selectedDay.individual_target?.note && (
+              <div className="rounded-lg p-3 bg-white/5 border border-white/10">
+                <p className="text-xs font-medium text-white/50 mb-1">Note from coach</p>
+                <p className="text-sm whitespace-pre-wrap text-white/85">{selectedDay.individual_target.note}</p>
+              </div>
+            )}
 
             {selectedDay.workout_log && selectedDay.workout_log.kudos_count > 0 && (
               <div className="flex items-center gap-1.5 bg-pink-400/15 border border-pink-400/25 rounded-lg px-3 py-2">
@@ -839,8 +850,9 @@ export default function CalendarPage() {
                   return weeks;
                 })().map((week, wi) => {
                   let wkKm = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
+                  // Week totals are full Sunday–Saturday — do NOT clamp to the
+                  // current month, or a month-boundary week gets split in two.
                   for (const d of week) {
-                    if (!isSameMonth(new Date(d.date + 'T00:00'), currentDate)) continue;
                     wkExp += plannedKmForDay(d);
                     const log = d.workout_log;
                     if (!log) continue;
@@ -864,15 +876,15 @@ export default function CalendarPage() {
                         status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
                         'bg-white/20 border-white/30 hover:bg-white/30';
                       const cellHeight = 150;
-                      const personalOverride = d.individual_target?.override_group;
                       const it = d.individual_target;
-                      const workoutTitle = personalOverride
-                        ? (it?.title || it?.note || 'Personal')
-                        : (d.group_workout?.title || '');
-                      const workoutBody = personalOverride
-                        ? (it?.main_session || it?.warmup || (it?.title ? it?.note : '') || '')
-                        : (d.group_workout?.content || d.group_workout?.main_session || '');
-                      const hasPersonal = d.individual_target?.note || d.individual_target?.title;
+                      const gwx = d.group_workout;
+                      // Active workout = personal override OR no group → personal; else group.
+                      const useTarget = !!it && (it.override_group || !gwx);
+                      const active = useTarget ? it : gwx;
+                      const personalOverride = useTarget;
+                      const workoutTitle = active?.title || (useTarget ? 'Personal' : '');
+                      const workoutBody = active?.content || active?.main_session || active?.warmup || '';
+                      const hasPersonal = !!it && (it.note || it.title);
                       const TYPE_FULL = {
                         simple:    { label: 'Other',     color: 'bg-white/10 text-white/70' },
                         easy:      { label: 'Easy run',  color: 'bg-emerald-400/20 text-emerald-200' },
@@ -883,12 +895,8 @@ export default function CalendarPage() {
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
                         race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
                       };
-                      const typeChip = personalOverride
-                        ? (it?.workout_type ? TYPE_FULL[it.workout_type] : null)
-                        : (d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null);
-                      const cellIsRace = personalOverride
-                        ? it?.workout_type === 'race'
-                        : d.group_workout?.workout_type === 'race';
+                      const typeChip = active?.workout_type ? TYPE_FULL[active.workout_type] : null;
+                      const cellIsRace = active?.workout_type === 'race';
                       return (
                         <button
                           key={d.date}

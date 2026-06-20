@@ -41,7 +41,7 @@ export default function TrackingDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [personalForm, setPersonalForm] = useState({
-    workout_type: 'simple', title: '', note: '',
+    workout_type: 'simple', title: '', content: '', note: '',
     warmup: '', main_session: '', cooldown: '', distance_km: '',
   });
   const [overrideGroup, setOverrideGroup] = useState(false);
@@ -201,6 +201,7 @@ export default function TrackingDashboardPage() {
     setPersonalForm({
       workout_type: t?.workout_type || 'simple',
       title: t?.title || '',
+      content: t?.content || '',
       note: t?.note || '',
       warmup: t?.warmup || '',
       main_session: t?.main_session || '',
@@ -221,9 +222,10 @@ export default function TrackingDashboardPage() {
     try {
       const f = personalForm;
       const structured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(f.workout_type);
-      const hasContent = structured
+      const hasContent = (structured
         ? (f.warmup.trim() || f.main_session.trim() || f.cooldown.trim() || f.title.trim())
-        : (f.note.trim() || f.title.trim());
+        : ((f.content || '').trim() || f.title.trim()))
+        || (f.note || '').trim();
 
       if (hasContent) {
         const payload = {
@@ -231,6 +233,7 @@ export default function TrackingDashboardPage() {
           override_group: overrideGroup,
           workout_type: f.workout_type,
           title: f.title,
+          content: structured ? '' : (f.content || ''),
           warmup: structured ? f.warmup : '',
           main_session: structured ? f.main_session : '',
           cooldown: structured ? f.cooldown : '',
@@ -397,9 +400,7 @@ export default function TrackingDashboardPage() {
                   {athlete.days.map((d) => {
                     const log = d.log;
                     const hasTarget = !!d.target;
-                    const cellIsRace = d.target?.override_group
-                      ? d.target?.workout_type === 'race'
-                      : d.group_workout?.workout_type === 'race';
+                    const cellIsRace = (((d.target && (d.target.override_group || !d.group_workout)) ? d.target : d.group_workout)?.workout_type) === 'race';
                     let bg = 'bg-white/15';
                     let text = '-';
                     if (log) {
@@ -490,33 +491,21 @@ export default function TrackingDashboardPage() {
             {(() => {
               const workoutDisplay = (d) => {
                 // Returns { title, snippet } — title is the prominent label, snippet is the body text.
+                // Active workout = personal override OR no group → personal; else group.
                 const gw = d.group_workout;
                 const t = d.target;
-                const personalOverride = t?.override_group;
-                if (personalOverride) {
-                  const title = t.title || '';
-                  const snippet = t.note || t.main_session || t.warmup || '';
-                  if (title || snippet) {
-                    return { title: title || 'Personal', snippet, color: 'text-blue-700' };
-                  }
-                }
-                if (gw) {
-                  const title = gw.title || '';
-                  const snippet = gw.content || gw.main_session || gw.warmup || '';
-                  return { title, snippet, color: 'text-gray-700' };
-                }
-                if (d.target?.note || d.target?.title) {
-                  return { title: d.target.title || 'Personal', snippet: d.target.note, color: 'text-blue-700' };
-                }
-                return null;
+                const useTarget = !!t && (t.override_group || !gw);
+                const active = useTarget ? t : gw;
+                if (!active) return null;
+                const title = active.title || (useTarget ? 'Personal' : '');
+                const snippet = active.content || active.main_session || active.warmup || '';
+                return { title, snippet, color: useTarget ? 'text-blue-700' : 'text-gray-700' };
               };
 
               const renderDay = (d) => {
                 const dayDate = new Date(d.date + 'T00:00');
                 const w = workoutDisplay(d);
-                const cellIsRace = d.target?.override_group
-                  ? d.target?.workout_type === 'race'
-                  : d.group_workout?.workout_type === 'race';
+                const cellIsRace = (((d.target && (d.target.override_group || !d.group_workout)) ? d.target : d.group_workout)?.workout_type) === 'race';
                 const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
                 const cellBg = cellIsRace
                   ? 'bg-indigo-500/15 border-indigo-400/40'
@@ -669,9 +658,8 @@ export default function TrackingDashboardPage() {
                                         const isToday = d.date === todayStr;
                                         const hasLog = d.log;
                                         const logStatus = hasLog?.status || (hasLog?.completed ? 'completed' : (hasLog?.missed ? 'missed' : null));
-                                        const activeType = d.target?.override_group
-                                          ? d.target?.workout_type
-                                          : d.group_workout?.workout_type;
+                                        const _t = d.target;
+                                        const activeType = ((_t && (_t.override_group || !d.group_workout)) ? _t : d.group_workout)?.workout_type;
                                         const typeMap = {
                                           simple: { abbr: 'Oth', color: 'bg-white/10 text-white/70' },
                                           easy: { abbr: 'Easy', color: 'bg-emerald-400/20 text-emerald-200' },
@@ -1032,9 +1020,10 @@ export default function TrackingDashboardPage() {
                   const nextTitle = wasDefault ? (value === 'simple' ? '' : typeMetaFor(value).label) : f.title;
                   return { ...f, workout_type: value, title: nextTitle };
                 });
-                const hasAny = meta.structured
+                const hasAny = (meta.structured
                   ? (personalForm.warmup.trim() || personalForm.main_session.trim() || personalForm.cooldown.trim() || personalForm.title.trim())
-                  : (personalForm.note.trim() || personalForm.title.trim());
+                  : ((personalForm.content || '').trim() || personalForm.title.trim()))
+                  || (personalForm.note || '').trim();
                 const inputCls = 'w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-400';
                 return (
                   <div className="space-y-2">
@@ -1073,10 +1062,15 @@ export default function TrackingDashboardPage() {
                           className={inputCls} />
                       </>
                     ) : (
-                      <textarea value={personalForm.note} onChange={(e) => setF('note', e.target.value)}
-                        placeholder="Write a personal workout..." rows={2}
+                      <textarea value={personalForm.content} onChange={(e) => setF('content', e.target.value)}
+                        placeholder="Workout (what to do)…" rows={2}
                         className={inputCls} />
                     )}
+
+                    {/* Always-available note — shown to the athlete only when they open the day */}
+                    <textarea value={personalForm.note} onChange={(e) => setF('note', e.target.value)}
+                      placeholder="Note for the athlete (optional)…" rows={2}
+                      className={inputCls} />
 
                     {hasAny && (
                       <label className="flex items-center gap-2 cursor-pointer">
@@ -1163,10 +1157,10 @@ export default function TrackingDashboardPage() {
               </div>
               <div className="space-y-1">
                 {profileMonth.weeks.map((week, wi) => {
-                  // Compute week stats: only count days in this month, ignore overflow days
+                  // Week totals are full Sunday–Saturday — do NOT clamp to the
+                  // current month, or a month-boundary week gets split in two.
                   let wkKm = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
                   for (const d of week) {
-                    if (!isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) continue;
                     wkExp += plannedKm(d);
                     if (!d.log) continue;
                     if (d.log.distance_km) wkKm += d.log.distance_km;
@@ -1187,15 +1181,14 @@ export default function TrackingDashboardPage() {
                         status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
                         'bg-white/20 border-white/30 hover:bg-white/30';
                       const cellHeight = 150;
-                      const personalOverride = d.target?.override_group;
                       const t = d.target;
-                      const workoutTitle = personalOverride
-                        ? (t?.title || t?.note || 'Personal')
-                        : (d.group_workout?.title || '');
-                      const workoutBody = personalOverride
-                        ? (t?.main_session || t?.warmup || (t?.title ? t?.note : '') || '')
-                        : (d.group_workout?.content || d.group_workout?.main_session || '');
-                      const hasPersonal = d.target?.note;
+                      const gwx = d.group_workout;
+                      const useTarget = !!t && (t.override_group || !gwx);
+                      const active = useTarget ? t : gwx;
+                      const personalOverride = useTarget;
+                      const workoutTitle = active?.title || (useTarget ? 'Personal' : '');
+                      const workoutBody = active?.content || active?.main_session || active?.warmup || '';
+                      const hasPersonal = !!t && (t.note || t.title);
                       const TYPE_FULL = {
                         simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
                         easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
@@ -1206,12 +1199,8 @@ export default function TrackingDashboardPage() {
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
                         race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
                       };
-                      const typeChip = personalOverride
-                        ? (t?.workout_type ? TYPE_FULL[t.workout_type] : null)
-                        : (d.group_workout?.workout_type ? TYPE_FULL[d.group_workout.workout_type] : null);
-                      const cellIsRace = personalOverride
-                        ? t?.workout_type === 'race'
-                        : d.group_workout?.workout_type === 'race';
+                      const typeChip = active?.workout_type ? TYPE_FULL[active.workout_type] : null;
+                      const cellIsRace = active?.workout_type === 'race';
                       return (
                         <button
                           key={d.date}

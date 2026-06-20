@@ -26,7 +26,7 @@ const plannedKmOf = (day) => {
 };
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
 
-const EMPTY = { workout_type: 'simple', title: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false, distance_km: '' };
+const EMPTY = { workout_type: 'simple', title: '', content: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false, distance_km: '' };
 const INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
 
 export default function AthleteLogModal({ athlete, onClose }) {
@@ -102,6 +102,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
     setForm({
       workout_type: t?.workout_type || 'simple',
       title: t?.title || '',
+      content: t?.content || '',
       note: t?.note || '',
       warmup: t?.warmup || '',
       main_session: t?.main_session || '',
@@ -113,9 +114,10 @@ export default function AthleteLogModal({ athlete, onClose }) {
   };
 
   const meta = typeMetaFor(form.workout_type);
-  const hasAny = meta.structured
+  const hasAny = (meta.structured
     ? (form.warmup.trim() || form.main_session.trim() || form.cooldown.trim() || form.title.trim())
-    : (form.note.trim() || form.title.trim());
+    : ((form.content || '').trim() || form.title.trim()))
+    || (form.note || '').trim();
   const setField = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   // Picking a type auto-titles the workout with that type's name unless a custom
   // title was typed. 'Other' stays untitled.
@@ -134,6 +136,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
           override_group: form.override_group,
           workout_type: form.workout_type,
           title: form.title,
+          content: meta.structured ? '' : (form.content || ''),
           warmup: meta.structured ? form.warmup : '',
           main_session: meta.structured ? form.main_session : '',
           cooldown: meta.structured ? form.cooldown : '',
@@ -197,8 +200,11 @@ export default function AthleteLogModal({ athlete, onClose }) {
                 <textarea value={form.cooldown} onChange={(e) => setField('cooldown', e.target.value)} placeholder="Cool-down" rows={1} className={INPUT} />
               </>
             ) : (
-              <textarea value={form.note} onChange={(e) => setField('note', e.target.value)} placeholder="Write a personal workout or note…" rows={4} className={INPUT} />
+              <textarea value={form.content} onChange={(e) => setField('content', e.target.value)} placeholder="Workout (what to do)…" rows={3} className={INPUT} />
             )}
+
+            {/* Always-available note — shown to the athlete only when they open the day */}
+            <textarea value={form.note} onChange={(e) => setField('note', e.target.value)} placeholder="Note for the athlete (optional)…" rows={2} className={INPUT} />
 
             {hasAny && (
               <label className="flex items-center gap-2">
@@ -253,7 +259,8 @@ export default function AthleteLogModal({ athlete, onClose }) {
                             const log = day?.log;
                             const logStatus = log?.status || (log?.completed ? 'completed' : (log?.missed ? 'missed' : null));
                             const t = day?.target;
-                            const activeType = t?.override_group ? t?.workout_type : day?.group_workout?.workout_type;
+                            const _active = (t && (t.override_group || !day?.group_workout)) ? t : day?.group_workout;
+                            const activeType = _active?.workout_type;
                             const tm = activeType ? typeMetaFor(activeType) : null;
                             const isRace = activeType === 'race';
                             return (
@@ -331,11 +338,13 @@ export default function AthleteLogModal({ athlete, onClose }) {
                         const day = dayOf(d);
                         const inMonth = isSameMonth(d, monthDate);
                         const t = day?.target;
-                        const tm = t ? typeMetaFor(t.workout_type) : null;
                         const gw = day?.group_workout;
+                        const useTarget = !!t && (t.override_group || !gw);
+                        const active = useTarget ? t : gw;
+                        const tm = active ? typeMetaFor(active.workout_type) : null;
                         const log = day?.log;
                         const status = log?.status;
-                        const title = t ? (t.title || t.note || t.main_session || t.warmup) : (gw ? (gw.title || typeMetaFor(gw.workout_type).label) : '');
+                        const title = active ? (active.title || active.content || active.main_session || active.warmup || typeMetaFor(active.workout_type).label) : '';
                         const bg = !inMonth ? 'bg-white/5 border-white/10 opacity-60' :
                           status === 'completed' ? 'bg-green-500/30 border-green-400/40' :
                           status === 'partial' ? 'bg-yellow-500/25 border-yellow-400/35' :
@@ -347,7 +356,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
                             style={{ height: 130 }}>
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-white">{format(d, 'd')}</span>
-                              {tm && <span className={`text-[8px] font-bold uppercase px-1 rounded ${tm.color}`}>{t.override_group ? '★' : ''}{tm.abbr}</span>}
+                              {tm && <span className={`text-[8px] font-bold uppercase px-1 rounded ${tm.color}`}>{useTarget ? '★' : ''}{tm.abbr}</span>}
                             </div>
                             {title && <p className="text-[10px] text-white/85 mt-1 line-clamp-4 leading-tight">{title}</p>}
                             {!t && gw && <p className="text-[8px] text-white/40 mt-0.5">group</p>}

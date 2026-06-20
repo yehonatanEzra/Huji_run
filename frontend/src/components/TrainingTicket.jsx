@@ -76,7 +76,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
         </div>
       );
     }
-    const content = workout.content ?? workout.note;
+    const content = workout.content;
     return content ? <p className={`text-sm whitespace-pre-wrap ${bodyText}`}>{content}</p> : null;
   })();
 

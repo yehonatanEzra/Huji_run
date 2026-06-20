@@ -52,11 +52,12 @@ class IndividualTarget(Base):
     team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
     athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    note: Mapped[str] = mapped_column(Text, nullable=False)  # kept for backward compat; used for simple/easy
+    note: Mapped[str] = mapped_column(Text, nullable=False)  # supplementary coach note (shown on day-click only)
     override_group: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # workout_type: simple | easy | tempo | long | intervals | fartlek
     workout_type: Mapped[str] = mapped_column(String(20), nullable=False, default="simple")
     title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # body for simple/easy/rest
     warmup: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     main_session: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cooldown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

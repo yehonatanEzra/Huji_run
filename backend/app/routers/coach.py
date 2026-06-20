@@ -754,6 +754,7 @@ def get_athlete_week(
                 "override_group": target.override_group,
                 "workout_type": target.workout_type,
                 "title": target.title,
+                "content": target.content,
                 "warmup": target.warmup,
                 "main_session": target.main_session,
                 "cooldown": target.cooldown,
@@ -767,7 +768,7 @@ def get_athlete_week(
                 "main_session": gw.main_session,
                 "cooldown": gw.cooldown,
                 "distance_km": gw.distance_km,
-            } if gw and (gw.content or gw.warmup or gw.main_session or gw.cooldown) else None,
+            } if gw and (gw.content or gw.warmup or gw.main_session or gw.cooldown or gw.title) else None,
         })
 
     return {"week_start": ws.isoformat(), "days": days}

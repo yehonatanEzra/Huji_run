@@ -17,3 +17,6 @@ export const deleteTemplate = (id) =>
 
 export const applyTemplate = (id, data) =>
   client.post(`/workout-templates/${id}/apply`, data);
+
+export const applyTemplateToAthlete = (id, data) =>
+  client.post(`/workout-templates/${id}/apply-athlete`, data);

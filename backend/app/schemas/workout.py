@@ -43,6 +43,7 @@ class IndividualTargetUpsert(BaseModel):
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
     distance_km: Optional[float] = None  # planned distance
+    hidden: bool = False  # coach-only draft, athlete can't see it yet
 
 
 class IndividualTargetOut(BaseModel):
@@ -58,6 +59,7 @@ class IndividualTargetOut(BaseModel):
     main_session: Optional[str] = None
     cooldown: Optional[str] = None
     distance_km: Optional[float] = None
+    hidden: bool = False
     model_config = {"from_attributes": True}
 
 

@@ -90,6 +90,8 @@ def prescribed_dates_with_types(
         .all()
     )
     for it in its:
+        if it.hidden:
+            continue  # coach-only draft — invisible to the athlete, never "prescribed"
         if not _it_has_content(it):
             continue
         # Personal note that doesn't override the group → still prescribed

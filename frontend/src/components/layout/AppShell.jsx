@@ -81,17 +81,17 @@ export default function AppShell() {
   return (
     <div className="h-dvh flex flex-col overflow-hidden">
       <header className={`shrink-0 z-40 border-b border-white/10 text-white px-4 py-3 flex items-center justify-between ${isAbout ? 'bg-black' : 'bg-black/40 backdrop-blur-md'}`}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           {!isRoot && (
             <button
               onClick={() => navigate(-1)}
-              className="text-white opacity-80 hover:opacity-100 text-xl leading-none pr-1"
+              className="shrink-0 text-white opacity-80 hover:opacity-100 text-xl leading-none pr-1"
               aria-label="Go back"
             >
               ←
             </button>
           )}
-          <h1 className="text-lg font-bold tracking-tight">Huji Run</h1>
+          <h1 className="shrink-0 whitespace-nowrap text-lg font-bold tracking-tight">Huji Run</h1>
           <button
             onClick={() => navigate('/about')}
             className={`ml-1 text-xs font-medium rounded-full px-3 py-1 transition ${blueAbout ? 'bg-[#363a52] hover:bg-[#454a68]' : 'bg-[#353436] hover:bg-[#454446]'}`}

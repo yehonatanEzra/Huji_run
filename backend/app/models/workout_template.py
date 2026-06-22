@@ -12,14 +12,20 @@ class WorkoutTemplate(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Optional group scope. NULL = general plan (private to creator); set = shared
+    # with all coaches of that group.
+    group_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("training_groups.id", ondelete="SET NULL"), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     weeks_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # JSON object {week_number: target_km} — planning aid shown as written/target.
+    week_targets: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     days = relationship("WorkoutTemplateDay", back_populates="template",
                         cascade="all, delete-orphan")
+    group = relationship("TrainingGroup")
 
 
 class WorkoutTemplateDay(Base):

@@ -111,6 +111,10 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
             WorkoutLog.athlete_id == athlete.id,
             WorkoutLog.date == day,
         ).first()
+        # Hidden targets are coach-only: the athlete sees neither the target nor
+        # a suppressed group workout. Drop it entirely for athlete views.
+        if not is_coach and it and it.hidden:
+            it = None
         if not is_coach and it and it.override_group:
             gw = None
         if log:
@@ -413,8 +417,10 @@ def upsert_individual_target(
         IndividualTarget.date == day,
     ).first()
     if it:
+        was_hidden = it.hidden
         it.note = body.note or ""
         it.override_group = body.override_group
+        it.hidden = body.hidden
         if body.workout_type is not None and body.workout_type in ALLOWED_TYPES:
             it.workout_type = body.workout_type
         if body.title is not None:
@@ -429,6 +435,14 @@ def upsert_individual_target(
             it.cooldown = _clean(body.cooldown)
         if body.distance_km is not None:
             it.distance_km = body.distance_km
+        # Notify only when the workout becomes newly visible to the athlete.
+        if was_hidden and not body.hidden:
+            title = _clean(body.title) or it.workout_type.capitalize()
+            notify(
+                db, athlete_id, "personal_workout",
+                f"Coach assigned you a personal workout: {title} ({day.strftime('%a %b %d')})",
+                f"/calendar?date={day.isoformat()}",
+            )
     else:
         wt = body.workout_type if (body.workout_type in ALLOWED_TYPES) else "simple"
         it = IndividualTarget(
@@ -436,6 +450,7 @@ def upsert_individual_target(
             date=day,
             note=body.note or "",
             override_group=body.override_group,
+            hidden=body.hidden,
             workout_type=wt,
             title=_clean(body.title),
             content=_clean(body.content),
@@ -446,12 +461,14 @@ def upsert_individual_target(
             created_by=coach.id,
         )
         db.add(it)
-        title = _clean(body.title) or wt.capitalize()
-        notify(
-            db, athlete_id, "personal_workout",
-            f"Coach assigned you a personal workout: {title} ({day.strftime('%a %b %d')})",
-            f"/calendar?date={day.isoformat()}",
-        )
+        # Don't ping the athlete about a workout they can't see yet.
+        if not body.hidden:
+            title = _clean(body.title) or wt.capitalize()
+            notify(
+                db, athlete_id, "personal_workout",
+                f"Coach assigned you a personal workout: {title} ({day.strftime('%a %b %d')})",
+                f"/calendar?date={day.isoformat()}",
+            )
     db.commit()
     db.refresh(it)
     return it

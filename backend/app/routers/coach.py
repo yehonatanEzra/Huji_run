@@ -752,6 +752,7 @@ def get_athlete_week(
             "target": {
                 "note": target.note,
                 "override_group": target.override_group,
+                "hidden": target.hidden,
                 "workout_type": target.workout_type,
                 "title": target.title,
                 "content": target.content,

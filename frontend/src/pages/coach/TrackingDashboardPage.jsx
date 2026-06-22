@@ -45,6 +45,7 @@ export default function TrackingDashboardPage() {
     warmup: '', main_session: '', cooldown: '', distance_km: '',
   });
   const [overrideGroup, setOverrideGroup] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -209,6 +210,7 @@ export default function TrackingDashboardPage() {
       distance_km: t?.distance_km ?? '',
     });
     setOverrideGroup(t?.override_group || false);
+    setHidden(t?.hidden || false);
   };
 
   // Close the day detail; return to the expanded month view if we came from it.
@@ -217,7 +219,8 @@ export default function TrackingDashboardPage() {
     if (returnToExpanded) { setMonthExpanded(true); setReturnToExpanded(false); }
   };
 
-  const handleSavePersonal = async () => {
+  const handleSavePersonal = async (hiddenOverride) => {
+    const isHidden = typeof hiddenOverride === 'boolean' ? hiddenOverride : hidden;
     setSaving(true);
     try {
       const f = personalForm;
@@ -238,6 +241,7 @@ export default function TrackingDashboardPage() {
           main_session: structured ? f.main_session : '',
           cooldown: structured ? f.cooldown : '',
           distance_km: (f.distance_km === '' || f.distance_km == null) ? null : parseFloat(f.distance_km),
+          hidden: isHidden,
         };
         await upsertTarget(selected.athlete.id, selected.day.date, payload);
       } else {
@@ -505,9 +509,13 @@ export default function TrackingDashboardPage() {
               const renderDay = (d) => {
                 const dayDate = new Date(d.date + 'T00:00');
                 const w = workoutDisplay(d);
+                const _useTarget = !!d.target && (d.target.override_group || !d.group_workout);
+                const hiddenDay = _useTarget && !!d.target.hidden;
                 const cellIsRace = (((d.target && (d.target.override_group || !d.group_workout)) ? d.target : d.group_workout)?.workout_type) === 'race';
                 const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
-                const cellBg = cellIsRace
+                const cellBg = hiddenDay
+                  ? 'bg-white/[0.06] border-dashed border-white/25'
+                  : cellIsRace
                   ? 'bg-indigo-500/15 border-indigo-400/40'
                   : status === 'completed' ? 'bg-green-500/15 border-green-400/30'
                   : status === 'partial' ? 'bg-yellow-500/15 border-yellow-400/30'
@@ -524,7 +532,7 @@ export default function TrackingDashboardPage() {
                     onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
                     className={`w-full text-left rounded-lg px-3 py-2 text-sm border hover:bg-white/10 transition ${cellBg} ${cellIsRace ? 'border-2' : ''}`}>
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-white/80 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}</span>
+                      <span className="font-medium text-white/80 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}{hiddenDay && ' ·  hidden'}</span>
                       <span className="flex items-center gap-1.5">
                         {d.log?.distance_km > 0 && <span className="text-xs font-semibold text-[#c0c1ff]">{Number(d.log.distance_km).toFixed(1)} km</span>}
                         <span className={`text-xs font-bold ${iconColor}`}>
@@ -1073,24 +1081,38 @@ export default function TrackingDashboardPage() {
                       className={inputCls} />
 
                     {hasAny && (
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={overrideGroup} onChange={(e) => setOverrideGroup(e.target.checked)} className="w-4 h-4 rounded accent-blue-500" />
-                        <span className="text-xs text-white/75">Show this instead of group workout</span>
-                      </label>
+                      <>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={overrideGroup} onChange={(e) => setOverrideGroup(e.target.checked)} className="w-4 h-4 rounded accent-blue-500" />
+                          <span className="text-xs text-white/75">Show this instead of group workout</span>
+                        </label>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                          <span className="text-xs text-white/75">Hide from athlete
+                            <span className="block text-[11px] text-white/45">They won’t see it until you share. You (and the group’s coaches) still see it in gray.</span>
+                          </span>
+                        </label>
+                      </>
                     )}
                   </div>
                 );
               })()}
               <div className="flex gap-2 mt-3">
-                <button onClick={handleSavePersonal} disabled={saving}
+                <button onClick={() => handleSavePersonal()} disabled={saving}
                   className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition">
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'Saving...' : hidden ? 'Save (hidden)' : 'Save'}
                 </button>
                 <button onClick={closeSelected}
                   className="flex-1 border border-white/25 text-white/75 hover:text-white hover:bg-white/10 rounded-lg py-2.5 text-sm font-medium transition">
                   Cancel
                 </button>
               </div>
+              {hidden && (
+                <button onClick={() => handleSavePersonal(false)} disabled={saving}
+                  className="w-full mt-2 border border-blue-400/50 text-blue-200 rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-400/10 disabled:opacity-50 transition">
+                  Share with athlete now
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1175,17 +1197,19 @@ export default function TrackingDashboardPage() {
                       const dayDate = new Date(d.date + 'T00:00');
                       const inMonth = isSameMonth(dayDate, profileMonthDate);
                       const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
-                      const bg = !inMonth ? 'bg-white/5 border-white/10 hover:bg-white/10 opacity-60' :
-                        status === 'completed' ? 'bg-green-500/40 border-green-400/50 hover:bg-green-500/50' :
-                        status === 'partial' ? 'bg-yellow-500/35 border-yellow-400/45 hover:bg-yellow-500/45' :
-                        status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
-                        'bg-white/20 border-white/30 hover:bg-white/30';
                       const cellHeight = 150;
                       const t = d.target;
                       const gwx = d.group_workout;
                       const useTarget = !!t && (t.override_group || !gwx);
                       const active = useTarget ? t : gwx;
                       const personalOverride = useTarget;
+                      const targetHidden = useTarget && !!t.hidden;
+                      const bg = !inMonth ? 'bg-white/5 border-white/10 hover:bg-white/10 opacity-60' :
+                        targetHidden ? 'bg-white/[0.06] border-dashed border-white/25 hover:bg-white/10' :
+                        status === 'completed' ? 'bg-green-500/40 border-green-400/50 hover:bg-green-500/50' :
+                        status === 'partial' ? 'bg-yellow-500/35 border-yellow-400/45 hover:bg-yellow-500/45' :
+                        status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
+                        'bg-white/20 border-white/30 hover:bg-white/30';
                       const workoutTitle = active?.title || (useTarget ? 'Personal' : '');
                       const workoutBody = active?.content || active?.main_session || active?.warmup || '';
                       const hasPersonal = !!t && (t.note || t.title);
@@ -1210,7 +1234,7 @@ export default function TrackingDashboardPage() {
                         >
                           {/* Date row + type chip */}
                           <div className="flex items-start justify-between px-2 pt-1.5">
-                            <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}</span>
+                            <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}{targetHidden && ' 🙈'}</span>
                             {typeChip && (
                               <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${typeChip.color}`}>
                                 {typeChip.label}

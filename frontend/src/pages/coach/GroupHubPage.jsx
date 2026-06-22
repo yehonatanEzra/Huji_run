@@ -18,6 +18,8 @@ import { getReportingOverview, getLoadOverview } from '../../api/reporting';
 import { getMyTeams, updateTeam } from '../../api/teams';
 import GroupWorkoutsTab from './GroupWorkoutsTab';
 import AthleteLogModal from '../../components/coach/AthleteLogModal';
+import { listTemplates, getTemplate, deleteTemplate } from '../../api/workoutTemplates';
+import TemplateBuilder, { GroupApplyModal } from './PlanBuilder';
 
 const GLASS = 'bg-[#161616]/85 backdrop-blur-2xl border border-white/10';
 const GLASS_INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
@@ -107,13 +109,14 @@ export default function GroupHubPage() {
 
       {/* Tabs */}
       <div className={`flex gap-1 p-1 rounded-full mb-4 ${GLASS}`}>
-        {[['workouts', 'Workouts'], ['athletes', 'Athletes'], ['cocoaches', 'Staff'], ['insights', 'Insights']].map(([k, label]) => (
+        {[['workouts', 'Workouts'], ['athletes', 'Athletes'], ['plans', 'Plan'], ['cocoaches', 'Staff'], ['insights', 'Insights']].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className={`${TAB} ${tab === k ? TAB_ACTIVE : TAB_INACTIVE}`}>{label}</button>
         ))}
       </div>
 
       {selected && tab === 'workouts' && <GroupWorkoutsTab group={selected} />}
       {selected && tab === 'athletes' && <AthletesTab group={selected} onChanged={reload} groups={groups} />}
+      {selected && tab === 'plans' && <GroupPlansTab group={selected} />}
       {selected && tab === 'cocoaches' && <CoCoachesTab group={selected} />}
       {selected && tab === 'insights' && <InsightsTab group={selected} />}
 
@@ -461,6 +464,84 @@ function MovePanel({ athlete, fromGroup, groups, onClose, onDone }) {
       </div>
       {msg && <p className="text-xs text-amber-200 mt-3">{msg}</p>}
       <button onClick={onClose} className="mt-4 w-full text-sm text-white/50 hover:text-white">Cancel</button>
+    </div>
+  );
+}
+
+// ── Plan tab (group-scoped plans, shared with the group's coaches) ────────────
+function GroupPlansTab({ group }) {
+  const isMain = group.role === 'main';
+  const [plans, setPlans] = useState(null);
+  const [error, setError] = useState('');
+  const [editing, setEditing] = useState(null);   // template detail or 'new'
+  const [applyTarget, setApplyTarget] = useState(null);
+
+  const refresh = useCallback(() => {
+    listTemplates()
+      .then(({ data }) => setPlans(data.filter((t) => t.group_id === group.id)))
+      .catch((e) => setError(e.response?.data?.detail || 'Failed to load plans'));
+  }, [group.id]);
+  useEffect(() => { setPlans(null); refresh(); }, [refresh]);
+
+  const openNew = () => setEditing({ id: null, name: '', description: '', weeks_count: 4, days: [] });
+  const openEdit = async (id) => {
+    try { const { data } = await getTemplate(id); setEditing(data); }
+    catch (e) { setError(e.response?.data?.detail || 'Failed to open plan'); }
+  };
+  const handleDelete = async (t) => {
+    if (!confirm(`Delete plan "${t.name}"? This cannot be undone.`)) return;
+    try { await deleteTemplate(t.id); refresh(); }
+    catch (e) { setError(e.response?.data?.detail || 'Failed to delete'); }
+  };
+
+  if (editing) {
+    return (
+      <TemplateBuilder
+        initial={editing}
+        lockedGroupId={group.id}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); refresh(); }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-white/55">Shared with this group’s coaches. Any coach can write; {isMain ? 'apply to the group below.' : 'only the main coach can apply to the group.'}</p>
+        <button onClick={openNew} className="shrink-0 bg-[#c0c1ff] text-[#1000a9] rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-[#a9aaff]">+ New plan</button>
+      </div>
+
+      {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded p-2">{error}</p>}
+      {plans === null && <Spinner />}
+      {plans && plans.length === 0 && <p className="text-sm text-white/45 py-6 text-center">No plans for this group yet.</p>}
+
+      <div className="space-y-2">
+        {plans?.map((t) => (
+          <div key={t.id} className={`${GLASS} rounded-xl px-3 py-3`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-medium truncate text-white">{t.name}</p>
+                {t.description && <p className="text-xs text-white/50 truncate">{t.description}</p>}
+                <p className="text-xs text-white/40 mt-0.5">
+                  {t.weeks_count} week{t.weeks_count !== 1 ? 's' : ''} · {t.day_count} workout{t.day_count !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <div className="flex gap-1 shrink-0">
+                {isMain && (
+                  <button onClick={() => setApplyTarget(t)} className="text-xs bg-[#c0c1ff] text-[#1000a9] px-2.5 py-1 rounded hover:bg-[#a9aaff]">Apply</button>
+                )}
+                <button onClick={() => openEdit(t.id)} className="text-xs border border-white/20 text-white/80 px-2.5 py-1 rounded hover:bg-white/10">Edit</button>
+                <button onClick={() => handleDelete(t)} className="text-xs text-red-300 bg-red-500/10 border border-red-400/30 px-2.5 py-1 rounded hover:bg-red-500/20 hover:text-red-200 transition">Delete</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {applyTarget && (
+        <GroupApplyModal template={applyTarget} fixedGroupId={group.id} onClose={() => setApplyTarget(null)} />
+      )}
     </div>
   );
 }

@@ -46,7 +46,7 @@ export default function NextRaceCard({ className = '' }) {
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#c0c1ff] mb-0.5">🏁 Next race</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#c0c1ff] mb-0.5">Next race</p>
           <p className="font-bold text-white truncate">{race.name || '(untitled)'}</p>
           <p className="text-xs text-white/55 mt-0.5">
             {format(new Date(race.race_date + 'T00:00'), 'EEE, MMM d')} · {SCOPE_LABEL[race.scope] || race.scope}

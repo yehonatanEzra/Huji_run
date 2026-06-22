@@ -351,7 +351,7 @@ export default function ProfilePage() {
               disabled={stravaConnecting}
               className="text-xs font-semibold bg-orange-500/80 hover:bg-orange-500 text-white px-3 py-1.5 rounded-lg transition disabled:opacity-50"
             >
-              {stravaConnecting ? 'Redirecting…' : '🏃 Connect Strava'}
+              {stravaConnecting ? 'Redirecting…' : ' Connect Strava'}
             </button>
           )}
         </div>

@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, getISOWeek, getISOWeekYear } from 'date-fns';
+import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { getDashboardWeek, pendingApprovalsCount, listGroups } from '../../api/coach';
-import { getLoadOverview } from '../../api/reporting';
 import { incomingRequests } from '../../api/coaching';
 import Spinner from '../../components/ui/Spinner';
 import NextRaceCard from '../../components/races/NextRaceCard';
-
-function toIsoWeekStr(d) {
-  return `${getISOWeekYear(d)}-W${String(getISOWeek(d)).padStart(2, '0')}`;
-}
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -45,14 +40,12 @@ export default function CoachHomePage() {
   useEffect(() => {
     let alive = true;
     const today = format(new Date(), 'yyyy-MM-dd');
-    const week = toIsoWeekStr(new Date());
     Promise.allSettled([
       getDashboardWeek(today),
-      getLoadOverview({ week }),
       incomingRequests(),
       pendingApprovalsCount(),
       listGroups(),
-    ]).then(([dash, load, reqs, appr, groups]) => {
+    ]).then(([dash, reqs, appr, groups]) => {
       if (!alive) return;
       const athletes = dash.status === 'fulfilled' ? (dash.value.data.athletes || []) : [];
       const todayReports = athletes
@@ -66,7 +59,6 @@ export default function CoachHomePage() {
       setData({
         athletes: athletes.length,
         todayReports,
-        spikes: load.status === 'fulfilled' ? (load.value.data.athletes || []).filter((a) => a.is_spike).length : 0,
         requests: reqs.status === 'fulfilled' ? (reqs.value.data || []).length : 0,
         approvals: appr.status === 'fulfilled' ? (appr.value.data.count || 0) : 0,
         groups: groups.status === 'fulfilled' ? (groups.value.data || []).length : 0,
@@ -80,7 +72,6 @@ export default function CoachHomePage() {
   const attention = data ? [
     { key: 'req', count: data.requests, label: 'Join requests', to: '/coach/requests', tone: 'accent', icon: ICON_PERSON_ADD },
     { key: 'appr', count: data.approvals, label: 'Group approvals', to: '/coach/group', tone: 'accent', icon: ICON_GROUP_ADD },
-    { key: 'spike', count: data.spikes, label: 'Load spikes', to: '/coach/group', tone: 'red', icon: ICON_SPEED },
   ].filter((a) => a.count > 0) : [];
 
   return (
@@ -202,10 +193,5 @@ const ICON_PERSON_ADD = (
 const ICON_GROUP_ADD = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
     <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M9 20H2v-2a4 4 0 018 0M13 7a3 3 0 11-6 0 3 3 0 016 0zM19 5v4M21 7h-4" />
-  </svg>
-);
-const ICON_SPEED = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-    <path d="M12 14l4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );

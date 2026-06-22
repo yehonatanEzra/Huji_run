@@ -26,7 +26,7 @@ const plannedKmOf = (day) => {
 };
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
 
-const EMPTY = { workout_type: 'simple', title: '', content: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false, distance_km: '' };
+const EMPTY = { workout_type: 'simple', title: '', content: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false, distance_km: '', hidden: false };
 const INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
 
 export default function AthleteLogModal({ athlete, onClose }) {
@@ -109,6 +109,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
       cooldown: t?.cooldown || '',
       override_group: t?.override_group || false,
       distance_km: t?.distance_km ?? '',
+      hidden: t?.hidden || false,
     });
     setEditDay(day);
   };
@@ -127,7 +128,8 @@ export default function AthleteLogModal({ athlete, onClose }) {
     return { ...f, workout_type: value, title: nextTitle };
   });
 
-  const handleSave = async () => {
+  const handleSave = async (hiddenOverride) => {
+    const hidden = typeof hiddenOverride === 'boolean' ? hiddenOverride : form.hidden;
     setSaving(true);
     try {
       if (hasAny) {
@@ -141,6 +143,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
           main_session: meta.structured ? form.main_session : '',
           cooldown: meta.structured ? form.cooldown : '',
           distance_km: (form.distance_km === '' || form.distance_km == null) ? null : parseFloat(form.distance_km),
+          hidden,
         });
       } else {
         await deleteTarget(athlete.id, editDay.date);
@@ -207,16 +210,33 @@ export default function AthleteLogModal({ athlete, onClose }) {
             <textarea value={form.note} onChange={(e) => setField('note', e.target.value)} placeholder="Note for the athlete (optional)…" rows={2} className={INPUT} />
 
             {hasAny && (
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={form.override_group} onChange={(e) => setField('override_group', e.target.checked)} className="w-4 h-4 rounded accent-[#c0c1ff]" />
-                <span className="text-xs text-white/60">Show this instead of the group workout</span>
-              </label>
+              <>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={form.override_group} onChange={(e) => setField('override_group', e.target.checked)} className="w-4 h-4 rounded accent-[#c0c1ff]" />
+                  <span className="text-xs text-white/60">Show this instead of the group workout</span>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input type="checkbox" checked={form.hidden} onChange={(e) => setField('hidden', e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-[#c0c1ff]" />
+                  <span className="text-xs text-white/60">Hide from athlete
+                    <span className="block text-[11px] text-white/40">They won’t see it until you share. You’ll still see it (gray) in this log.</span>
+                  </span>
+                </label>
+              </>
             )}
 
             <button onClick={handleSave} disabled={saving}
               className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-xl py-2.5 text-sm font-bold disabled:opacity-50">
-              {saving ? 'Saving…' : hasAny ? 'Save' : 'Clear'}
+              {saving ? 'Saving…' : hasAny ? (form.hidden ? 'Save (hidden)' : 'Save') : 'Clear'}
             </button>
+            {hasAny && form.hidden && (
+              <button
+                onClick={() => handleSave(false)}
+                disabled={saving}
+                className="w-full border border-[#c0c1ff]/50 text-[#c0c1ff] rounded-xl py-2.5 text-sm font-bold hover:bg-[#c0c1ff]/10 disabled:opacity-50"
+              >
+                Share with athlete now
+              </button>
+            )}
           </div>
         ) : (
           // ── Month screen (compact) ─────────────────────────────────
@@ -263,15 +283,19 @@ export default function AthleteLogModal({ athlete, onClose }) {
                             const activeType = _active?.workout_type;
                             const tm = activeType ? typeMetaFor(activeType) : null;
                             const isRace = activeType === 'race';
+                            // Hidden = the active workout is a coach-only target the athlete can't see yet.
+                            const hidden = _active === t && !!t?.hidden;
                             return (
                               <button
                                 key={key}
                                 onClick={() => day && openEdit(day)}
                                 className={`flex flex-col items-center px-1 py-1.5 rounded-xl text-xs transition hover:shadow-sm relative ${
                                   !inMonth ? 'opacity-40' : ''
-                                } ${isRace ? 'border-2 border-[#8083ff]/45 bg-[#8083ff]/10' :
+                                } ${hidden ? 'border border-dashed border-white/20 bg-white/[0.04]' :
+                                   isRace ? 'border-2 border-[#8083ff]/45 bg-[#8083ff]/10' :
                                    isToday ? 'border border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border border-white/10 bg-white/10'}`}
                               >
+                                {hidden && <span className="absolute top-0.5 right-0.5 text-[9px] leading-none" title="Hidden from athlete">🙈</span>}
                                 {isRace && <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>}
                                 {tm && !isRace && <span className={`text-[8px] px-1 py-px rounded font-semibold leading-none ${tm.color}`}>{tm.abbr}</span>}
                                 <span className="text-[10px] font-bold text-white">
@@ -344,20 +368,23 @@ export default function AthleteLogModal({ athlete, onClose }) {
                         const tm = active ? typeMetaFor(active.workout_type) : null;
                         const log = day?.log;
                         const status = log?.status;
+                        const hidden = useTarget && !!t.hidden;
                         const title = active ? (active.title || active.content || active.main_session || active.warmup || typeMetaFor(active.workout_type).label) : '';
                         const bg = !inMonth ? 'bg-white/5 border-white/10 opacity-60' :
+                          hidden ? 'bg-white/[0.04] border-dashed border-white/20' :
                           status === 'completed' ? 'bg-green-500/30 border-green-400/40' :
                           status === 'partial' ? 'bg-yellow-500/25 border-yellow-400/35' :
                           status === 'missed' ? 'bg-red-500/25 border-red-400/35' :
                           'bg-[#201f20]/50 border-white/15';
                         return (
                           <button key={key} onClick={() => day && (setExpanded(false), openEdit(day))}
-                            className={`text-left rounded-lg border p-1.5 transition hover:brightness-125 flex flex-col ${bg}`}
+                            className={`text-left rounded-lg border p-1.5 transition hover:brightness-125 flex flex-col ${bg} ${hidden ? 'text-white/50' : ''}`}
                             style={{ height: 130 }}>
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-white">{format(d, 'd')}</span>
                               {tm && <span className={`text-[8px] font-bold uppercase px-1 rounded ${tm.color}`}>{useTarget ? '★' : ''}{tm.abbr}</span>}
                             </div>
+                            {hidden && <p className="text-[8px] text-white/40 mt-0.5">🙈 hidden</p>}
                             {title && <p className="text-[10px] text-white/85 mt-1 line-clamp-4 leading-tight">{title}</p>}
                             {!t && gw && <p className="text-[8px] text-white/40 mt-0.5">group</p>}
                             {plannedKmOf(day) > 0 && <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKmOf(day))} km</p>}

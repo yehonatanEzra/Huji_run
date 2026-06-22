@@ -54,6 +54,9 @@ class IndividualTarget(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     note: Mapped[str] = mapped_column(Text, nullable=False)  # supplementary coach note (shown on day-click only)
     override_group: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Coach-only draft: when True the athlete never sees this target (not on
+    # their calendar, not counted, never auto-missed) until the coach shares it.
+    hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     # workout_type: simple | easy | tempo | long | intervals | fartlek
     workout_type: Mapped[str] = mapped_column(String(20), nullable=False, default="simple")
     title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)

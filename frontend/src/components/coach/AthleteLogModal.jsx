@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns';
 import { getAthleteWeek } from '../../api/coach';
 import { createTarget, updateTargetById, deleteTargetById, setGroupVisibility } from '../../api/calendar';
-import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm } from '../../constants/workouts';
+import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm, tracksDistance } from '../../constants/workouts';
 import Modal from '../ui/Modal';
 import Spinner from '../ui/Spinner';
 
@@ -15,6 +15,8 @@ const TYPES = [
   { value: 'intervals', label: 'Intervals', abbr: 'Int',  color: 'bg-[#ec6a06]/25 text-[#ffb690]',     structured: true },
   { value: 'fartlek',   label: 'Fartlek',   abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200',       structured: true },
   { value: 'race',      label: 'Race',      abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]',     structured: true, mainLabel: 'Race' },
+  { value: 'strength',  label: 'Strength',  abbr: 'Str',  color: 'bg-amber-400/20 text-amber-200',     structured: false },
+  { value: 'cycling',   label: 'Cycling',   abbr: 'Cyc',  color: 'bg-cyan-400/20 text-cyan-200',       structured: false },
 ];
 const typeMetaFor = (t) => TYPES.find((x) => x.value === t) || TYPES[0];
 const DEFAULT_TITLES = new Set(TYPES.map((t) => t.label));
@@ -170,7 +172,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
           warmup: meta.structured ? form.warmup : '',
           main_session: meta.structured ? form.main_session : '',
           cooldown: meta.structured ? form.cooldown : '',
-          distance_km: (form.distance_km === '' || form.distance_km == null) ? null : parseFloat(form.distance_km),
+          distance_km: !tracksDistance(form.workout_type) || form.distance_km === '' || form.distance_km == null ? null : parseFloat(form.distance_km),
           hidden,
         };
         if (editingTarget?.id) await updateTargetById(editingTarget.id, body);
@@ -279,7 +281,9 @@ export default function AthleteLogModal({ athlete, onClose }) {
 
             <input type="text" value={form.title} onChange={(e) => setField('title', e.target.value)} placeholder="Title (shown on calendar)" className={INPUT} />
 
-            <input type="number" inputMode="decimal" value={form.distance_km} onChange={(e) => setField('distance_km', e.target.value)} placeholder="Distance (km)" className={INPUT} />
+            {tracksDistance(form.workout_type) && (
+              <input type="number" inputMode="decimal" value={form.distance_km} onChange={(e) => setField('distance_km', e.target.value)} placeholder="Distance (km)" className={INPUT} />
+            )}
 
             {meta.structured ? (
               <>

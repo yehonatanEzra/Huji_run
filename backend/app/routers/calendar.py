@@ -248,7 +248,7 @@ def delete_log(
 
 # ── Coach endpoints ───────────────────────────────────────────────────────────
 
-ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
+ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling"}
 
 
 def _clean(s):

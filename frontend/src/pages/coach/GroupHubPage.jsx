@@ -767,8 +767,8 @@ function AnalyticsView({ group }) {
   );
 }
 
-const TYPE_COLORS = { simple: '#9ca3af', easy: '#34d399', rest: '#94a3b8', tempo: '#fb923c', long: '#a78bfa', intervals: '#f87171', fartlek: '#f472b6', race: '#818cf8' };
-const TYPE_LABEL = { simple: 'Other', easy: 'Easy', rest: 'Rest', tempo: 'Tempo', long: 'Long', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
+const TYPE_COLORS = { simple: '#9ca3af', easy: '#34d399', rest: '#94a3b8', tempo: '#fb923c', long: '#a78bfa', intervals: '#f87171', fartlek: '#f472b6', race: '#818cf8', strength: '#fbbf24', cycling: '#22d3ee' };
+const TYPE_LABEL = { simple: 'Other', easy: 'Easy', rest: 'Rest', tempo: 'Tempo', long: 'Long', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling' };
 
 function DarkBars({ buckets, valueKey, color, asPercent = false }) {
   const max = Math.max(...buckets.map((b) => b[valueKey]), asPercent ? 1 : 0.0001);

@@ -21,7 +21,7 @@ from ..services.notifications import notify_many
 
 router = APIRouter(prefix="/workout-templates", tags=["workout-templates"])
 
-ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
+ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling"}
 
 
 def _clean(s: Optional[str]) -> Optional[str]:

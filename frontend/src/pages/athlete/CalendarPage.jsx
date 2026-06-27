@@ -231,6 +231,8 @@ export default function CalendarPage() {
     intervals: { label: 'Intervals', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
     fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
     race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+    strength:  { label: 'Strength',  color: 'bg-amber-400/20 text-amber-200' },
+    cycling:   { label: 'Cycling',   color: 'bg-cyan-400/20 text-cyan-200' },
   };
   // Short labels for the compact month-grid cells.
   const TYPE_ABBR_GLASS = {
@@ -242,6 +244,8 @@ export default function CalendarPage() {
     intervals: { abbr: 'Int',  color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
     fartlek:   { abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200' },
     race:      { abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+    strength:  { abbr: 'Str',  color: 'bg-amber-400/20 text-amber-200' },
+    cycling:   { abbr: 'Cyc',  color: 'bg-cyan-400/20 text-cyan-200' },
   };
 
   const renderDayCard = (day) => {
@@ -555,7 +559,7 @@ export default function CalendarPage() {
         {selectedDay && (
           <div className="space-y-4">
             {(() => {
-              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
+              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling' };
               const TYPE_COLOR = {
                 simple: 'bg-white/10 text-white/70',
                 easy: 'bg-emerald-400/20 text-emerald-200',
@@ -565,6 +569,8 @@ export default function CalendarPage() {
                 intervals: 'bg-[#ec6a06]/25 text-[#ffb690]',
                 fartlek: 'bg-pink-400/20 text-pink-200',
                 race: 'bg-[#8083ff]/30 text-[#c0c1ff]',
+                strength: 'bg-amber-400/20 text-amber-200',
+                cycling: 'bg-cyan-400/20 text-cyan-200',
               };
               const cards = dayWorkouts(selectedDay).filter(
                 (w) => w.title || w.content || w.warmup || w.main_session || w.cooldown || (w.distance_km > 0)
@@ -888,6 +894,8 @@ export default function CalendarPage() {
                         intervals: { label: 'Intervals', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
                         race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+                        strength:  { label: 'Strength',  color: 'bg-amber-400/20 text-amber-200' },
+                        cycling:   { label: 'Cycling',   color: 'bg-cyan-400/20 text-cyan-200' },
                       };
                       const typeChip = active?.workout_type ? TYPE_FULL[active.workout_type] : null;
                       const cellIsRace = active?.workout_type === 'race';

@@ -13,9 +13,15 @@ export const WORKOUT_TYPES = [
   { value: 'intervals', label: 'Intervals', abbr: 'Int',  structured: true },
   { value: 'fartlek',   label: 'Fartlek',   abbr: 'Fart', structured: true },
   { value: 'race',      label: 'Race',      abbr: 'Race', structured: true, mainLabel: 'Race' },
+  { value: 'strength',  label: 'Strength',  abbr: 'Str',  structured: false },
+  { value: 'cycling',   label: 'Cycling',   abbr: 'Cyc',  structured: false },
 ];
 export const isStructured = (type) =>
   ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(type);
+
+// Types that don't carry a planned distance — the km input is hidden for these.
+export const NO_DISTANCE_TYPES = ['strength', 'cycling'];
+export const tracksDistance = (type) => !NO_DISTANCE_TYPES.includes(type);
 
 // Group sessions, then personal sessions, each in list order. Accepts both the
 // new list shape and the old singular compat shape. Returns items tagged with

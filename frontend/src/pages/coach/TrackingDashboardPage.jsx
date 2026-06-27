@@ -13,6 +13,8 @@ const WORKOUT_TYPES = [
   { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',         structured: true },
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
+  { value: 'strength',  label: 'Strength',  color: 'bg-amber-100 text-amber-700',     structured: false },
+  { value: 'cycling',   label: 'Cycling',   color: 'bg-cyan-100 text-cyan-700',       structured: false },
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
@@ -21,7 +23,7 @@ const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
 const plannedKm = (d) => visibleDayPlannedKm(d);
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
 import { createTarget, updateTargetById, deleteTargetById, promoteTarget, setGroupVisibility } from '../../api/calendar';
-import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm } from '../../constants/workouts';
+import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm, tracksDistance } from '../../constants/workouts';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
 import Modal from '../../components/ui/Modal';
@@ -296,7 +298,7 @@ export default function TrackingDashboardPage() {
           warmup: structured ? f.warmup : '',
           main_session: structured ? f.main_session : '',
           cooldown: structured ? f.cooldown : '',
-          distance_km: (f.distance_km === '' || f.distance_km == null) ? null : parseFloat(f.distance_km),
+          distance_km: !tracksDistance(f.workout_type) || f.distance_km === '' || f.distance_km == null ? null : parseFloat(f.distance_km),
           hidden: isHidden,
         };
         if (editingTargetId) await updateTargetById(editingTargetId, payload);
@@ -703,6 +705,8 @@ export default function TrackingDashboardPage() {
                           intervals: { abbr: 'Int',  color: 'bg-red-100 text-red-700' },
                           fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
                           race:      { abbr: 'Race', color: 'bg-indigo-100 text-indigo-700' },
+                          strength:  { abbr: 'Str',  color: 'bg-amber-100 text-amber-700' },
+                          cycling:   { abbr: 'Cyc',  color: 'bg-cyan-100 text-cyan-700' },
                         };
                         const todayStr = format(new Date(), 'yyyy-MM-dd');
                         return (
@@ -754,6 +758,8 @@ export default function TrackingDashboardPage() {
                                           intervals: { abbr: 'Int', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
                                           fartlek: { abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200' },
                                           race: { abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+                                          strength: { abbr: 'Str', color: 'bg-amber-400/20 text-amber-200' },
+                                          cycling: { abbr: 'Cyc', color: 'bg-cyan-400/20 text-cyan-200' },
                                         };
                                         const typeInfo = activeType ? typeMap[activeType] : null;
                                         const isRace = activeType === 'race';
@@ -985,7 +991,7 @@ export default function TrackingDashboardPage() {
                 const gw = selected.day.group_workout;
                 if (!gw) return <p className="text-sm text-white/40 italic">No group workout for this day</p>;
                 const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
-                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
+                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling' };
                 const MAIN_LABEL = { race: 'Race' };
                 const middleLabel = MAIN_LABEL[gw.workout_type] || 'Main';
                 const gwIsRace = gw.workout_type === 'race';
@@ -1186,10 +1192,12 @@ export default function TrackingDashboardPage() {
                       placeholder="Title (shown on calendar)"
                       className={inputCls} />
 
-                    <input type="number" inputMode="decimal" value={personalForm.distance_km}
-                      onChange={(e) => setF('distance_km', e.target.value)}
-                      placeholder="Distance (km)"
-                      className={inputCls} />
+                    {tracksDistance(personalForm.workout_type) && (
+                      <input type="number" inputMode="decimal" value={personalForm.distance_km}
+                        onChange={(e) => setF('distance_km', e.target.value)}
+                        placeholder="Distance (km)"
+                        className={inputCls} />
+                    )}
 
                     {meta.structured ? (
                       <>
@@ -1358,6 +1366,8 @@ export default function TrackingDashboardPage() {
                         intervals: { label: 'Intervals', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
                         race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+                        strength:  { label: 'Strength',  color: 'bg-amber-400/20 text-amber-200' },
+                        cycling:   { label: 'Cycling',   color: 'bg-cyan-400/20 text-cyan-200' },
                       };
                       const typeChip = active?.workout_type ? TYPE_FULL[active.workout_type] : null;
                       const cellIsRace = active?.workout_type === 'race';

@@ -8,6 +8,7 @@ import { getCoachGroupWeek } from '../../api/calendar';
 import { addDays, format } from 'date-fns';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
+import { tracksDistance } from '../../constants/workouts';
 
 export const WORKOUT_TYPES = [
   { value: 'simple',    label: 'Other',     color: 'bg-gray-100 text-gray-700',       structured: false },
@@ -18,6 +19,8 @@ export const WORKOUT_TYPES = [
   { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',         structured: true },
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
+  { value: 'strength',  label: 'Strength',  color: 'bg-amber-100 text-amber-700',     structured: false },
+  { value: 'cycling',   label: 'Cycling',   color: 'bg-cyan-100 text-cyan-700',       structured: false },
 ];
 export const typeMeta = (t) => WORKOUT_TYPES.find((x) => x.value === t) || WORKOUT_TYPES[0];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -33,6 +36,7 @@ const CELL_COLOR = {
   simple: 'bg-slate-500/85', easy: 'bg-emerald-500/85', rest: 'bg-slate-400/80',
   tempo: 'bg-orange-500/85', long: 'bg-purple-500/85', intervals: 'bg-red-500/85',
   fartlek: 'bg-pink-500/85', race: 'bg-indigo-500/85',
+  strength: 'bg-amber-500/85', cycling: 'bg-cyan-500/85',
 };
 
 // Monday (week start) of a yyyy-MM-dd date string.
@@ -141,7 +145,7 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
       .map(([k, v]) => {
         const [w, d] = k.split('-').map(Number);
         const day = { week_number: w, day_of_week: d, ...v };
-        day.distance_km = (day.distance_km === '' || day.distance_km == null) ? null : parseFloat(day.distance_km);
+        day.distance_km = !tracksDistance(day.workout_type) || day.distance_km === '' || day.distance_km == null ? null : parseFloat(day.distance_km);
         return day;
       })
       .filter((d) => d.week_number <= weeks);
@@ -445,14 +449,16 @@ function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
           className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
         />
 
-        <input
-          type="number"
-          inputMode="decimal"
-          placeholder="Distance (km)"
-          value={form.distance_km}
-          onChange={(e) => upd('distance_km', e.target.value)}
-          className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-        />
+        {tracksDistance(form.workout_type) && (
+          <input
+            type="number"
+            inputMode="decimal"
+            placeholder="Distance (km)"
+            value={form.distance_km}
+            onChange={(e) => upd('distance_km', e.target.value)}
+            className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
+          />
+        )}
 
         {meta.structured ? (
           <>

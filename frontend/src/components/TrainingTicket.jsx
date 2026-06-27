@@ -12,6 +12,8 @@ const TYPE = {
   intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
   fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
   race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
+  strength:  { label: 'Strength',  color: 'bg-amber-100 text-amber-700' },
+  cycling:   { label: 'Cycling',   color: 'bg-cyan-100 text-cyan-700' },
 };
 
 // Today's workouts as the athlete sees them. The backend already applies the

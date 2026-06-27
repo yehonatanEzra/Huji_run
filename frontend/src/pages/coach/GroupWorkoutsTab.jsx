@@ -5,6 +5,7 @@ import { getGroup, listAthletes } from '../../api/coach';
 import Modal from '../../components/ui/Modal';
 import { NoiseBackground } from '../../components/ui/NoiseBackground';
 import Spinner from '../../components/ui/Spinner';
+import { tracksDistance } from '../../constants/workouts';
 
 const WORKOUT_TYPES = [
   { value: 'simple',    label: 'Other',     abbr: 'Oth',  color: 'bg-gray-100 text-gray-700',       structured: false },
@@ -15,6 +16,8 @@ const WORKOUT_TYPES = [
   { value: 'intervals', label: 'Intervals', abbr: 'Int',  color: 'bg-red-100 text-red-700',         structured: true },
   { value: 'fartlek',   label: 'Fartlek',   abbr: 'Fart', color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      abbr: 'Race', color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
+  { value: 'strength',  label: 'Strength',  abbr: 'Str',  color: 'bg-amber-100 text-amber-700',     structured: false },
+  { value: 'cycling',   label: 'Cycling',   abbr: 'Cyc',  color: 'bg-cyan-100 text-cyan-700',       structured: false },
 ];
 
 const typeMeta = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
@@ -229,7 +232,7 @@ export default function GroupWorkoutsTab({ group }) {
     setSaving(true);
     try {
       const payload = { ...form, ...overrides };
-      payload.distance_km = (payload.distance_km === '' || payload.distance_km == null) ? null : parseFloat(payload.distance_km);
+      payload.distance_km = !tracksDistance(payload.workout_type) || payload.distance_km === '' || payload.distance_km == null ? null : parseFloat(payload.distance_km);
       if (['simple', 'easy', 'rest'].includes(payload.workout_type)) {
         payload.warmup = '';
         payload.main_session = '';
@@ -599,17 +602,19 @@ export default function GroupWorkoutsTab({ group }) {
               </div>
 
               {/* Planned distance */}
-              <div>
-                <p className="text-xs font-semibold text-white/60 mb-1">Distance (km)</p>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={form.distance_km}
-                  onChange={(e) => setField('distance_km', e.target.value)}
-                  placeholder="e.g., 8"
-                  className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-                />
-              </div>
+              {tracksDistance(form.workout_type) && (
+                <div>
+                  <p className="text-xs font-semibold text-white/60 mb-1">Distance (km)</p>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={form.distance_km}
+                    onChange={(e) => setField('distance_km', e.target.value)}
+                    placeholder="e.g., 8"
+                    className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
+                  />
+                </div>
+              )}
 
               {/* Published content — simple/easy/tempo (single field) OR long/intervals/fartlek (3 fields) */}
               {meta.structured ? (

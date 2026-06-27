@@ -46,7 +46,8 @@ class GroupWorkout(Base):
 
 class IndividualTarget(Base):
     __tablename__ = "individual_targets"
-    __table_args__ = (UniqueConstraint("athlete_id", "date", name="uq_target_athlete_date"),)
+    # No unique (athlete_id, date): multiple personal workouts may exist per day
+    # (e.g. double easy / AM+PM). Ordered by `position`.
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -57,6 +58,8 @@ class IndividualTarget(Base):
     # Coach-only draft: when True the athlete never sees this target (not on
     # their calendar, not counted, never auto-missed) until the coach shares it.
     hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    # Ordering of multiple workouts within a day (0 = first / AM).
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     # workout_type: simple | easy | tempo | long | intervals | fartlek
     workout_type: Mapped[str] = mapped_column(String(20), nullable=False, default="simple")
     title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns';
 import { getAthleteWeek } from '../../api/coach';
-import { upsertTarget, deleteTarget } from '../../api/calendar';
+import { createTarget, updateTargetById, deleteTargetById } from '../../api/calendar';
+import { dayWorkouts } from '../../constants/workouts';
 import Modal from '../ui/Modal';
 import Spinner from '../ui/Spinner';
 
@@ -17,13 +18,8 @@ const TYPES = [
 ];
 const typeMetaFor = (t) => TYPES.find((x) => x.value === t) || TYPES[0];
 const DEFAULT_TITLES = new Set(TYPES.map((t) => t.label));
-// Planned km of a day's active workout (personal override wins, else group, else personal).
-const plannedKmOf = (day) => {
-  if (!day) return 0;
-  const t = day.target;
-  const active = t?.override_group ? t : (day.group_workout || t);
-  return active?.distance_km || 0;
-};
+// Planned km across all of a day's workouts (group + personal, per the merge rule).
+const plannedKmOf = (day) => dayWorkouts(day).reduce((s, w) => s + (w.distance_km || 0), 0);
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
 
 const EMPTY = { workout_type: 'simple', title: '', content: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false, distance_km: '', hidden: false };
@@ -33,6 +29,8 @@ export default function AthleteLogModal({ athlete, onClose }) {
   const [monthDate, setMonthDate] = useState(new Date());
   const [dayMap, setDayMap] = useState(null);  // { 'yyyy-MM-dd': dayData }
   const [editDay, setEditDay] = useState(null);
+  // null = viewing the day's workout list; object = editing/creating one target.
+  const [editingTarget, setEditingTarget] = useState(null);
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -97,8 +95,11 @@ export default function AthleteLogModal({ athlete, onClose }) {
     };
   }, [expanded]);
 
-  const openEdit = (day) => {
-    const t = day.target;
+  // Open a day → show its workout list.
+  const openEdit = (day) => { setEditDay(day); setEditingTarget(null); };
+
+  // Open the form to edit an existing target (t) or create a new one (t = null).
+  const openTargetForm = (t) => {
     setForm({
       workout_type: t?.workout_type || 'simple',
       title: t?.title || '',
@@ -111,7 +112,22 @@ export default function AthleteLogModal({ athlete, onClose }) {
       distance_km: t?.distance_km ?? '',
       hidden: t?.hidden || false,
     });
-    setEditDay(day);
+    setEditingTarget(t || { __new: true });
+  };
+
+  const refetchInto = async (afterDate) => {
+    await fetchMonth();
+    const { data } = await getAthleteWeek(athlete.id, afterDate);
+    const fresh = data.days.find((x) => x.date === afterDate);
+    if (fresh) setEditDay(fresh);  // refresh the open day's list
+  };
+
+  const handleDeleteTarget = async (t) => {
+    if (!t?.id) return;
+    setSaving(true);
+    try { await deleteTargetById(t.id); await refetchInto(editDay.date); }
+    catch (err) { console.error(err); }
+    finally { setSaving(false); }
   };
 
   const meta = typeMetaFor(form.workout_type);
@@ -133,7 +149,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
     setSaving(true);
     try {
       if (hasAny) {
-        await upsertTarget(athlete.id, editDay.date, {
+        const body = {
           note: form.note,
           override_group: form.override_group,
           workout_type: form.workout_type,
@@ -144,12 +160,14 @@ export default function AthleteLogModal({ athlete, onClose }) {
           cooldown: meta.structured ? form.cooldown : '',
           distance_km: (form.distance_km === '' || form.distance_km == null) ? null : parseFloat(form.distance_km),
           hidden,
-        });
-      } else {
-        await deleteTarget(athlete.id, editDay.date);
+        };
+        if (editingTarget?.id) await updateTargetById(editingTarget.id, body);
+        else await createTarget(athlete.id, editDay.date, body);
+      } else if (editingTarget?.id) {
+        await deleteTargetById(editingTarget.id);  // cleared an existing one
       }
-      setEditDay(null);
-      fetchMonth();
+      setEditingTarget(null);          // back to the day's list
+      await refetchInto(editDay.date);
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
   };
@@ -163,10 +181,59 @@ export default function AthleteLogModal({ athlete, onClose }) {
   return (
     <>
       <Modal open onClose={onClose} panelClassName="bg-[#131314] border-t border-white/10">
-        {editDay ? (
-          // ── Edit screen ────────────────────────────────────────────
+        {editDay && !editingTarget ? (
+          // ── Day workout list ───────────────────────────────────────
           <div className="space-y-3">
             <button onClick={() => setEditDay(null)} className="text-xs text-white/50 hover:text-white">← Back to month</button>
+            <h3 className="text-base font-bold text-white">
+              {athlete.full_name} · {format(new Date(editDay.date + 'T00:00'), 'EEE, MMM d')}
+            </h3>
+
+            {editDay.group_workout && (
+              <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3">
+                <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1">Group workout this day</p>
+                <p className="text-sm text-white/75">
+                  {editDay.group_workout.title || typeMetaFor(editDay.group_workout.workout_type).label}
+                  {editDay.group_workout.main_session ? ` · ${editDay.group_workout.main_session}` : editDay.group_workout.content ? ` · ${editDay.group_workout.content}` : ''}
+                </p>
+              </div>
+            )}
+
+            <p className="text-[10px] uppercase tracking-widest text-white/40">Personal workouts</p>
+            {(editDay.targets || []).length === 0 && (
+              <p className="text-sm text-white/45 italic">None yet — add one below.</p>
+            )}
+            <div className="space-y-2">
+              {(editDay.targets || []).map((t) => {
+                const tm = typeMetaFor(t.workout_type);
+                return (
+                  <div key={t.id} className={`rounded-xl border p-3 flex items-start justify-between gap-2 ${t.hidden ? 'border-dashed border-white/20 bg-white/[0.03]' : 'border-white/10 bg-white/[0.05]'}`}>
+                    <button onClick={() => openTargetForm(t)} className="min-w-0 text-left flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tm.color}`}>{tm.label}</span>
+                        {t.hidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
+                        {t.override_group && <span className="text-[10px] text-[#c0c1ff]">overrides group</span>}
+                      </div>
+                      <p className="text-sm text-white mt-1 truncate">
+                        {t.title || tm.label}
+                        {t.distance_km > 0 && <span className="text-white/45 font-normal"> · {Number(t.distance_km).toFixed(1)} km</span>}
+                      </p>
+                    </button>
+                    <button onClick={() => handleDeleteTarget(t)} disabled={saving}
+                      className="shrink-0 text-[11px] px-2 py-1 rounded border border-red-400/30 text-red-300 hover:bg-red-500/15 disabled:opacity-50">Delete</button>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={() => openTargetForm(null)}
+              className="w-full border border-[#c0c1ff]/40 text-[#c0c1ff] rounded-xl py-2.5 text-sm font-bold hover:bg-[#c0c1ff]/10">
+              + Add personal workout
+            </button>
+          </div>
+        ) : editDay && editingTarget ? (
+          // ── Edit / create one personal workout ─────────────────────
+          <div className="space-y-3">
+            <button onClick={() => setEditingTarget(null)} className="text-xs text-white/50 hover:text-white">← Back to day</button>
             <h3 className="text-base font-bold text-white">
               {athlete.full_name} · {format(new Date(editDay.date + 'T00:00'), 'EEE, MMM d')}
             </h3>
@@ -278,13 +345,14 @@ export default function AthleteLogModal({ athlete, onClose }) {
                             const isToday = key === format(new Date(), 'yyyy-MM-dd');
                             const log = day?.log;
                             const logStatus = log?.status || (log?.completed ? 'completed' : (log?.missed ? 'missed' : null));
-                            const t = day?.target;
-                            const _active = (t && (t.override_group || !day?.group_workout)) ? t : day?.group_workout;
+                            const wl = dayWorkouts(day);
+                            const _active = wl.find((w) => w.workout_type === 'race') || wl[0];
                             const activeType = _active?.workout_type;
                             const tm = activeType ? typeMetaFor(activeType) : null;
                             const isRace = activeType === 'race';
-                            // Hidden = the active workout is a coach-only target the athlete can't see yet.
-                            const hidden = _active === t && !!t?.hidden;
+                            const extra = wl.length - 1;
+                            // Hidden = the lead workout is a coach-only target the athlete can't see yet.
+                            const hidden = _active?._source === 'personal' && !!_active?.hidden;
                             return (
                               <button
                                 key={key}
@@ -296,6 +364,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
                                    isToday ? 'border border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border border-white/10 bg-white/10'}`}
                               >
                                 {hidden && <span className="absolute top-0.5 right-0.5 text-[9px] leading-none" title="Hidden from athlete">🙈</span>}
+                                {extra > 0 && <span className="absolute bottom-0.5 right-0.5 text-[7px] font-bold text-white/70 bg-white/15 rounded px-0.5 leading-none">+{extra}</span>}
                                 {isRace && <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>}
                                 {tm && !isRace && <span className={`text-[8px] px-1 py-px rounded font-semibold leading-none ${tm.color}`}>{tm.abbr}</span>}
                                 <span className="text-[10px] font-bold text-white">
@@ -361,14 +430,14 @@ export default function AthleteLogModal({ athlete, onClose }) {
                         const key = format(d, 'yyyy-MM-dd');
                         const day = dayOf(d);
                         const inMonth = isSameMonth(d, monthDate);
-                        const t = day?.target;
-                        const gw = day?.group_workout;
-                        const useTarget = !!t && (t.override_group || !gw);
-                        const active = useTarget ? t : gw;
+                        const wl = dayWorkouts(day);
+                        const active = wl.find((w) => w.workout_type === 'race') || wl[0];
+                        const useTarget = active?._source === 'personal';
                         const tm = active ? typeMetaFor(active.workout_type) : null;
                         const log = day?.log;
                         const status = log?.status;
-                        const hidden = useTarget && !!t.hidden;
+                        const hidden = useTarget && !!active.hidden;
+                        const extra = wl.length - 1;
                         const title = active ? (active.title || active.content || active.main_session || active.warmup || typeMetaFor(active.workout_type).label) : '';
                         const bg = !inMonth ? 'bg-white/5 border-white/10 opacity-60' :
                           hidden ? 'bg-white/[0.04] border-dashed border-white/20' :
@@ -385,8 +454,8 @@ export default function AthleteLogModal({ athlete, onClose }) {
                               {tm && <span className={`text-[8px] font-bold uppercase px-1 rounded ${tm.color}`}>{useTarget ? '★' : ''}{tm.abbr}</span>}
                             </div>
                             {hidden && <p className="text-[8px] text-white/40 mt-0.5">🙈 hidden</p>}
-                            {title && <p className="text-[10px] text-white/85 mt-1 line-clamp-4 leading-tight">{title}</p>}
-                            {!t && gw && <p className="text-[8px] text-white/40 mt-0.5">group</p>}
+                            {title && <p className="text-[10px] text-white/85 mt-1 line-clamp-3 leading-tight">{title}</p>}
+                            {extra > 0 && <p className="text-[8px] text-[#c0c1ff] font-semibold mt-0.5">+{extra} more</p>}
                             {plannedKmOf(day) > 0 && <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKmOf(day))} km</p>}
                           </button>
                         );

@@ -422,8 +422,12 @@ def dashboard_week(
     logs = db.query(WorkoutLog).filter(WorkoutLog.date.in_(week_dates)).all()
     log_map: dict[tuple, WorkoutLog] = {(l.athlete_id, l.date): l for l in logs}
 
-    targets = db.query(IndividualTarget).filter(IndividualTarget.date.in_(week_dates)).all()
-    target_map: dict[tuple, IndividualTarget] = {(t.athlete_id, t.date): t for t in targets}
+    targets = db.query(IndividualTarget).filter(IndividualTarget.date.in_(week_dates)).order_by(
+        IndividualTarget.position.asc(), IndividualTarget.id.asc()
+    ).all()
+    targets_by_key: dict[tuple, list] = {}
+    for t in targets:
+        targets_by_key.setdefault((t.athlete_id, t.date), []).append(t)
 
     # All workouts in this week's date range, newest-first per (group, date).
     group_workouts = (
@@ -491,7 +495,7 @@ def dashboard_week(
         days = []
         for d in week_dates:
             log = log_map.get((athlete.id, d))
-            target = target_map.get((athlete.id, d))
+            day_targets = targets_by_key.get((athlete.id, d), [])
             gw = _pick_for(athlete.id, athlete.training_group_id, d) if athlete.training_group_id else None
             log_out = None
             if log:
@@ -508,7 +512,8 @@ def dashboard_week(
             days.append({
                 "date": d,
                 "log": log_out,
-                "target": IndividualTargetOut.model_validate(target) if target else None,
+                "targets": [IndividualTargetOut.model_validate(t) for t in day_targets],
+                "target": IndividualTargetOut.model_validate(day_targets[0]) if day_targets else None,
                 "group_workout": GroupWorkoutOut.model_validate(gw) if gw else None,
             })
         rows.append(AthleteWeekRow(
@@ -662,8 +667,10 @@ def get_athlete_week(
     targets = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete_id,
         IndividualTarget.date.in_(week_dates),
-    ).all()
-    target_map = {t.date: t for t in targets}
+    ).order_by(IndividualTarget.position.asc(), IndividualTarget.id.asc()).all()
+    targets_by_date: dict = {}
+    for t in targets:
+        targets_by_date.setdefault(t.date, []).append(t)
 
     gw_map = {}
     if athlete.training_group_id:
@@ -741,26 +748,33 @@ def get_athlete_week(
             "comment_count": per_log_comment_count.get(log.id, 0),
         }
 
+    def _target_payload(t):
+        return {
+            "id": t.id,
+            "note": t.note,
+            "override_group": t.override_group,
+            "hidden": t.hidden,
+            "position": t.position,
+            "workout_type": t.workout_type,
+            "title": t.title,
+            "content": t.content,
+            "warmup": t.warmup,
+            "main_session": t.main_session,
+            "cooldown": t.cooldown,
+            "distance_km": t.distance_km,
+        }
+
     days = []
     for d in week_dates:
         log = log_map.get(d)
-        target = target_map.get(d)
+        day_targets = targets_by_date.get(d, [])
         gw = gw_map.get(d)
         days.append({
             "date": d.isoformat(),
             "log": _log_payload(log) if log else None,
-            "target": {
-                "note": target.note,
-                "override_group": target.override_group,
-                "hidden": target.hidden,
-                "workout_type": target.workout_type,
-                "title": target.title,
-                "content": target.content,
-                "warmup": target.warmup,
-                "main_session": target.main_session,
-                "cooldown": target.cooldown,
-                "distance_km": target.distance_km,
-            } if target else None,
+            "targets": [_target_payload(t) for t in day_targets],
+            # compat: primary (first) target for the not-yet-migrated UI
+            "target": _target_payload(day_targets[0]) if day_targets else None,
             "group_workout": {
                 "content": gw.content,
                 "workout_type": gw.workout_type,

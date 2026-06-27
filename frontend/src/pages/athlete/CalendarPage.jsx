@@ -10,13 +10,10 @@ import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 import PageBackground from '../../components/PageBackground';
 import { NoiseBackground } from '../../components/ui/NoiseBackground';
+import { dayWorkouts, dayPlannedKm } from '../../constants/workouts';
 
-// Planned km of the day's active workout (personal override wins, else group, else personal).
-const plannedKmForDay = (d) => {
-  const t = d.individual_target;
-  const active = t?.override_group ? t : (d.group_workout || t);
-  return active?.distance_km || 0;
-};
+// Planned km across all of the day's (visible) workouts.
+const plannedKmForDay = (d) => dayPlannedKm(d);
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
 
 export default function CalendarPage() {
@@ -249,16 +246,17 @@ export default function CalendarPage() {
     const date = new Date(day.date + 'T00:00');
     const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
     const log = day.workout_log;
-    const t = day.individual_target;
-    const gw = day.group_workout;
-    // Active workout = personal override OR no group workout → personal; else group.
-    const active = (t && (t.override_group || !gw)) ? t : gw;
+    const list = dayWorkouts(day);
+    // Lead with a race if present, else the first workout.
+    const active = list.find((w) => w.workout_type === 'race') || list[0];
     const activeType = active?.workout_type;
     const isRace = activeType === 'race';
     const typeMeta = activeType ? TYPE_GLASS[activeType] : null;
+    const extra = list.length - 1;
 
-    // Overview shows the workout only; the coach note is detail-only (on day-click).
-    const snippet = active?.title || active?.content || active?.main_session || active?.warmup;
+    // Overview shows the lead workout (+N more); note is detail-only (on day-click).
+    const lead = active?.title || active?.content || active?.main_session || active?.warmup;
+    const snippet = lead ? (extra > 0 ? `${lead} +${extra} more` : lead) : null;
     const note = null;
 
     const km = log?.distance_km;
@@ -382,11 +380,12 @@ export default function CalendarPage() {
                 const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
                 const hasLog = day.workout_log;
                 const inMonth = dayDate.getMonth() === currentDate.getMonth();
-                const _it = day.individual_target;
-                const _active = (_it && (_it.override_group || !day.group_workout)) ? _it : day.group_workout;
+                const _list = dayWorkouts(day);
+                const _active = _list.find((w) => w.workout_type === 'race') || _list[0];
                 const activeType = _active?.workout_type;
                 const isRace = activeType === 'race';
                 const tag = activeType ? TYPE_ABBR_GLASS[activeType] : null;
+                const _extra = _list.length - 1;
                 return (
                   <button
                     key={day.date}
@@ -398,6 +397,9 @@ export default function CalendarPage() {
                       isToday ? 'border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border-white/10'
                     }`}
                   >
+                    {_extra > 0 && (
+                      <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-white/70 bg-white/15 rounded px-0.5 leading-none">+{_extra}</span>
+                    )}
                     {/* Workout-type tag at the top */}
                     <span className="h-3 flex items-center">
                       {tag && (
@@ -522,8 +524,7 @@ export default function CalendarPage() {
       <Modal open={!!selectedDay} onClose={closeDay} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
         {selectedDay && (
           <div className="space-y-4">
-            {selectedDay.group_workout && !selectedDay.individual_target?.override_group && (() => {
-              const gw = selectedDay.group_workout;
+            {(() => {
               const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
               const TYPE_COLOR = {
                 simple: 'bg-white/10 text-white/70',
@@ -535,87 +536,51 @@ export default function CalendarPage() {
                 fartlek: 'bg-pink-400/20 text-pink-200',
                 race: 'bg-[#8083ff]/30 text-[#c0c1ff]',
               };
-              const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
-              const middleLabel = gw.workout_type === 'race' ? 'Race' : 'Main';
-              const isRaceDay = gw.workout_type === 'race';
-              return (
-                <div className={`rounded-lg p-3 space-y-2 ${isRaceDay ? 'bg-indigo-400/20 border-2 border-indigo-400/60' : 'bg-white/10 backdrop-blur-sm border border-white/20'}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-white/50">Group Workout</p>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[gw.workout_type] || TYPE_COLOR.simple}`}>
-                      {TYPE_LABELS[gw.workout_type] || 'Simple'}
-                    </span>
-                  </div>
-                  {gw.title && <p className="text-base font-semibold text-white">{isRaceDay && '🏁 '}{gw.title}</p>}
-                  {!gw.title && isRaceDay && <p className="text-base font-semibold text-white">🏁 Race day</p>}
-                  {isStructured ? (
-                    <div className="space-y-1.5 text-sm">
-                      {gw.warmup && <p><span className="text-xs uppercase tracking-wider text-white/40">Warm-up · </span><span className="whitespace-pre-wrap text-white/85">{gw.warmup}</span></p>}
-                      {gw.main_session && <p><span className="text-xs uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap text-white/85">{gw.main_session}</span></p>}
-                      {gw.cooldown && <p><span className="text-xs uppercase tracking-wider text-white/40">Cool-down · </span><span className="whitespace-pre-wrap text-white/85">{gw.cooldown}</span></p>}
-                    </div>
-                  ) : (
-                    gw.content && <p className="text-sm whitespace-pre-wrap text-white/85">{gw.content}</p>
-                  )}
-                  {gw.distance_km > 0 && (
-                    <p className="text-sm"><span className="text-xs uppercase tracking-wider text-white/40">Distance · </span><span className="font-semibold text-[#c0c1ff]">{Number(gw.distance_km.toFixed(1))} km</span></p>
-                  )}
-                </div>
+              const cards = dayWorkouts(selectedDay).filter(
+                (w) => w.title || w.content || w.warmup || w.main_session || w.cooldown || (w.distance_km > 0)
               );
-            })()}
-            {selectedDay.individual_target && (() => {
-              const t = selectedDay.individual_target;
-              const hasBody = t.title || t.content || t.warmup || t.main_session || t.cooldown || (t.distance_km > 0);
-              const isActive = t.override_group || !selectedDay.group_workout;
-              if (!hasBody || !isActive) return null;
-              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
-              const TYPE_COLOR = {
-                simple: 'bg-white/10 text-white/70',
-                easy: 'bg-emerald-400/20 text-emerald-200',
-                rest: 'bg-slate-400/20 text-slate-200',
-                tempo: 'bg-orange-400/20 text-orange-200',
-                long: 'bg-purple-400/20 text-purple-200',
-                intervals: 'bg-[#ec6a06]/25 text-[#ffb690]',
-                fartlek: 'bg-pink-400/20 text-pink-200',
-                race: 'bg-[#8083ff]/30 text-[#c0c1ff]',
-              };
-              const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(t.workout_type);
-              const middleLabel = t.workout_type === 'race' ? 'Race' : 'Main';
-              const isRaceT = t.workout_type === 'race';
-              return (
-                <div className={`rounded-lg p-3 space-y-2 ${isRaceT ? 'bg-indigo-400/20 border-2 border-indigo-400/60' : 'bg-blue-400/15 backdrop-blur-sm border border-blue-300/25'}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium text-[#c0c1ff]">Coach's workout for you</p>
-                    {t.workout_type && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[t.workout_type] || TYPE_COLOR.simple}`}>
-                        {TYPE_LABELS[t.workout_type] || 'Other'}
-                      </span>
+              return cards.map((w) => {
+                const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(w.workout_type);
+                const middleLabel = w.workout_type === 'race' ? 'Race' : 'Main';
+                const isRace = w.workout_type === 'race';
+                const isPersonal = w._source === 'personal';
+                return (
+                  <div key={w._key} className={`rounded-lg p-3 space-y-2 ${isRace ? 'bg-indigo-400/20 border-2 border-indigo-400/60' : isPersonal ? 'bg-blue-400/15 backdrop-blur-sm border border-blue-300/25' : 'bg-white/10 backdrop-blur-sm border border-white/20'}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={`text-xs font-medium ${isPersonal ? 'text-[#c0c1ff]' : 'text-white/50'}`}>{isPersonal ? "Coach's workout for you" : 'Group Workout'}</p>
+                      {w.workout_type && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[w.workout_type] || TYPE_COLOR.simple}`}>
+                          {TYPE_LABELS[w.workout_type] || 'Other'}
+                        </span>
+                      )}
+                    </div>
+                    {w.title && <p className="text-base font-semibold text-white">{isRace && '🏁 '}{w.title}</p>}
+                    {!w.title && isRace && <p className="text-base font-semibold text-white">🏁 Race day</p>}
+                    {isStructured ? (
+                      <div className="space-y-1.5 text-sm">
+                        {w.warmup && <p><span className="text-xs uppercase tracking-wider text-white/40">Warm-up · </span><span className="whitespace-pre-wrap text-white/85">{w.warmup}</span></p>}
+                        {w.main_session && <p><span className="text-xs uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap text-white/85">{w.main_session}</span></p>}
+                        {w.cooldown && <p><span className="text-xs uppercase tracking-wider text-white/40">Cool-down · </span><span className="whitespace-pre-wrap text-white/85">{w.cooldown}</span></p>}
+                      </div>
+                    ) : (
+                      w.content && <p className="text-sm whitespace-pre-wrap text-white/85">{w.content}</p>
+                    )}
+                    {w.distance_km > 0 && (
+                      <p className="text-sm"><span className="text-xs uppercase tracking-wider text-white/40">Distance · </span><span className="font-semibold text-[#c0c1ff]">{Number(w.distance_km.toFixed(1))} km</span></p>
                     )}
                   </div>
-                  {t.title && <p className="text-base font-semibold text-white">{isRaceT && '🏁 '}{t.title}</p>}
-                  {!t.title && isRaceT && <p className="text-base font-semibold text-white">🏁 Race day</p>}
-                  {isStructured ? (
-                    <div className="space-y-1.5 text-sm">
-                      {t.warmup && <p><span className="text-xs uppercase tracking-wider text-white/40">Warm-up · </span><span className="whitespace-pre-wrap text-white/85">{t.warmup}</span></p>}
-                      {t.main_session && <p><span className="text-xs uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap text-white/85">{t.main_session}</span></p>}
-                      {t.cooldown && <p><span className="text-xs uppercase tracking-wider text-white/40">Cool-down · </span><span className="whitespace-pre-wrap text-white/85">{t.cooldown}</span></p>}
-                    </div>
-                  ) : (
-                    t.content && <p className="text-sm whitespace-pre-wrap text-white/85">{t.content}</p>
-                  )}
-                  {t.distance_km > 0 && (
-                    <p className="text-sm"><span className="text-xs uppercase tracking-wider text-white/40">Distance · </span><span className="font-semibold text-[#c0c1ff]">{Number(t.distance_km.toFixed(1))} km</span></p>
-                  )}
-                </div>
-              );
+                );
+              });
             })()}
 
-            {selectedDay.individual_target?.note && (
-              <div className="rounded-lg p-3 bg-white/5 border border-white/10">
-                <p className="text-xs font-medium text-white/50 mb-1">Note from coach</p>
-                <p className="text-sm whitespace-pre-wrap text-white/85">{selectedDay.individual_target.note}</p>
-              </div>
-            )}
+            {(selectedDay.individual_targets || (selectedDay.individual_target ? [selectedDay.individual_target] : []))
+              .filter((t) => t.note)
+              .map((t, i) => (
+                <div key={`note-${t.id ?? i}`} className="rounded-lg p-3 bg-white/5 border border-white/10">
+                  <p className="text-xs font-medium text-white/50 mb-1">Note from coach</p>
+                  <p className="text-sm whitespace-pre-wrap text-white/85">{t.note}</p>
+                </div>
+              ))}
 
             {selectedDay.workout_log && selectedDay.workout_log.kudos_count > 0 && (
               <div className="flex items-center gap-1.5 bg-pink-400/15 border border-pink-400/25 rounded-lg px-3 py-2">
@@ -876,15 +841,13 @@ export default function CalendarPage() {
                         status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
                         'bg-white/20 border-white/30 hover:bg-white/30';
                       const cellHeight = 150;
-                      const it = d.individual_target;
-                      const gwx = d.group_workout;
-                      // Active workout = personal override OR no group → personal; else group.
-                      const useTarget = !!it && (it.override_group || !gwx);
-                      const active = useTarget ? it : gwx;
-                      const personalOverride = useTarget;
-                      const workoutTitle = active?.title || (useTarget ? 'Personal' : '');
+                      const wlist = dayWorkouts(d);
+                      const active = wlist.find((w) => w.workout_type === 'race') || wlist[0];
+                      const personalOverride = active?._source === 'personal';
+                      const extraCount = wlist.length - 1;
+                      const workoutTitle = active?.title || (personalOverride ? 'Personal' : '');
                       const workoutBody = active?.content || active?.main_session || active?.warmup || '';
-                      const hasPersonal = !!it && (it.note || it.title);
+                      const hasPersonal = wlist.some((w) => w._source === 'personal');
                       const TYPE_FULL = {
                         simple:    { label: 'Other',     color: 'bg-white/10 text-white/70' },
                         easy:      { label: 'Easy run',  color: 'bg-emerald-400/20 text-emerald-200' },
@@ -925,6 +888,9 @@ export default function CalendarPage() {
                             )}
                             {workoutBody && (
                               <p className="text-[10px] text-white/65 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>
+                            )}
+                            {extraCount > 0 && (
+                              <p className="text-[9px] text-[#c0c1ff] font-semibold mt-0.5">+{extraCount} more</p>
                             )}
                             {plannedKmForDay(d) > 0 && (
                               <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKmForDay(d))} km</p>

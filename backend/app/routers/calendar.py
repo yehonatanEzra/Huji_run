@@ -50,37 +50,29 @@ def _week_start(d: date) -> date:
     return d - timedelta(days=(d.weekday() + 1) % 7)
 
 
-def _pick_workout_for_athlete(
+def _workouts_for_athlete(
     db: Session, group_id: int, day: date, athlete_id: int, *, is_coach_view: bool
-):
-    """Among all group workouts on (group_id, day), pick the one that applies
-    to this athlete. Rules:
+) -> list[GroupWorkout]:
+    """All group workouts on (group_id, day) that apply to this athlete, oldest
+    -first (stable AM→PM order). Rules:
       - A workout with NO recipients is broadcast → applies to everyone.
       - A workout with explicit recipients applies only to those athletes.
-      - When multiple workouts apply, the newest (highest id) wins.
-    For coach views (`is_coach_view=True`) the recipient filter is bypassed —
-    coaches just get the newest workout for the day."""
+    Coach views (`is_coach_view=True`) bypass the recipient filter and see all."""
     workouts = (
         db.query(GroupWorkout)
         .filter(GroupWorkout.training_group_id == group_id, GroupWorkout.date == day)
-        .order_by(GroupWorkout.id.desc())
+        .order_by(GroupWorkout.id.asc())
         .all()
     )
-    if not workouts:
-        return None
-    if is_coach_view:
-        return workouts[0]
+    if not workouts or is_coach_view:
+        return workouts
     wids = [w.id for w in workouts]
     recips: dict[int, set[int]] = {wid: set() for wid in wids}
     for wid, aid in db.query(
         GroupWorkoutRecipient.group_workout_id, GroupWorkoutRecipient.athlete_id
     ).filter(GroupWorkoutRecipient.group_workout_id.in_(wids)).all():
         recips[wid].add(aid)
-    for w in workouts:  # already sorted newest-first
-        rec = recips[w.id]
-        if not rec or athlete_id in rec:
-            return w
-    return None
+    return [w for w in workouts if not recips[w.id] or athlete_id in recips[w.id]]
 
 
 def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = False, group_id: Optional[int] = None, viewer_id: Optional[int] = None) -> WeekResponse:
@@ -94,43 +86,50 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
     logs = []
     for i in range(7):
         day = week_start + timedelta(days=i)
-        gw = None
+        gws = []
         if gid:
-            gw = _pick_workout_for_athlete(db, gid, day, athlete.id, is_coach_view=is_coach)
-            if gw and not is_coach:
-                has_published = bool(gw.content or gw.warmup or gw.main_session or gw.cooldown or gw.title)
-                if not has_published:
-                    gw = None
-                else:
-                    gw.draft_content = None
-        it = db.query(IndividualTarget).filter(
+            gws = _workouts_for_athlete(db, gid, day, athlete.id, is_coach_view=is_coach)
+            if not is_coach:
+                # Athletes only see published group workouts; clear coach-only drafts.
+                published = []
+                for gw in gws:
+                    if gw.content or gw.warmup or gw.main_session or gw.cooldown or gw.title:
+                        gw.draft_content = None
+                        published.append(gw)
+                gws = published
+        targets = db.query(IndividualTarget).filter(
             IndividualTarget.athlete_id == athlete.id,
             IndividualTarget.date == day,
-        ).first()
+        ).order_by(IndividualTarget.position.asc(), IndividualTarget.id.asc()).all()
         log = db.query(WorkoutLog).filter(
             WorkoutLog.athlete_id == athlete.id,
             WorkoutLog.date == day,
         ).first()
-        # Hidden targets are coach-only: the athlete sees neither the target nor
-        # a suppressed group workout. Drop it entirely for athlete views.
-        if not is_coach and it and it.hidden:
-            it = None
-        if not is_coach and it and it.override_group:
-            gw = None
+        # Hidden targets are coach-only: strip them from athlete views entirely.
+        if not is_coach:
+            targets = [t for t in targets if not t.hidden]
+            # A personal override suppresses the group sessions for the athlete.
+            if any(t.override_group for t in targets):
+                gws = []
         if log:
             logs.append(log)
-        gw_out = None
-        if gw:
+        gw_outs = []
+        for gw in gws:
             gw_out = GroupWorkoutOut.model_validate(gw)
             gw_recipient_ids = [
                 r[0] for r in db.query(GroupWorkoutRecipient.athlete_id)
                 .filter(GroupWorkoutRecipient.group_workout_id == gw.id).all()
             ]
-            gw_out = gw_out.model_copy(update={"recipient_ids": gw_recipient_ids})
+            gw_outs.append(gw_out.model_copy(update={"recipient_ids": gw_recipient_ids}))
+        target_outs = [IndividualTargetOut.model_validate(t) for t in targets]
         days.append(DayData(
             date=day,
-            group_workout=gw_out,
-            individual_target=IndividualTargetOut.model_validate(it) if it else None,
+            group_workouts=gw_outs,
+            individual_targets=target_outs,
+            # Compat: newest group workout + first personal target (matches the
+            # old single-value behavior for the not-yet-migrated calendar UI).
+            group_workout=gw_outs[-1] if gw_outs else None,
+            individual_target=target_outs[0] if target_outs else None,
             workout_log=WorkoutLogOut.model_validate(log) if log else None,
         ))
 
@@ -393,6 +392,45 @@ def delete_group_workout_by_id(
     db.commit()
 
 
+_TARGET_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
+
+
+def _target_clean(s):
+    if s is None:
+        return None
+    s = s.strip()
+    return s or None
+
+
+def _notify_personal(db, athlete_id: int, day: date, title: str):
+    notify(
+        db, athlete_id, "personal_workout",
+        f"Coach assigned you a personal workout: {title} ({day.strftime('%a %b %d')})",
+        f"/calendar?date={day.isoformat()}",
+    )
+
+
+def _write_target_fields(it: IndividualTarget, body: IndividualTargetUpsert):
+    """Apply upsert body onto a target. workout_type only changes when valid."""
+    it.note = body.note or ""
+    it.override_group = body.override_group
+    it.hidden = body.hidden
+    if body.workout_type is not None and body.workout_type in _TARGET_TYPES:
+        it.workout_type = body.workout_type
+    if body.title is not None:
+        it.title = _target_clean(body.title)
+    if body.content is not None:
+        it.content = _target_clean(body.content)
+    if body.warmup is not None:
+        it.warmup = _target_clean(body.warmup)
+    if body.main_session is not None:
+        it.main_session = _target_clean(body.main_session)
+    if body.cooldown is not None:
+        it.cooldown = _target_clean(body.cooldown)
+    if body.distance_km is not None:
+        it.distance_km = body.distance_km
+
+
 @router.put("/targets/{athlete_id}/{day}", response_model=IndividualTargetOut)
 def upsert_individual_target(
     athlete_id: int,
@@ -401,77 +439,96 @@ def upsert_individual_target(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
+    """Transitional single-workout upsert: edits the primary (first) target for
+    the day, or creates one. New UIs use POST + by-id PUT/DELETE for multiples."""
     athlete = db.get(User, athlete_id)
     if not can_coach_target_athlete(coach, athlete, db):
         raise HTTPException(status_code=404, detail="Athlete not found")
-    ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
-
-    def _clean(s):
-        if s is None:
-            return None
-        s = s.strip()
-        return s if s else None
-
     it = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete_id,
         IndividualTarget.date == day,
-    ).first()
+    ).order_by(IndividualTarget.position.asc(), IndividualTarget.id.asc()).first()
     if it:
         was_hidden = it.hidden
-        it.note = body.note or ""
-        it.override_group = body.override_group
-        it.hidden = body.hidden
-        if body.workout_type is not None and body.workout_type in ALLOWED_TYPES:
-            it.workout_type = body.workout_type
-        if body.title is not None:
-            it.title = _clean(body.title)
-        if body.content is not None:
-            it.content = _clean(body.content)
-        if body.warmup is not None:
-            it.warmup = _clean(body.warmup)
-        if body.main_session is not None:
-            it.main_session = _clean(body.main_session)
-        if body.cooldown is not None:
-            it.cooldown = _clean(body.cooldown)
-        if body.distance_km is not None:
-            it.distance_km = body.distance_km
-        # Notify only when the workout becomes newly visible to the athlete.
+        _write_target_fields(it, body)
         if was_hidden and not body.hidden:
-            title = _clean(body.title) or it.workout_type.capitalize()
-            notify(
-                db, athlete_id, "personal_workout",
-                f"Coach assigned you a personal workout: {title} ({day.strftime('%a %b %d')})",
-                f"/calendar?date={day.isoformat()}",
-            )
+            _notify_personal(db, athlete_id, day, _target_clean(body.title) or it.workout_type.capitalize())
     else:
-        wt = body.workout_type if (body.workout_type in ALLOWED_TYPES) else "simple"
-        it = IndividualTarget(
-            athlete_id=athlete_id,
-            date=day,
-            note=body.note or "",
-            override_group=body.override_group,
-            hidden=body.hidden,
-            workout_type=wt,
-            title=_clean(body.title),
-            content=_clean(body.content),
-            warmup=_clean(body.warmup),
-            main_session=_clean(body.main_session),
-            cooldown=_clean(body.cooldown),
-            distance_km=body.distance_km,
-            created_by=coach.id,
-        )
+        it = IndividualTarget(athlete_id=athlete_id, date=day, note="", created_by=coach.id, position=0)
+        _write_target_fields(it, body)
+        if it.workout_type not in _TARGET_TYPES:
+            it.workout_type = "simple"
         db.add(it)
-        # Don't ping the athlete about a workout they can't see yet.
         if not body.hidden:
-            title = _clean(body.title) or wt.capitalize()
-            notify(
-                db, athlete_id, "personal_workout",
-                f"Coach assigned you a personal workout: {title} ({day.strftime('%a %b %d')})",
-                f"/calendar?date={day.isoformat()}",
-            )
+            _notify_personal(db, athlete_id, day, _target_clean(body.title) or it.workout_type.capitalize())
     db.commit()
     db.refresh(it)
     return it
+
+
+@router.post("/targets/{athlete_id}/{day}", response_model=IndividualTargetOut, status_code=201)
+def create_individual_target(
+    athlete_id: int,
+    day: date,
+    body: IndividualTargetUpsert,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    """Append an additional personal workout to a day (multiple per day)."""
+    athlete = db.get(User, athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    count = db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == athlete_id, IndividualTarget.date == day,
+    ).count()
+    it = IndividualTarget(athlete_id=athlete_id, date=day, note="", created_by=coach.id, position=count)
+    _write_target_fields(it, body)
+    if it.workout_type not in _TARGET_TYPES:
+        it.workout_type = "simple"
+    db.add(it)
+    if not body.hidden:
+        _notify_personal(db, athlete_id, day, _target_clean(body.title) or it.workout_type.capitalize())
+    db.commit()
+    db.refresh(it)
+    return it
+
+
+@router.put("/individual-targets/{target_id}", response_model=IndividualTargetOut)
+def update_individual_target(
+    target_id: int,
+    body: IndividualTargetUpsert,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    it = db.get(IndividualTarget, target_id)
+    if it is None:
+        raise HTTPException(status_code=404, detail="Target not found")
+    athlete = db.get(User, it.athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
+        raise HTTPException(status_code=404, detail="Target not found")
+    was_hidden = it.hidden
+    _write_target_fields(it, body)
+    if was_hidden and not body.hidden:
+        _notify_personal(db, it.athlete_id, it.date, _target_clean(body.title) or it.workout_type.capitalize())
+    db.commit()
+    db.refresh(it)
+    return it
+
+
+@router.delete("/individual-targets/{target_id}", status_code=204)
+def delete_individual_target_by_id(
+    target_id: int,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    it = db.get(IndividualTarget, target_id)
+    if it is None:
+        return
+    athlete = db.get(User, it.athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
+        raise HTTPException(status_code=404, detail="Target not found")
+    db.delete(it)
+    db.commit()
 
 
 @router.delete("/targets/{athlete_id}/{day}", status_code=204)
@@ -481,13 +538,14 @@ def delete_individual_target(
     coach: User = Depends(require_coach),
     db: Session = Depends(get_db),
 ):
+    """Transitional: clears the primary (first) target for the day."""
     athlete = db.get(User, athlete_id)
     if not can_coach_target_athlete(coach, athlete, db):
         raise HTTPException(status_code=404, detail="Athlete not found")
     it = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete_id,
         IndividualTarget.date == day,
-    ).first()
+    ).order_by(IndividualTarget.position.asc(), IndividualTarget.id.asc()).first()
     if it:
         db.delete(it)
         db.commit()

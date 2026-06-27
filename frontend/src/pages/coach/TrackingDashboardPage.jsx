@@ -23,7 +23,8 @@ const plannedKm = (d) => {
   return active?.distance_km || 0;
 };
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
-import { upsertTarget, deleteTarget } from '../../api/calendar';
+import { createTarget, updateTargetById, deleteTargetById } from '../../api/calendar';
+import { dayWorkouts } from '../../constants/workouts';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
 import Modal from '../../components/ui/Modal';
@@ -46,6 +47,8 @@ export default function TrackingDashboardPage() {
   });
   const [overrideGroup, setOverrideGroup] = useState(false);
   const [hidden, setHidden] = useState(false);
+  // null = the form is creating a new personal workout; id = editing that one.
+  const [editingTargetId, setEditingTargetId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -195,10 +198,8 @@ export default function TrackingDashboardPage() {
 
   useEffect(() => { fetchData(); }, [weekDate]);
 
-  const openCell = (athlete, dayData, fromExpanded = false) => {
-    setReturnToExpanded(fromExpanded);
-    setSelected({ athlete, day: dayData });
-    const t = dayData.target;
+  // Load a target into the form (t = null → empty "add" form).
+  const seedForm = (t) => {
     setPersonalForm({
       workout_type: t?.workout_type || 'simple',
       title: t?.title || '',
@@ -211,6 +212,28 @@ export default function TrackingDashboardPage() {
     });
     setOverrideGroup(t?.override_group || false);
     setHidden(t?.hidden || false);
+    setEditingTargetId(t?.id || null);
+  };
+
+  const openCell = (athlete, dayData, fromExpanded = false) => {
+    setReturnToExpanded(fromExpanded);
+    setSelected({ athlete, day: dayData });
+    seedForm(null);  // existing workouts show in a list; the form starts as "add"
+  };
+
+  const refreshSelectedDay = async () => {
+    if (!selected) return;
+    const { data } = await getAthleteWeek(selected.athlete.id, selected.day.date);
+    const fresh = data.days.find((x) => x.date === selected.day.date);
+    if (fresh) setSelected((s) => ({ ...s, day: fresh }));
+  };
+
+  const deleteTargetRow = async (t) => {
+    if (!t?.id) return;
+    setSaving(true);
+    try { await deleteTargetById(t.id); await refreshSelectedDay(); fetchData(); }
+    catch (err) { console.error(err); }
+    finally { setSaving(false); }
   };
 
   // Close the day detail; return to the expanded month view if we came from it.
@@ -243,11 +266,13 @@ export default function TrackingDashboardPage() {
           distance_km: (f.distance_km === '' || f.distance_km == null) ? null : parseFloat(f.distance_km),
           hidden: isHidden,
         };
-        await upsertTarget(selected.athlete.id, selected.day.date, payload);
-      } else {
-        await deleteTarget(selected.athlete.id, selected.day.date);
+        if (editingTargetId) await updateTargetById(editingTargetId, payload);
+        else await createTarget(selected.athlete.id, selected.day.date, payload);
+      } else if (editingTargetId) {
+        await deleteTargetById(editingTargetId);
       }
-      closeSelected();
+      seedForm(null);            // reset to "add" so the coach can add another
+      await refreshSelectedDay();  // refresh the day's list in place
       fetchData();
       if (profile && profile.id === selected.athlete.id) {
         const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
@@ -509,6 +534,7 @@ export default function TrackingDashboardPage() {
               const renderDay = (d) => {
                 const dayDate = new Date(d.date + 'T00:00');
                 const w = workoutDisplay(d);
+                const extra = dayWorkouts(d).length - 1;
                 const _useTarget = !!d.target && (d.target.override_group || !d.group_workout);
                 const hiddenDay = _useTarget && !!d.target.hidden;
                 const cellIsRace = (((d.target && (d.target.override_group || !d.group_workout)) ? d.target : d.group_workout)?.workout_type) === 'race';
@@ -542,7 +568,7 @@ export default function TrackingDashboardPage() {
                     </div>
                     {w && (w.title || w.snippet) && (
                       <div className="mt-1">
-                        {w.title && <p className={`text-xs font-semibold ${titleColor}`}>{w.title}{plannedKm(d) > 0 && <span className="text-white/45 font-normal"> · {fmtKm(plannedKm(d))} km</span>}</p>}
+                        {w.title && <p className={`text-xs font-semibold ${titleColor}`}>{w.title}{extra > 0 && <span className="text-[#c0c1ff] font-normal"> +{extra}</span>}{plannedKm(d) > 0 && <span className="text-white/45 font-normal"> · {fmtKm(plannedKm(d))} km</span>}</p>}
                         {w.snippet && <p className="text-xs text-white/65 whitespace-pre-wrap truncate">{w.snippet}</p>}
                       </div>
                     )}
@@ -1019,7 +1045,35 @@ export default function TrackingDashboardPage() {
 
             {/* Personal workout section */}
             <div className="border-t border-white/15 pt-4">
-              <p className="text-base font-bold text-white mb-3">Personal Workout</p>
+              <p className="text-base font-bold text-white mb-3">Personal Workouts</p>
+
+              {/* Existing personal workouts for this day */}
+              {(selected.day.targets || []).length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {(selected.day.targets || []).map((t) => {
+                    const tm = typeMetaFor(t.workout_type);
+                    return (
+                      <div key={t.id} className={`rounded-lg border p-2.5 flex items-start justify-between gap-2 ${editingTargetId === t.id ? 'border-blue-400/60 bg-blue-400/10' : t.hidden ? 'border-dashed border-white/20 bg-white/[0.03]' : 'border-white/10 bg-white/[0.05]'}`}>
+                        <button onClick={() => seedForm(t)} className="min-w-0 text-left flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tm.color}`}>{tm.label}</span>
+                            {t.hidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
+                            {t.override_group && <span className="text-[10px] text-blue-200">overrides group</span>}
+                          </div>
+                          <p className="text-sm text-white mt-0.5 truncate">
+                            {t.title || tm.label}
+                            {t.distance_km > 0 && <span className="text-white/45 font-normal"> · {Number(t.distance_km).toFixed(1)} km</span>}
+                          </p>
+                        </button>
+                        <button onClick={() => deleteTargetRow(t)} disabled={saving}
+                          className="shrink-0 text-[11px] px-2 py-1 rounded border border-red-400/30 text-red-300 hover:bg-red-500/15 disabled:opacity-50">Delete</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <p className="text-xs font-semibold text-white/55 mb-2">{editingTargetId ? 'Edit workout' : 'Add a workout'}</p>
               {(() => {
                 const meta = typeMetaFor(personalForm.workout_type);
                 const setF = (k, v) => setPersonalForm(f => ({ ...f, [k]: v }));
@@ -1100,11 +1154,11 @@ export default function TrackingDashboardPage() {
               <div className="flex gap-2 mt-3">
                 <button onClick={() => handleSavePersonal()} disabled={saving}
                   className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition">
-                  {saving ? 'Saving...' : hidden ? 'Save (hidden)' : 'Save'}
+                  {saving ? 'Saving...' : editingTargetId ? (hidden ? 'Update (hidden)' : 'Update') : (hidden ? 'Add (hidden)' : 'Add')}
                 </button>
-                <button onClick={closeSelected}
+                <button onClick={() => (editingTargetId ? seedForm(null) : closeSelected())}
                   className="flex-1 border border-white/25 text-white/75 hover:text-white hover:bg-white/10 rounded-lg py-2.5 text-sm font-medium transition">
-                  Cancel
+                  {editingTargetId ? 'Cancel edit' : 'Close'}
                 </button>
               </div>
               {hidden && (
@@ -1204,6 +1258,7 @@ export default function TrackingDashboardPage() {
                       const active = useTarget ? t : gwx;
                       const personalOverride = useTarget;
                       const targetHidden = useTarget && !!t.hidden;
+                      const extra = dayWorkouts(d).length - 1;
                       const bg = !inMonth ? 'bg-white/5 border-white/10 hover:bg-white/10 opacity-60' :
                         targetHidden ? 'bg-white/[0.06] border-dashed border-white/25 hover:bg-white/10' :
                         status === 'completed' ? 'bg-green-500/40 border-green-400/50 hover:bg-green-500/50' :
@@ -1256,6 +1311,7 @@ export default function TrackingDashboardPage() {
                                 {workoutBody}
                               </p>
                             )}
+                            {extra > 0 && <p className="text-[9px] text-blue-200 font-semibold mt-0.5">+{extra} more</p>}
                             {plannedKm(d) > 0 && (
                               <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKm(d))} km</p>
                             )}

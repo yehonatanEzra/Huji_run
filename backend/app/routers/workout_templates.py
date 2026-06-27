@@ -44,22 +44,23 @@ def _owned_template(db: Session, template_id: int, coach: User, active_team_id: 
 
 
 def _write_days(db: Session, template: WorkoutTemplate, days) -> None:
-    """Replace all of a template's days from the incoming list."""
+    """Replace all of a template's days from the incoming list. Multiple workouts
+    may share a (week, day_of_week) cell — ordered by arrival via `position`."""
     db.query(WorkoutTemplateDay).filter(
         WorkoutTemplateDay.template_id == template.id
     ).delete(synchronize_session=False)
-    seen = set()
+    pos_by_cell: dict[tuple, int] = {}
     for d in days:
         if d.week_number > template.weeks_count:
             continue  # ignore days beyond the declared week count
-        key = (d.week_number, d.day_of_week)
-        if key in seen:
-            raise HTTPException(status_code=422, detail=f"Duplicate day {key}")
-        seen.add(key)
+        cell = (d.week_number, d.day_of_week)
+        position = pos_by_cell.get(cell, 0)
+        pos_by_cell[cell] = position + 1
         db.add(WorkoutTemplateDay(
             template_id=template.id,
             week_number=d.week_number,
             day_of_week=d.day_of_week,
+            position=position,
             workout_type=d.workout_type if d.workout_type in ALLOWED_TYPES else "simple",
             title=_clean(d.title),
             content=_clean(d.content),
@@ -90,7 +91,7 @@ def _detail(t: WorkoutTemplate) -> TemplateDetail:
     return TemplateDetail(
         id=t.id, name=t.name, description=t.description,
         weeks_count=t.weeks_count,
-        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week)),
+        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position)),
         week_targets=_parse_targets(t.week_targets),
         group_id=t.group_id,
         group_name=t.group.name if t.group else None,
@@ -247,7 +248,7 @@ def apply_template(
     # Snap to the Monday of the chosen week so day_of_week=0 lands on a Monday.
     start_monday = body.start_date - timedelta(days=body.start_date.weekday())
 
-    days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week))
+    days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position))
     # Map each template day to its calendar date up front so we can both detect
     # collisions and report the plan's end date.
     targets = {
@@ -331,7 +332,7 @@ def apply_template_to_athlete(
         raise HTTPException(status_code=404, detail="Athlete not found")
 
     start_monday = body.start_date - timedelta(days=body.start_date.weekday())
-    days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week))
+    days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position))
     targets = {
         d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
         for d in days

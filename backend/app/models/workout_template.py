@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import Integer, String, Text, Float, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import Integer, String, Text, Float, DateTime, ForeignKey, func
 from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
@@ -29,12 +29,9 @@ class WorkoutTemplate(Base):
 
 
 class WorkoutTemplateDay(Base):
-    """One day's prescription within a template, addressed by (week, weekday)."""
+    """One workout within a template, addressed by (week, weekday). Multiple may
+    share a (week, day_of_week) cell — ordered by `position`."""
     __tablename__ = "workout_template_days"
-    __table_args__ = (
-        UniqueConstraint("template_id", "week_number", "day_of_week",
-                         name="uq_template_week_day"),
-    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     template_id: Mapped[int] = mapped_column(Integer, ForeignKey("workout_templates.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -47,5 +44,6 @@ class WorkoutTemplateDay(Base):
     main_session: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     cooldown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     distance_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # planned distance
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     template = relationship("WorkoutTemplate", back_populates="days")

@@ -60,6 +60,7 @@ class IndividualTargetOut(BaseModel):
     cooldown: Optional[str] = None
     distance_km: Optional[float] = None
     hidden: bool = False
+    position: int = 0
     model_config = {"from_attributes": True}
 
 
@@ -96,8 +97,16 @@ class WorkoutLogOut(BaseModel):
 
 class DayData(BaseModel):
     date: date
-    group_workout: Optional[GroupWorkoutOut]
-    individual_target: Optional[IndividualTargetOut]
+    # Multiple workouts per day. group_workouts = sessions visible to this viewer
+    # (recipient-filtered for athletes); individual_targets = personal sessions
+    # (hidden ones stripped for athletes). A personal target with override_group
+    # suppresses the group list for athletes (handled in _build_week).
+    group_workouts: list[GroupWorkoutOut] = []
+    individual_targets: list[IndividualTargetOut] = []
+    # DEPRECATED transitional compat for the not-yet-migrated UI: the "primary"
+    # workout of each list. Remove once all frontends read the lists.
+    group_workout: Optional[GroupWorkoutOut] = None
+    individual_target: Optional[IndividualTargetOut] = None
     workout_log: Optional[WorkoutLogOut]
 
 

@@ -10,7 +10,7 @@ from ..models.user import User
 from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
 from ..models.group_add_request import GroupAddRequest
-from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
+from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog, GroupWorkoutHide
 from ..models.race import Race, Heat, Result
 from ..schemas.auth import UserOut
 from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut, IndividualTargetOut, GroupWorkoutOut
@@ -422,8 +422,19 @@ def dashboard_week(
     logs = db.query(WorkoutLog).filter(WorkoutLog.date.in_(week_dates)).all()
     log_map: dict[tuple, WorkoutLog] = {(l.athlete_id, l.date): l for l in logs}
 
-    targets = db.query(IndividualTarget).filter(IndividualTarget.date.in_(week_dates)).all()
-    target_map: dict[tuple, IndividualTarget] = {(t.athlete_id, t.date): t for t in targets}
+    targets = db.query(IndividualTarget).filter(IndividualTarget.date.in_(week_dates)).order_by(
+        IndividualTarget.position.asc(), IndividualTarget.id.asc()
+    ).all()
+    targets_by_key: dict[tuple, list] = {}
+    for t in targets:
+        targets_by_key.setdefault((t.athlete_id, t.date), []).append(t)
+
+    # (athlete_id, date) pairs where the coach hid the group workout for the day.
+    hide_set = {
+        (h.athlete_id, h.date)
+        for h in db.query(GroupWorkoutHide.athlete_id, GroupWorkoutHide.date)
+        .filter(GroupWorkoutHide.date.in_(week_dates)).all()
+    }
 
     # All workouts in this week's date range, newest-first per (group, date).
     group_workouts = (
@@ -491,7 +502,7 @@ def dashboard_week(
         days = []
         for d in week_dates:
             log = log_map.get((athlete.id, d))
-            target = target_map.get((athlete.id, d))
+            day_targets = targets_by_key.get((athlete.id, d), [])
             gw = _pick_for(athlete.id, athlete.training_group_id, d) if athlete.training_group_id else None
             log_out = None
             if log:
@@ -508,8 +519,10 @@ def dashboard_week(
             days.append({
                 "date": d,
                 "log": log_out,
-                "target": IndividualTargetOut.model_validate(target) if target else None,
+                "targets": [IndividualTargetOut.model_validate(t) for t in day_targets],
+                "target": IndividualTargetOut.model_validate(day_targets[0]) if day_targets else None,
                 "group_workout": GroupWorkoutOut.model_validate(gw) if gw else None,
+                "hide_group": (athlete.id, d) in hide_set,
             })
         rows.append(AthleteWeekRow(
             id=athlete.id,
@@ -662,8 +675,10 @@ def get_athlete_week(
     targets = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete_id,
         IndividualTarget.date.in_(week_dates),
-    ).all()
-    target_map = {t.date: t for t in targets}
+    ).order_by(IndividualTarget.position.asc(), IndividualTarget.id.asc()).all()
+    targets_by_date: dict = {}
+    for t in targets:
+        targets_by_date.setdefault(t.date, []).append(t)
 
     gw_map = {}
     if athlete.training_group_id:
@@ -741,25 +756,42 @@ def get_athlete_week(
             "comment_count": per_log_comment_count.get(log.id, 0),
         }
 
+    def _target_payload(t):
+        return {
+            "id": t.id,
+            "note": t.note,
+            "override_group": t.override_group,
+            "additional": t.additional,
+            "hidden": t.hidden,
+            "position": t.position,
+            "workout_type": t.workout_type,
+            "title": t.title,
+            "content": t.content,
+            "warmup": t.warmup,
+            "main_session": t.main_session,
+            "cooldown": t.cooldown,
+            "distance_km": t.distance_km,
+        }
+
+    hide_set = {
+        h.date for h in db.query(GroupWorkoutHide.date).filter(
+            GroupWorkoutHide.athlete_id == athlete_id,
+            GroupWorkoutHide.date.in_(week_dates),
+        ).all()
+    }
+
     days = []
     for d in week_dates:
         log = log_map.get(d)
-        target = target_map.get(d)
+        day_targets = targets_by_date.get(d, [])
         gw = gw_map.get(d)
         days.append({
             "date": d.isoformat(),
             "log": _log_payload(log) if log else None,
-            "target": {
-                "note": target.note,
-                "override_group": target.override_group,
-                "workout_type": target.workout_type,
-                "title": target.title,
-                "content": target.content,
-                "warmup": target.warmup,
-                "main_session": target.main_session,
-                "cooldown": target.cooldown,
-                "distance_km": target.distance_km,
-            } if target else None,
+            "targets": [_target_payload(t) for t in day_targets],
+            # compat: primary (first) target for the not-yet-migrated UI
+            "target": _target_payload(day_targets[0]) if day_targets else None,
+            "hide_group": d in hide_set,
             "group_workout": {
                 "content": gw.content,
                 "workout_type": gw.workout_type,

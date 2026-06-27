@@ -1,4 +1,5 @@
 """FR-A: reusable multi-week workout plan templates."""
+import json
 from datetime import date, timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,18 +7,21 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_coach, get_active_team_id
 from ..models.user import User
-from ..models.workout import GroupWorkout
+from ..models.workout import GroupWorkout, IndividualTarget, GroupWorkoutHide
 from ..models.workout_template import WorkoutTemplate, WorkoutTemplateDay
+from ..models.training_group import TrainingGroup
+from ..models.group_coach import GroupCoach
 from ..schemas.workout_template import (
     TemplateUpsert, TemplateSummary, TemplateDetail,
-    TemplateApply, TemplateApplyResult,
+    TemplateApply, TemplateApplyAthlete, TemplateApplyResult,
 )
 from ..services.coach_scope import visible_group_ids as _visible_group_ids
+from ..services.coach_scope import can_coach_target_athlete
 from ..services.notifications import notify_many
 
 router = APIRouter(prefix="/workout-templates", tags=["workout-templates"])
 
-ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest"}
+ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling"}
 
 
 def _clean(s: Optional[str]) -> Optional[str]:
@@ -31,29 +35,32 @@ def _owned_template(db: Session, template_id: int, coach: User, active_team_id: 
     t = db.get(WorkoutTemplate, template_id)
     if t is None:
         raise HTTPException(status_code=404, detail="Template not found")
-    # Templates are private to their creator (PRD FR-A). Admins may touch any.
-    if coach.role != "admin" and t.created_by != coach.id:
-        raise HTTPException(status_code=404, detail="Template not found")
-    return t
+    if coach.role == "admin" or t.created_by == coach.id:
+        return t
+    # Group-scoped plans are shared with all coaches of that group.
+    if t.group_id is not None and t.group_id in _visible_group_ids(coach, db, active_team_id):
+        return t
+    raise HTTPException(status_code=404, detail="Template not found")
 
 
 def _write_days(db: Session, template: WorkoutTemplate, days) -> None:
-    """Replace all of a template's days from the incoming list."""
+    """Replace all of a template's days from the incoming list. Multiple workouts
+    may share a (week, day_of_week) cell — ordered by arrival via `position`."""
     db.query(WorkoutTemplateDay).filter(
         WorkoutTemplateDay.template_id == template.id
     ).delete(synchronize_session=False)
-    seen = set()
+    pos_by_cell: dict[tuple, int] = {}
     for d in days:
         if d.week_number > template.weeks_count:
             continue  # ignore days beyond the declared week count
-        key = (d.week_number, d.day_of_week)
-        if key in seen:
-            raise HTTPException(status_code=422, detail=f"Duplicate day {key}")
-        seen.add(key)
+        cell = (d.week_number, d.day_of_week)
+        position = pos_by_cell.get(cell, 0)
+        pos_by_cell[cell] = position + 1
         db.add(WorkoutTemplateDay(
             template_id=template.id,
             week_number=d.week_number,
             day_of_week=d.day_of_week,
+            position=position,
             workout_type=d.workout_type if d.workout_type in ALLOWED_TYPES else "simple",
             title=_clean(d.title),
             content=_clean(d.content),
@@ -64,12 +71,51 @@ def _write_days(db: Session, template: WorkoutTemplate, days) -> None:
         ))
 
 
+def _serialize_targets(targets: dict[int, float], weeks_count: int) -> Optional[str]:
+    """Keep only positive targets within the declared week range; store as JSON."""
+    clean = {int(w): float(v) for w, v in (targets or {}).items()
+             if 1 <= int(w) <= weeks_count and v and float(v) > 0}
+    return json.dumps(clean) if clean else None
+
+
+def _parse_targets(raw: Optional[str]) -> dict[int, float]:
+    if not raw:
+        return {}
+    try:
+        return {int(k): float(v) for k, v in json.loads(raw).items()}
+    except (ValueError, TypeError):
+        return {}
+
+
 def _detail(t: WorkoutTemplate) -> TemplateDetail:
     return TemplateDetail(
         id=t.id, name=t.name, description=t.description,
         weeks_count=t.weeks_count,
-        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week)),
+        days=sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position)),
+        week_targets=_parse_targets(t.week_targets),
+        group_id=t.group_id,
+        group_name=t.group.name if t.group else None,
     )
+
+
+def _validate_group(db: Session, coach: User, active_team_id: Optional[int], group_id: Optional[int]) -> Optional[int]:
+    """A coach may only scope a plan to a group they coach."""
+    if group_id is None:
+        return None
+    if coach.role != "admin" and group_id not in _visible_group_ids(coach, db, active_team_id):
+        raise HTTPException(status_code=403, detail="Not a coach of that group")
+    return group_id
+
+
+def _is_main_coach(coach: User, db: Session, group_id: int) -> bool:
+    """Only the group's main coach (or an admin) may apply a plan to the group."""
+    if coach.role == "admin":
+        return True
+    return db.query(GroupCoach).filter(
+        GroupCoach.group_id == group_id,
+        GroupCoach.user_id == coach.id,
+        GroupCoach.role == "main",
+    ).first() is not None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -80,25 +126,36 @@ def list_templates(
     db: Annotated[Session, Depends(get_db)],
     active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
 ):
-    # Templates are private to their creator (PRD FR-A); admins see all.
+    # Visible = own plans (general or group) + group-scoped plans for groups the
+    # coach coaches. Admins see all.
+    from sqlalchemy import func, or_
     q = db.query(WorkoutTemplate)
     if coach.role != "admin":
-        q = q.filter(WorkoutTemplate.created_by == coach.id)
+        visible = _visible_group_ids(coach, db, active_team_id)
+        conds = [WorkoutTemplate.created_by == coach.id]
+        if visible:
+            conds.append(WorkoutTemplate.group_id.in_(visible))
+        q = q.filter(or_(*conds))
     templates = q.order_by(WorkoutTemplate.created_at.desc()).all()
     if not templates:
         return []
     # One grouped query for all day counts instead of a COUNT per template (N+1).
-    from sqlalchemy import func
     counts = dict(
         db.query(WorkoutTemplateDay.template_id, func.count(WorkoutTemplateDay.id))
         .filter(WorkoutTemplateDay.template_id.in_([t.id for t in templates]))
         .group_by(WorkoutTemplateDay.template_id)
         .all()
     )
+    # Batch group names to avoid an N+1 per template.
+    gids = {t.group_id for t in templates if t.group_id is not None}
+    gnames = dict(
+        db.query(TrainingGroup.id, TrainingGroup.name).filter(TrainingGroup.id.in_(gids)).all()
+    ) if gids else {}
     return [
         TemplateSummary(
             id=t.id, name=t.name, description=t.description,
             weeks_count=t.weeks_count, day_count=counts.get(t.id, 0),
+            group_id=t.group_id, group_name=gnames.get(t.group_id),
         )
         for t in templates
     ]
@@ -127,6 +184,8 @@ def create_template(
         name=body.name,
         description=_clean(body.description),
         weeks_count=body.weeks_count,
+        week_targets=_serialize_targets(body.week_targets, body.weeks_count),
+        group_id=_validate_group(db, coach, active_team_id, body.group_id),
         created_by=coach.id,
     )
     db.add(t)
@@ -149,6 +208,8 @@ def update_template(
     t.name = body.name
     t.description = _clean(body.description)
     t.weeks_count = body.weeks_count
+    t.week_targets = _serialize_targets(body.week_targets, body.weeks_count)
+    t.group_id = _validate_group(db, coach, active_team_id, body.group_id)
     _write_days(db, t, body.days)
     db.commit()
     db.refresh(t)
@@ -179,13 +240,15 @@ def apply_template(
     the Monday of `start_date`."""
     t = _owned_template(db, template_id, coach, active_team_id)
 
-    if body.group_id not in _visible_group_ids(coach, db, active_team_id):
-        raise HTTPException(status_code=403, detail="Not a coach of that group")
+    # Writing plans is open to any group coach, but applying to the group
+    # (publishing group workouts) is the main coach's call only.
+    if not _is_main_coach(coach, db, body.group_id):
+        raise HTTPException(status_code=403, detail="Only the main coach can apply a plan to the group")
 
     # Snap to the Monday of the chosen week so day_of_week=0 lands on a Monday.
     start_monday = body.start_date - timedelta(days=body.start_date.weekday())
 
-    days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week))
+    days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position))
     # Map each template day to its calendar date up front so we can both detect
     # collisions and report the plan's end date.
     targets = {
@@ -243,6 +306,111 @@ def apply_template(
         notify_many(
             db, athlete_ids, "new_workout",
             f"Coach published the '{t.name}' plan starting {start_monday.strftime('%b %d')}",
+            f"/calendar?date={start_monday.isoformat()}",
+        )
+
+    db.commit()
+    return TemplateApplyResult(created=created, replaced=replaced,
+                              start_monday=start_monday, end_date=last_date)
+
+
+@router.post("/{template_id}/apply-athlete", response_model=TemplateApplyResult)
+def apply_template_to_athlete(
+    template_id: int,
+    body: TemplateApplyAthlete,
+    coach: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+    active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
+):
+    """Materialize a plan into IndividualTarget rows for one athlete, starting
+    from the Monday of `start_date`. Defaults to NOT overriding the group
+    workout (shows alongside it)."""
+    t = _owned_template(db, template_id, coach, active_team_id)
+
+    athlete = db.get(User, body.athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
+        raise HTTPException(status_code=404, detail="Athlete not found")
+
+    start_monday = body.start_date - timedelta(days=body.start_date.weekday())
+    days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position))
+    targets = {
+        d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
+        for d in days
+    }
+
+    # Clean override: wipe every individual target across the plan's whole range,
+    # then write the plan fresh.
+    range_end_excl = start_monday + timedelta(weeks=t.weeks_count)
+    existing = db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == body.athlete_id,
+        IndividualTarget.date >= start_monday,
+        IndividualTarget.date < range_end_excl,
+    )
+    conflicts = existing.count()
+    replaced = 0
+    if conflicts and not body.replace:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{conflicts} personal workout(s) in the plan's {t.weeks_count} week(s) "
+                   f"will be replaced; re-apply with replace=true to overwrite",
+        )
+    if conflicts:
+        existing.delete(synchronize_session=False)
+        replaced = conflicts
+    # Clear any stale "hide group" rows in the range so a re-apply starts clean.
+    db.query(GroupWorkoutHide).filter(
+        GroupWorkoutHide.athlete_id == body.athlete_id,
+        GroupWorkoutHide.date >= start_monday,
+        GroupWorkoutHide.date < range_end_excl,
+    ).delete(synchronize_session=False)
+
+    created = 0
+    last_date = start_monday
+    target_dates = set()
+    # Preserve per-day ordering so the first plan workout on a day is the "main".
+    pos_by_date: dict = {}
+    for d in days:
+        target = targets[d]
+        last_date = max(last_date, target)
+        target_dates.add(target)
+        position = pos_by_date.get(target, 0)
+        pos_by_date[target] = position + 1
+        db.add(IndividualTarget(
+            team_id=active_team_id,
+            athlete_id=body.athlete_id,
+            date=target,
+            note="",
+            position=position,
+            # "Override the group workout" → the plan's sessions always show
+            # (additional) and we hide the group workout on those days (below).
+            additional=body.override_group,
+            workout_type=d.workout_type,
+            title=d.title,
+            content=d.content,
+            warmup=d.warmup,
+            main_session=d.main_session,
+            cooldown=d.cooldown,
+            distance_km=d.distance_km,
+            created_by=coach.id,
+        ))
+        created += 1
+
+    if body.override_group:
+        # Hide the group workout on every day the plan fills.
+        existing_hide = {
+            h.date for h in db.query(GroupWorkoutHide.date).filter(
+                GroupWorkoutHide.athlete_id == body.athlete_id,
+                GroupWorkoutHide.date.in_(target_dates),
+            ).all()
+        }
+        for td in target_dates:
+            if td not in existing_hide:
+                db.add(GroupWorkoutHide(athlete_id=body.athlete_id, date=td, created_by=coach.id))
+
+    if created:
+        notify_many(
+            db, [body.athlete_id], "new_workout",
+            f"Coach assigned you the '{t.name}' plan starting {start_monday.strftime('%b %d')}",
             f"/calendar?date={start_monday.isoformat()}",
         )
 

@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     STRAVA_REDIRECT_URI: str = "http://localhost:8000/api/v1/strava/callback"
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Optional SMTP settings. When SMTP_HOST is empty, emails are logged to console only.
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    SMTP_FROM: str = ""
+
     class Config:
         env_file = ".env"
 

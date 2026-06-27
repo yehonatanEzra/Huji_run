@@ -40,6 +40,8 @@ class TemplateUpsert(BaseModel):
     description: Optional[str] = None
     weeks_count: int = 1
     days: list[TemplateDayIn] = []
+    week_targets: dict[int, float] = {}  # {week_number: target_km}
+    group_id: Optional[int] = None       # None = general plan; set = group-scoped
 
     @field_validator("name")
     @classmethod
@@ -62,6 +64,8 @@ class TemplateSummary(BaseModel):
     description: Optional[str] = None
     weeks_count: int
     day_count: int
+    group_id: Optional[int] = None
+    group_name: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -71,6 +75,9 @@ class TemplateDetail(BaseModel):
     description: Optional[str] = None
     weeks_count: int
     days: list[TemplateDayOut]
+    week_targets: dict[int, float] = {}  # {week_number: target_km}
+    group_id: Optional[int] = None
+    group_name: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -78,6 +85,13 @@ class TemplateApply(BaseModel):
     group_id: int
     start_date: date          # snapped to the Monday of its week on the server
     replace: bool = True      # overwrite existing group workouts on the plan's dates
+
+
+class TemplateApplyAthlete(BaseModel):
+    athlete_id: int
+    start_date: date          # snapped to the Monday of its week on the server
+    override_group: bool = False  # default: show alongside the group workout
+    replace: bool = True      # overwrite existing individual targets on the plan's dates
 
 
 class TemplateApplyResult(BaseModel):

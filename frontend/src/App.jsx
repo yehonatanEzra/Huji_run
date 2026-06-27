@@ -4,6 +4,7 @@ import AppShell from './components/layout/AppShell';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import CalendarPage from './pages/athlete/CalendarPage';
 import VolumePage from './pages/athlete/VolumePage';
 import ProgressPage from './pages/athlete/ProgressPage';
@@ -43,6 +44,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={user ? <Navigate to={landingFor(user)} replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to={landingFor(user)} replace /> : <RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/t/:teamId" element={<PublicTeamPage />} />
 
       <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>

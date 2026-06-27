@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { format, addDays, startOfWeek, subWeeks, addWeeks, startOfMonth, endOfMonth, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getDashboardWeek, getAthleteProfile, getAthleteWeek, addAthletePB } from '../../api/coach';
 import { listRaces, getRace, updateResult, deleteResult, updateRace } from '../../api/races';
@@ -13,17 +13,17 @@ const WORKOUT_TYPES = [
   { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',         structured: true },
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
+  { value: 'strength',  label: 'Strength',  color: 'bg-amber-100 text-amber-700',     structured: false },
+  { value: 'cycling',   label: 'Cycling',   color: 'bg-cyan-100 text-cyan-700',       structured: false },
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
-// Planned km of a day's active workout (personal override wins, else group, else personal).
-const plannedKm = (d) => {
-  const t = d.target;
-  const active = t?.override_group ? t : (d.group_workout || t);
-  return active?.distance_km || 0;
-};
+// Planned km of a day = sum of the workouts the athlete actually sees (group
+// workout unless hidden for the day, plus 'additional' personal workouts).
+const plannedKm = (d) => visibleDayPlannedKm(d);
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
-import { upsertTarget, deleteTarget } from '../../api/calendar';
+import { createTarget, updateTargetById, deleteTargetById, promoteTarget, setGroupVisibility } from '../../api/calendar';
+import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm, tracksDistance } from '../../constants/workouts';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
 import Modal from '../../components/ui/Modal';
@@ -35,6 +35,7 @@ import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 
 export default function TrackingDashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [weekDate, setWeekDate] = useState(new Date());
   const [search, setSearch] = useState('');
   const [data, setData] = useState(null);
@@ -44,7 +45,13 @@ export default function TrackingDashboardPage() {
     workout_type: 'simple', title: '', content: '', note: '',
     warmup: '', main_session: '', cooldown: '', distance_km: '',
   });
-  const [overrideGroup, setOverrideGroup] = useState(false);
+  const [additional, setAdditional] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  // Local checkbox state for "don't show group workout today" — applied only when
+  // the coach clicks Apply, so it's not conflated with the personal-workout Add.
+  const [pendingHide, setPendingHide] = useState(false);
+  // null = the form is creating a new personal workout; id = editing that one.
+  const [editingTargetId, setEditingTargetId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -54,6 +61,9 @@ export default function TrackingDashboardPage() {
   const [profileMonthDate, setProfileMonthDate] = useState(new Date());
   const [profileMonth, setProfileMonth] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
+  // Carousel index per day in the expanded monthly grid: { 'YYYY-MM-DD': index }.
+  // Lets a cell with multiple workouts switch which single one it displays.
+  const [cellIdx, setCellIdx] = useState({});
   // When a day is opened from the expanded month view, closing it should return there.
   const [returnToExpanded, setReturnToExpanded] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(0.75);
@@ -194,10 +204,8 @@ export default function TrackingDashboardPage() {
 
   useEffect(() => { fetchData(); }, [weekDate]);
 
-  const openCell = (athlete, dayData, fromExpanded = false) => {
-    setReturnToExpanded(fromExpanded);
-    setSelected({ athlete, day: dayData });
-    const t = dayData.target;
+  // Load a target into the form (t = null → empty "add" form).
+  const seedForm = (t) => {
     setPersonalForm({
       workout_type: t?.workout_type || 'simple',
       title: t?.title || '',
@@ -208,7 +216,64 @@ export default function TrackingDashboardPage() {
       cooldown: t?.cooldown || '',
       distance_km: t?.distance_km ?? '',
     });
-    setOverrideGroup(t?.override_group || false);
+    setAdditional(t?.additional || false);
+    setHidden(t?.hidden || false);
+    setEditingTargetId(t?.id || null);
+  };
+
+  const openCell = (athlete, dayData, fromExpanded = false) => {
+    setReturnToExpanded(fromExpanded);
+    setSelected({ athlete, day: dayData });
+    setPendingHide(!!dayData.hide_group);
+    seedForm(null);  // existing workouts show in a list; the form starts as "add"
+  };
+
+  // Deep-link: when navigated from the coach home "Latest reports" list, open that
+  // athlete's day report directly. Clear the nav state so it doesn't reopen on back.
+  useEffect(() => {
+    const st = location.state;
+    if (!st?.openAthleteId || !st?.openDate) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await getAthleteWeek(st.openAthleteId, st.openDate);
+        const day = data.days.find((x) => x.date === st.openDate);
+        if (alive && day) {
+          openCell({ id: st.openAthleteId, full_name: st.athleteName || '', group_name: st.groupName || '' }, day);
+        }
+      } catch (e) { console.error(e); }
+    })();
+    navigate(location.pathname, { replace: true, state: null });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
+  const refreshSelectedDay = async () => {
+    if (!selected) return;
+    const { data } = await getAthleteWeek(selected.athlete.id, selected.day.date);
+    const fresh = data.days.find((x) => x.date === selected.day.date);
+    if (fresh) setSelected((s) => ({ ...s, day: fresh }));
+  };
+
+  // Day-level "don't show group workout today" — committed via the Apply button
+  // next to the checkbox, not on every checkbox click.
+  const applyGroupHide = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      await setGroupVisibility(selected.athlete.id, selected.day.date, pendingHide);
+      await refreshSelectedDay();
+      fetchData();
+    } catch (err) { console.error(err); }
+    finally { setSaving(false); }
+  };
+
+  const deleteTargetRow = async (t) => {
+    if (!t?.id) return;
+    setSaving(true);
+    try { await deleteTargetById(t.id); await refreshSelectedDay(); fetchData(); }
+    catch (err) { console.error(err); }
+    finally { setSaving(false); }
   };
 
   // Close the day detail; return to the expanded month view if we came from it.
@@ -217,7 +282,8 @@ export default function TrackingDashboardPage() {
     if (returnToExpanded) { setMonthExpanded(true); setReturnToExpanded(false); }
   };
 
-  const handleSavePersonal = async () => {
+  const handleSavePersonal = async (hiddenOverride) => {
+    const isHidden = typeof hiddenOverride === 'boolean' ? hiddenOverride : hidden;
     setSaving(true);
     try {
       const f = personalForm;
@@ -230,20 +296,23 @@ export default function TrackingDashboardPage() {
       if (hasContent) {
         const payload = {
           note: f.note,
-          override_group: overrideGroup,
+          additional: additional,
           workout_type: f.workout_type,
           title: f.title,
           content: structured ? '' : (f.content || ''),
           warmup: structured ? f.warmup : '',
           main_session: structured ? f.main_session : '',
           cooldown: structured ? f.cooldown : '',
-          distance_km: (f.distance_km === '' || f.distance_km == null) ? null : parseFloat(f.distance_km),
+          distance_km: !tracksDistance(f.workout_type) || f.distance_km === '' || f.distance_km == null ? null : parseFloat(f.distance_km),
+          hidden: isHidden,
         };
-        await upsertTarget(selected.athlete.id, selected.day.date, payload);
-      } else {
-        await deleteTarget(selected.athlete.id, selected.day.date);
+        if (editingTargetId) await updateTargetById(editingTargetId, payload);
+        else await createTarget(selected.athlete.id, selected.day.date, payload);
+      } else if (editingTargetId) {
+        await deleteTargetById(editingTargetId);
       }
-      closeSelected();
+      seedForm(null);            // reset to "add" so the coach can add another
+      await refreshSelectedDay();  // refresh the day's list in place
       fetchData();
       if (profile && profile.id === selected.athlete.id) {
         const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
@@ -400,7 +469,7 @@ export default function TrackingDashboardPage() {
                   {athlete.days.map((d) => {
                     const log = d.log;
                     const hasTarget = !!d.target;
-                    const cellIsRace = (((d.target && (d.target.override_group || !d.group_workout)) ? d.target : d.group_workout)?.workout_type) === 'race';
+                    const cellIsRace = visibleDayWorkouts(d)[0]?.workout_type === 'race';
                     let bg = 'bg-white/15';
                     let text = '-';
                     if (log) {
@@ -489,25 +558,27 @@ export default function TrackingDashboardPage() {
             </div>
 
             {(() => {
-              const workoutDisplay = (d) => {
-                // Returns { title, snippet } — title is the prominent label, snippet is the body text.
-                // Active workout = personal override OR no group → personal; else group.
-                const gw = d.group_workout;
-                const t = d.target;
-                const useTarget = !!t && (t.override_group || !gw);
-                const active = useTarget ? t : gw;
-                if (!active) return null;
-                const title = active.title || (useTarget ? 'Personal' : '');
-                const snippet = active.content || active.main_session || active.warmup || '';
-                return { title, snippet, color: useTarget ? 'text-blue-700' : 'text-gray-700' };
-              };
+              // The workouts the athlete actually sees that day (group unless hidden
+              // for the day, plus 'additional' personals). Index 0 is the main cell.
+              const orderedDay = (d) => visibleDayWorkouts(d);
 
               const renderDay = (d) => {
                 const dayDate = new Date(d.date + 'T00:00');
-                const w = workoutDisplay(d);
-                const cellIsRace = (((d.target && (d.target.override_group || !d.group_workout)) ? d.target : d.group_workout)?.workout_type) === 'race';
+                const ordered = orderedDay(d);
+                const multi = ordered.length > 1;
+                const cur = Math.min(cellIdx[d.date] || 0, Math.max(0, ordered.length - 1));
+                const active = ordered[cur] || null;
+                const isPersonal = active?._source === 'personal';
+                const w = active
+                  ? { title: active.title || (isPersonal ? 'Personal' : ''), snippet: active.content || active.main_session || active.warmup || '', color: isPersonal ? 'text-blue-700' : 'text-gray-700' }
+                  : null;
+                const dispKm = multi ? (active?.distance_km || 0) : plannedKm(d);
+                const hiddenDay = isPersonal && !!active?.hidden;
+                const cellIsRace = active?.workout_type === 'race';
                 const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
-                const cellBg = cellIsRace
+                const cellBg = hiddenDay
+                  ? 'bg-white/[0.06] border-dashed border-white/25'
+                  : cellIsRace
                   ? 'bg-indigo-500/15 border-indigo-400/40'
                   : status === 'completed' ? 'bg-green-500/15 border-green-400/30'
                   : status === 'partial' ? 'bg-yellow-500/15 border-yellow-400/30'
@@ -524,17 +595,31 @@ export default function TrackingDashboardPage() {
                     onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
                     className={`w-full text-left rounded-lg px-3 py-2 text-sm border hover:bg-white/10 transition ${cellBg} ${cellIsRace ? 'border-2' : ''}`}>
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-white/80 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}</span>
-                      <span className="flex items-center gap-1.5">
-                        {d.log?.distance_km > 0 && <span className="text-xs font-semibold text-[#c0c1ff]">{Number(d.log.distance_km).toFixed(1)} km</span>}
-                        <span className={`text-xs font-bold ${iconColor}`}>
-                          {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-medium text-white/80 text-xs">{cellIsRace && '🏁 '}{format(dayDate, 'EEE, MMM d')}{hiddenDay && ' ·  hidden'}</span>
+                        {multi && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [d.date]: (cur + 1) % ordered.length })); }}
+                            className="shrink-0 inline-flex items-center text-[10px] font-bold text-[#c0c1ff] bg-white/10 hover:bg-white/20 rounded-full px-1.5 py-0.5 transition"
+                            title="Switch workout"
+                          >
+                            {cur + 1}/{ordered.length} ›
+                          </button>
+                        )}
+                      </span>
+                      <span className="flex flex-col items-end gap-0.5">
+                        <span className="flex items-center gap-1.5">
+                          {d.log?.distance_km > 0 && <span className="text-xs font-semibold text-[#c0c1ff]">{Number(d.log.distance_km).toFixed(1)} km</span>}
+                          <span className={`text-xs font-bold ${iconColor}`}>
+                            {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
+                          </span>
                         </span>
+                        {multi && plannedKm(d) > 0 && <span className="text-[11px] font-semibold text-white/55">Daily {fmtKm(plannedKm(d))} km</span>}
                       </span>
                     </div>
                     {w && (w.title || w.snippet) && (
                       <div className="mt-1">
-                        {w.title && <p className={`text-xs font-semibold ${titleColor}`}>{w.title}{plannedKm(d) > 0 && <span className="text-white/45 font-normal"> · {fmtKm(plannedKm(d))} km</span>}</p>}
+                        {w.title && <p className={`text-xs font-semibold ${titleColor}`}>{w.title}{dispKm > 0 && <span className="text-white/45 font-normal"> · {fmtKm(dispKm)} km</span>}</p>}
                         {w.snippet && <p className="text-xs text-white/65 whitespace-pre-wrap truncate">{w.snippet}</p>}
                       </div>
                     )}
@@ -546,6 +631,7 @@ export default function TrackingDashboardPage() {
               const monthDays = profileMonth ? profileMonth.weeks.flat().filter(d => isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) : null;
               const days = profileViewMode === 'month' ? monthDays : profileWeek?.days;
               const volume = days ? days.reduce((s, d) => s + (d.log?.distance_km || 0), 0) : 0;
+              const expectedVolume = days ? days.reduce((s, d) => s + plannedKm(d), 0) : 0;
               const volumeLabel = profileViewMode === 'month' ? 'this month' : 'this week';
 
               return (
@@ -585,10 +671,13 @@ export default function TrackingDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end mb-2">
+                  <div className="flex flex-col items-end gap-0.5 mb-2">
                     <span className="text-xs font-bold text-blue-200 bg-blue-500/20 border border-blue-400/30 rounded-full px-2.5 py-0.5">
                       {volume > 0 ? `${volume.toFixed(1)} km ${volumeLabel}` : 'No km logged'}
                     </span>
+                    {expectedVolume > 0 && (
+                      <span className="text-xs font-semibold text-white/60">Expected: {fmtKm(expectedVolume)} km</span>
+                    )}
                   </div>
 
                   {profileViewMode === 'week' ? (
@@ -621,6 +710,8 @@ export default function TrackingDashboardPage() {
                           intervals: { abbr: 'Int',  color: 'bg-red-100 text-red-700' },
                           fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
                           race:      { abbr: 'Race', color: 'bg-indigo-100 text-indigo-700' },
+                          strength:  { abbr: 'Str',  color: 'bg-amber-100 text-amber-700' },
+                          cycling:   { abbr: 'Cyc',  color: 'bg-cyan-100 text-cyan-700' },
                         };
                         const todayStr = format(new Date(), 'yyyy-MM-dd');
                         return (
@@ -658,8 +749,11 @@ export default function TrackingDashboardPage() {
                                         const isToday = d.date === todayStr;
                                         const hasLog = d.log;
                                         const logStatus = hasLog?.status || (hasLog?.completed ? 'completed' : (hasLog?.missed ? 'missed' : null));
-                                        const _t = d.target;
-                                        const activeType = ((_t && (_t.override_group || !d.group_workout)) ? _t : d.group_workout)?.workout_type;
+                                        const ordered = orderedDay(d);
+                                        const multi = ordered.length > 1;
+                                        const cur = Math.min(cellIdx[d.date] || 0, Math.max(0, ordered.length - 1));
+                                        const active = ordered[cur] || null;
+                                        const activeType = active?.workout_type;
                                         const typeMap = {
                                           simple: { abbr: 'Oth', color: 'bg-white/10 text-white/70' },
                                           easy: { abbr: 'Easy', color: 'bg-emerald-400/20 text-emerald-200' },
@@ -669,6 +763,8 @@ export default function TrackingDashboardPage() {
                                           intervals: { abbr: 'Int', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
                                           fartlek: { abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200' },
                                           race: { abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+                                          strength: { abbr: 'Str', color: 'bg-amber-400/20 text-amber-200' },
+                                          cycling: { abbr: 'Cyc', color: 'bg-cyan-400/20 text-cyan-200' },
                                         };
                                         const typeInfo = activeType ? typeMap[activeType] : null;
                                         const isRace = activeType === 'race';
@@ -676,7 +772,7 @@ export default function TrackingDashboardPage() {
                                           <button
                                             key={d.date}
                                             onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d)}
-                                            className={`flex flex-col items-center px-1 py-1.5 rounded-xl text-xs transition hover:shadow-sm relative ${
+                                            className={`flex flex-col items-center px-1 py-2 min-h-[78px] rounded-xl text-xs transition hover:shadow-sm relative ${
                                               !inMonth ? 'opacity-40' : ''
                                             } ${isRace ? 'border-2 border-[#8083ff]/45 bg-[#8083ff]/10' :
                                                isToday ? 'border border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border border-white/10 bg-white/10'}`}
@@ -684,13 +780,22 @@ export default function TrackingDashboardPage() {
                                             {isRace && (
                                               <span className="absolute top-0.5 left-0.5 text-[10px] leading-none">🏁</span>
                                             )}
+                                            {multi && (
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [d.date]: (cur + 1) % ordered.length })); }}
+                                                className="absolute top-0.5 right-0.5 text-[7px] font-bold text-[#c0c1ff] bg-white/15 hover:bg-white/30 rounded px-0.5 leading-none transition"
+                                                title="Switch workout"
+                                              >
+                                                {cur + 1}/{ordered.length}
+                                              </button>
+                                            )}
                                             {typeInfo && !isRace && (
                                               <span className={`text-[8px] px-1 py-px rounded font-semibold leading-none ${typeInfo.color}`}>
                                                 {typeInfo.abbr}
                                               </span>
                                             )}
-                                            <span className="text-[10px] font-bold text-white">
-                                              {hasLog?.distance_km && hasLog.distance_km > 0 ? (hasLog.distance_km < 10 ? hasLog.distance_km.toFixed(1) : Math.round(hasLog.distance_km)) : '-'}
+                                            <span className="text-[9px] font-bold text-[#c0c1ff]">
+                                              {hasLog?.distance_km && hasLog.distance_km > 0 ? `${hasLog.distance_km < 10 ? hasLog.distance_km.toFixed(1) : Math.round(hasLog.distance_km)}k` : '-'}
                                             </span>
                                             <span className="font-semibold text-white">{format(dayDate, 'd')}</span>
                                             <span className="text-[10px] text-white/60">{format(dayDate, 'EEE')}</span>
@@ -891,7 +996,7 @@ export default function TrackingDashboardPage() {
                 const gw = selected.day.group_workout;
                 if (!gw) return <p className="text-sm text-white/40 italic">No group workout for this day</p>;
                 const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
-                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race' };
+                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling' };
                 const MAIN_LABEL = { race: 'Race' };
                 const middleLabel = MAIN_LABEL[gw.workout_type] || 'Main';
                 const gwIsRace = gw.workout_type === 'race';
@@ -918,6 +1023,22 @@ export default function TrackingDashboardPage() {
                   </div>
                 );
               })()}
+              {selected.day.group_workout && (
+                <div className="mt-3 pt-2.5 border-t border-white/10">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={pendingHide} disabled={saving} onChange={(e) => setPendingHide(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                    <span className="text-xs text-white/75">Don’t show group workout today
+                      <span className="block text-[11px] text-white/45">Hides this group workout from the athlete for this day and drops it from their planned km.</span>
+                    </span>
+                  </label>
+                  {pendingHide !== !!selected.day.hide_group && (
+                    <button onClick={applyGroupHide} disabled={saving}
+                      className="mt-2 w-full bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2 text-xs font-semibold disabled:opacity-50 transition">
+                      {saving ? 'Applying…' : 'Apply'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Athlete report section */}
@@ -1011,7 +1132,47 @@ export default function TrackingDashboardPage() {
 
             {/* Personal workout section */}
             <div className="border-t border-white/15 pt-4">
-              <p className="text-base font-bold text-white mb-3">Personal Workout</p>
+              <p className="text-base font-bold text-white mb-3">Personal Workouts</p>
+
+              {/* Existing personal workouts for this day */}
+              {(selected.day.targets || []).length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {(selected.day.targets || []).map((t, idx) => {
+                    const tm = typeMetaFor(t.workout_type);
+                    const isMain = idx === 0;
+                    return (
+                      <div key={t.id} className={`rounded-lg border p-2.5 flex items-start justify-between gap-2 ${editingTargetId === t.id ? 'border-blue-400/60 bg-blue-400/10' : t.hidden ? 'border-dashed border-white/20 bg-white/[0.03]' : 'border-white/10 bg-white/[0.05]'}`}>
+                        <button onClick={() => seedForm(t)} className="min-w-0 text-left flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tm.color}`}>{tm.label}</span>
+                            {isMain && !t.hidden && (selected.day.targets || []).length > 1 && <span className="text-[9px] text-yellow-300 font-semibold">★ main</span>}
+                            {t.hidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
+                            {t.additional && <span className="text-[10px] text-blue-200">+ with group</span>}
+                          </div>
+                          <p className="text-sm text-white mt-0.5 truncate">
+                            {t.title || tm.label}
+                            {t.distance_km > 0 && <span className="text-white/45 font-normal"> · {Number(t.distance_km).toFixed(1)} km</span>}
+                          </p>
+                        </button>
+                        <div className="flex flex-col gap-1 shrink-0">
+                          {!isMain && !t.hidden && (
+                            <button
+                              onClick={async () => { setSaving(true); try { await promoteTarget(t.id); await refreshSelectedDay(); fetchData(); } finally { setSaving(false); } }}
+                              disabled={saving}
+                              className="text-[11px] px-2 py-1 rounded border border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/15 disabled:opacity-50"
+                              title="Set as main workout (shown first in calendar)"
+                            >★ Main</button>
+                          )}
+                          <button onClick={() => deleteTargetRow(t)} disabled={saving}
+                            className="text-[11px] px-2 py-1 rounded border border-red-400/30 text-red-300 hover:bg-red-500/15 disabled:opacity-50">Delete</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <p className="text-xs font-semibold text-white/55 mb-2">{editingTargetId ? 'Edit workout' : 'Add a workout'}</p>
               {(() => {
                 const meta = typeMetaFor(personalForm.workout_type);
                 const setF = (k, v) => setPersonalForm(f => ({ ...f, [k]: v }));
@@ -1044,10 +1205,12 @@ export default function TrackingDashboardPage() {
                       placeholder="Title (shown on calendar)"
                       className={inputCls} />
 
-                    <input type="number" inputMode="decimal" value={personalForm.distance_km}
-                      onChange={(e) => setF('distance_km', e.target.value)}
-                      placeholder="Distance (km)"
-                      className={inputCls} />
+                    {tracksDistance(personalForm.workout_type) && (
+                      <input type="number" inputMode="decimal" value={personalForm.distance_km}
+                        onChange={(e) => setF('distance_km', e.target.value)}
+                        placeholder="Distance (km)"
+                        className={inputCls} />
+                    )}
 
                     {meta.structured ? (
                       <>
@@ -1073,24 +1236,40 @@ export default function TrackingDashboardPage() {
                       className={inputCls} />
 
                     {hasAny && (
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={overrideGroup} onChange={(e) => setOverrideGroup(e.target.checked)} className="w-4 h-4 rounded accent-blue-500" />
-                        <span className="text-xs text-white/75">Show this instead of group workout</span>
-                      </label>
+                      <>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input type="checkbox" checked={additional} onChange={(e) => setAdditional(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                          <span className="text-xs text-white/75">Show in addition to group workout
+                            <span className="block text-[11px] text-white/45">Athlete sees this even when a group workout exists. If unchecked, a group workout that day replaces it.</span>
+                          </span>
+                        </label>
+                        <label className="flex items-start gap-2 cursor-pointer">
+                          <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                          <span className="text-xs text-white/75">Hide from athlete
+                            <span className="block text-[11px] text-white/45">They won’t see it until you share. You (and the group’s coaches) still see it in gray.</span>
+                          </span>
+                        </label>
+                      </>
                     )}
                   </div>
                 );
               })()}
               <div className="flex gap-2 mt-3">
-                <button onClick={handleSavePersonal} disabled={saving}
+                <button onClick={() => handleSavePersonal()} disabled={saving}
                   className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition">
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'Saving...' : editingTargetId ? (hidden ? 'Update (hidden)' : 'Update') : (hidden ? 'Add (hidden)' : 'Add')}
                 </button>
-                <button onClick={closeSelected}
+                <button onClick={() => (editingTargetId ? seedForm(null) : closeSelected())}
                   className="flex-1 border border-white/25 text-white/75 hover:text-white hover:bg-white/10 rounded-lg py-2.5 text-sm font-medium transition">
-                  Cancel
+                  {editingTargetId ? 'Cancel edit' : 'Close'}
                 </button>
               </div>
+              {hidden && (
+                <button onClick={() => handleSavePersonal(false)} disabled={saving}
+                  className="w-full mt-2 border border-blue-400/50 text-blue-200 rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-400/10 disabled:opacity-50 transition">
+                  Share with athlete now
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1175,32 +1354,38 @@ export default function TrackingDashboardPage() {
                       const dayDate = new Date(d.date + 'T00:00');
                       const inMonth = isSameMonth(dayDate, profileMonthDate);
                       const status = d.log ? (d.log.status || (d.log.completed ? 'completed' : 'missed')) : null;
+                      const cellHeight = 195;
+                      const allWorkouts = visibleDayWorkouts(d);
+                      const multi = allWorkouts.length > 1;
+                      const idx = Math.min(cellIdx[d.date] || 0, Math.max(0, allWorkouts.length - 1));
+                      const active = allWorkouts[idx] || null;
+                      const personalOverride = active?._source === 'personal';
+                      const targetHidden = personalOverride && !!active?.hidden;
                       const bg = !inMonth ? 'bg-white/5 border-white/10 hover:bg-white/10 opacity-60' :
+                        targetHidden ? 'bg-white/[0.06] border-dashed border-white/25 hover:bg-white/10' :
                         status === 'completed' ? 'bg-green-500/40 border-green-400/50 hover:bg-green-500/50' :
                         status === 'partial' ? 'bg-yellow-500/35 border-yellow-400/45 hover:bg-yellow-500/45' :
                         status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
                         'bg-white/20 border-white/30 hover:bg-white/30';
-                      const cellHeight = 150;
-                      const t = d.target;
-                      const gwx = d.group_workout;
-                      const useTarget = !!t && (t.override_group || !gwx);
-                      const active = useTarget ? t : gwx;
-                      const personalOverride = useTarget;
-                      const workoutTitle = active?.title || (useTarget ? 'Personal' : '');
+                      const workoutTitle = active?.title || (personalOverride ? 'Personal' : '');
                       const workoutBody = active?.content || active?.main_session || active?.warmup || '';
-                      const hasPersonal = !!t && (t.note || t.title);
+                      const hasPersonal = allWorkouts.some((w) => w._source === 'personal');
                       const TYPE_FULL = {
-                        simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
-                        easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
-                        rest:      { label: 'Rest day',  color: 'bg-slate-100 text-slate-700' },
-                        tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
-                        long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
-                        intervals: { label: 'Intervals', color: 'bg-red-100 text-red-700' },
-                        fartlek:   { label: 'Fartlek',   color: 'bg-pink-100 text-pink-700' },
-                        race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
+                        simple:    { label: 'Other',     color: 'bg-white/10 text-white/70' },
+                        easy:      { label: 'Easy',      color: 'bg-emerald-400/20 text-emerald-200' },
+                        rest:      { label: 'Rest day',  color: 'bg-slate-400/20 text-slate-200' },
+                        tempo:     { label: 'Tempo',     color: 'bg-orange-400/20 text-orange-200' },
+                        long:      { label: 'Long run',  color: 'bg-purple-400/20 text-purple-200' },
+                        intervals: { label: 'Intervals', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
+                        fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
+                        race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
+                        strength:  { label: 'Strength',  color: 'bg-amber-400/20 text-amber-200' },
+                        cycling:   { label: 'Cycling',   color: 'bg-cyan-400/20 text-cyan-200' },
                       };
                       const typeChip = active?.workout_type ? TYPE_FULL[active.workout_type] : null;
                       const cellIsRace = active?.workout_type === 'race';
+                      const kmParts = allWorkouts.map((w) => w.distance_km || 0).filter((k) => k > 0);
+                      const totalKm = kmParts.reduce((a, b) => a + b, 0);
                       return (
                         <button
                           key={d.date}
@@ -1210,7 +1395,18 @@ export default function TrackingDashboardPage() {
                         >
                           {/* Date row + type chip */}
                           <div className="flex items-start justify-between px-2 pt-1.5">
-                            <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}</span>
+                            <span className="flex items-center gap-1">
+                              <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}{targetHidden && ' 🙈'}</span>
+                              {multi && (
+                                <button
+                                  className="text-[9px] text-[#c0c1ff] font-bold leading-none flex items-center px-1 py-px rounded bg-white/10 hover:bg-white/25 transition"
+                                  onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [d.date]: ((m[d.date] || 0) + 1) % allWorkouts.length })); }}
+                                  title="Switch workout"
+                                >
+                                  {idx + 1}/{allWorkouts.length}
+                                </button>
+                              )}
+                            </span>
                             {typeChip && (
                               <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${typeChip.color}`}>
                                 {typeChip.label}
@@ -1232,8 +1428,13 @@ export default function TrackingDashboardPage() {
                                 {workoutBody}
                               </p>
                             )}
-                            {plannedKm(d) > 0 && (
-                              <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKm(d))} km</p>
+                            {totalKm > 0 && (
+                              <div className={`flex items-end mt-auto ${multi && (active?.distance_km || 0) > 0 ? 'justify-between' : 'justify-end'}`}>
+                                {multi && (active?.distance_km || 0) > 0 && (
+                                  <span className="text-[10px] text-white/50 font-semibold leading-none">{fmtKm(active.distance_km)} km</span>
+                                )}
+                                <span className="text-[11px] font-bold leading-none text-white">{fmtKm(totalKm)} km</span>
+                              </div>
                             )}
                           </div>
 
@@ -1252,7 +1453,7 @@ export default function TrackingDashboardPage() {
                                   <p className="text-[10px] text-white/40 italic flex-1">No report</p>
                                 ) : <div className="flex-1" />}
                                 {d.log.distance_km > 0 && (
-                                  <p className="text-xs text-blue-200 font-bold leading-none mt-1 self-end">{d.log.distance_km.toFixed(1)} km</p>
+                                  <p className="text-xs text-[#c0c1ff] font-bold leading-none mt-1 self-end">{d.log.distance_km.toFixed(1)} km</p>
                                 )}
                               </>
                             ) : (

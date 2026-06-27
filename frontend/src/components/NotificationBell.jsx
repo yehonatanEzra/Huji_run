@@ -103,7 +103,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 max-w-[90vw] bg-blue-950/95 backdrop-blur-lg border border-white/20 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className="fixed right-3 top-14 w-80 max-w-[calc(100vw-1.5rem)] bg-blue-950/95 backdrop-blur-lg border border-white/20 rounded-xl shadow-2xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
             <p className="text-sm font-semibold text-white">Notifications</p>
             {items.some(n => !n.read) && (

@@ -14,6 +14,8 @@ const WORKOUT_TYPES = [
   { value: 'intervals', label: 'Intervals', color: 'bg-red-100 text-red-700',         structured: true },
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
+  { value: 'strength',  label: 'Strength',  color: 'bg-amber-100 text-amber-700',     structured: false },
+  { value: 'cycling',   label: 'Cycling',   color: 'bg-cyan-100 text-cyan-700',       structured: false },
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 
@@ -26,7 +28,7 @@ export default function IndividualTargetsPage() {
   const [editDay, setEditDay] = useState(null);
   const [form, setForm] = useState({
     workout_type: 'simple', title: '', note: '',
-    warmup: '', main_session: '', cooldown: '', override_group: false,
+    warmup: '', main_session: '', cooldown: '', additional: false,
   });
   const [saving, setSaving] = useState(false);
 
@@ -62,7 +64,7 @@ export default function IndividualTargetsPage() {
       warmup: t?.warmup || '',
       main_session: t?.main_session || '',
       cooldown: t?.cooldown || '',
-      override_group: t?.override_group || false,
+      additional: t?.additional || false,
     });
   };
 
@@ -79,7 +81,7 @@ export default function IndividualTargetsPage() {
       if (hasAny) {
         await upsertTarget(selectedAthlete.id, editDay.date, {
           note: form.note,
-          override_group: form.override_group,
+          additional: form.additional,
           workout_type: form.workout_type,
           title: form.title,
           warmup: meta.structured ? form.warmup : '',
@@ -189,9 +191,11 @@ export default function IndividualTargetsPage() {
           )}
 
           {hasAny && (
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={form.override_group} onChange={(e) => setField('override_group', e.target.checked)} className="w-4 h-4 rounded" />
-              <span className="text-xs text-gray-600">Show this instead of group workout</span>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" checked={form.additional} onChange={(e) => setField('additional', e.target.checked)} className="mt-0.5 w-4 h-4 rounded" />
+              <span className="text-xs text-gray-600">Show in addition to group workout
+                <span className="block text-[11px] text-gray-400">Athlete sees this even when a group workout exists. If unchecked, a group workout that day replaces it.</span>
+              </span>
             </label>
           )}
 

@@ -16,6 +16,8 @@ const mergeUser = (data) => ({
   has_photo: data.has_photo ?? false,
   active_team_id: data.active_team_id ?? null,
   active_team_name: data.active_team_name ?? null,
+  email: data.email ?? null,
+  email_verified: data.email_verified ?? false,
 });
 
 export function AuthProvider({ children }) {

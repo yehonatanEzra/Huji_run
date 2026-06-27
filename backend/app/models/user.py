@@ -1,8 +1,9 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import Integer, String, Enum, DateTime, ForeignKey, Text, LargeBinary, func
+from sqlalchemy import Integer, String, Boolean, Enum, DateTime, ForeignKey, Text, LargeBinary, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql.expression import false
 from ..database import Base
 
 
@@ -13,6 +14,8 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
     username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     gender: Mapped[str] = mapped_column(Enum("M", "F", name="gender_enum"), nullable=False)
     role: Mapped[str] = mapped_column(
         Enum("athlete", "coach", "admin", name="role_enum"), nullable=False, default="athlete"

@@ -5,6 +5,7 @@ import NotificationBell from '../NotificationBell';
 import StravaSyncIconButton from '../StravaSyncIconButton';
 import { useAuth } from '../../contexts/AuthContext';
 import { getMyTeams } from '../../api/teams';
+import { requestAddEmail, addEmail } from '../../api/auth';
 
 const ROOT_PATHS = new Set([
   '/home', '/find-coach', '/calendar', '/races', '/hall-of-fame', '/health-wellness',
@@ -57,6 +58,96 @@ function TeamSwitcherModal({ teams, currentTeamId, onSwitch, onClose }) {
   );
 }
 
+function AddEmailModal({ onClose }) {
+  const { refreshUser } = useAuth();
+  const [step, setStep] = useState(1);
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const handleSendCode = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await requestAddEmail(email);
+      setStep(2);
+      setCooldown(60);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to send code');
+      if (err.response?.status === 429) setCooldown(60);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await addEmail(email, code);
+      await refreshUser();
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Invalid or expired code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const INPUT = 'w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-semibold mb-1">Add email address</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          {step === 1 ? 'Secure your account and enable password reset.' : `Enter the code sent to ${email}`}
+        </p>
+
+        {error && (
+          <div className="mb-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2">
+            <p className="text-xs text-red-600">{error}</p>
+          </div>
+        )}
+
+        {step === 1 ? (
+          <form onSubmit={handleSendCode} className="space-y-3">
+            <input type="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" className={INPUT} />
+            <button type="submit" disabled={loading} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-lg transition disabled:opacity-50">
+              {loading ? 'Sending…' : 'Send Code'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleVerify} className="space-y-3">
+            <input type="text" placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} required maxLength={6} inputMode="numeric" autoComplete="one-time-code" className={INPUT} />
+            <button type="submit" disabled={loading} className="w-full bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-lg transition disabled:opacity-50">
+              {loading ? 'Verifying…' : 'Verify & Save'}
+            </button>
+            <button type="button" onClick={() => { setStep(1); setCode(''); setError(''); }} disabled={cooldown > 0}
+              className="w-full text-xs text-gray-400 hover:text-gray-600 transition disabled:opacity-40">
+              {cooldown > 0 ? `Resend in ${cooldown}s` : 'Back / resend code'}
+            </button>
+          </form>
+        )}
+
+        <button onClick={onClose} className="mt-4 w-full text-xs text-gray-400 hover:text-gray-600 transition">
+          Maybe later
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AppShell() {
   const { user, logout, switchTeam } = useAuth();
   const location = useLocation();
@@ -68,6 +159,8 @@ export default function AppShell() {
 
   const [myTeams, setMyTeams] = useState([]);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [showAddEmail, setShowAddEmail] = useState(false);
+  const [emailBannerDismissed, setEmailBannerDismissed] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -129,6 +222,21 @@ export default function AppShell() {
         </div>
       </header>
 
+      {/* Email banner — shown to users who haven't verified an email yet */}
+      {user && !user.email_verified && !emailBannerDismissed && (
+        <div className="shrink-0 bg-indigo-600 text-white text-xs flex items-center justify-between px-4 py-2 gap-2">
+          <span className="opacity-90">Secure your account — add an email to enable password reset.</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <button onClick={() => setShowAddEmail(true)} className="font-semibold underline whitespace-nowrap hover:opacity-80 transition">
+              Add email
+            </button>
+            <button onClick={() => setEmailBannerDismissed(true)} className="opacity-60 hover:opacity-90 transition text-base leading-none" aria-label="Dismiss">
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Only this div scrolls — header is always visible, dock floats over it.
           pb-28 keeps the last content clear of the floating dock. */}
       <div className="flex-1 overflow-y-auto">
@@ -150,6 +258,10 @@ export default function AppShell() {
           onSwitch={switchTeam}
           onClose={() => setShowSwitcher(false)}
         />
+      )}
+
+      {showAddEmail && (
+        <AddEmailModal onClose={() => setShowAddEmail(false)} />
       )}
     </div>
   );

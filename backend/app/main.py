@@ -32,6 +32,7 @@ from .models.athlete_transfer import AthleteTransfer  # noqa: F401
 from .models.info_section import InfoSection  # noqa: F401
 from .models.workout_template import WorkoutTemplate, WorkoutTemplateDay  # noqa: F401
 from .models.goal import Goal  # noqa: F401
+from .models.email_verification import EmailVerification  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
 from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams, group_coach, reporting, analytics, workout_templates, goals, public, info
 

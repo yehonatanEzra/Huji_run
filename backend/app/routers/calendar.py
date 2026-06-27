@@ -525,9 +525,35 @@ def update_individual_target(
     _write_target_fields(it, body)
     if was_hidden and not body.hidden:
         _notify_personal(db, it.athlete_id, it.date, _target_clean(body.title) or it.workout_type.capitalize())
+    # A hidden target is a coach-only draft and can't be the athlete-facing "main"
+    # (position 0). If this one just became hidden while it was the main, hand the
+    # main slot to the first non-hidden sibling.
+    if it.hidden and it.position == 0:
+        _reassign_main_off(db, it)
     db.commit()
     db.refresh(it)
     return it
+
+
+def _reassign_main_off(db: Session, it: IndividualTarget) -> None:
+    """Demote `it` from position 0 and promote the first non-hidden sibling.
+    No-op if there is no non-hidden sibling to take the slot."""
+    siblings = (
+        db.query(IndividualTarget)
+        .filter(IndividualTarget.athlete_id == it.athlete_id, IndividualTarget.date == it.date)
+        .order_by(IndividualTarget.position.asc(), IndividualTarget.id.asc())
+        .all()
+    )
+    new_main = next((s for s in siblings if s.id != it.id and not s.hidden), None)
+    if new_main is None:
+        return
+    new_main.position = 0
+    pos = 1
+    for s in siblings:
+        if s.id == new_main.id:
+            continue
+        s.position = pos
+        pos += 1
 
 
 @router.post("/individual-targets/{target_id}/promote", status_code=200)
@@ -543,6 +569,8 @@ def promote_individual_target(
     athlete = db.get(User, it.athlete_id)
     if not can_coach_target_athlete(coach, athlete, db):
         raise HTTPException(status_code=404, detail="Target not found")
+    if it.hidden:
+        raise HTTPException(status_code=400, detail="Can't make a hidden workout the main one — share it first.")
     siblings = (
         db.query(IndividualTarget)
         .filter(IndividualTarget.athlete_id == it.athlete_id, IndividualTarget.date == it.date)

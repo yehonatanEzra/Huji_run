@@ -47,6 +47,9 @@ export default function TrackingDashboardPage() {
   });
   const [additional, setAdditional] = useState(false);
   const [hidden, setHidden] = useState(false);
+  // Local checkbox state for "don't show group workout today" — applied only when
+  // the coach clicks Apply, so it's not conflated with the personal-workout Add.
+  const [pendingHide, setPendingHide] = useState(false);
   // null = the form is creating a new personal workout; id = editing that one.
   const [editingTargetId, setEditingTargetId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -221,6 +224,7 @@ export default function TrackingDashboardPage() {
   const openCell = (athlete, dayData, fromExpanded = false) => {
     setReturnToExpanded(fromExpanded);
     setSelected({ athlete, day: dayData });
+    setPendingHide(!!dayData.hide_group);
     seedForm(null);  // existing workouts show in a list; the form starts as "add"
   };
 
@@ -251,12 +255,13 @@ export default function TrackingDashboardPage() {
     if (fresh) setSelected((s) => ({ ...s, day: fresh }));
   };
 
-  // Day-level "don't show group workout today" toggle for the open day.
-  const toggleGroupVisibility = async () => {
+  // Day-level "don't show group workout today" — committed via the Apply button
+  // next to the checkbox, not on every checkbox click.
+  const applyGroupHide = async () => {
     if (!selected) return;
     setSaving(true);
     try {
-      await setGroupVisibility(selected.athlete.id, selected.day.date, !selected.day.hide_group);
+      await setGroupVisibility(selected.athlete.id, selected.day.date, pendingHide);
       await refreshSelectedDay();
       fetchData();
     } catch (err) { console.error(err); }
@@ -1019,12 +1024,20 @@ export default function TrackingDashboardPage() {
                 );
               })()}
               {selected.day.group_workout && (
-                <label className="flex items-start gap-2 cursor-pointer mt-3 pt-2.5 border-t border-white/10">
-                  <input type="checkbox" checked={!!selected.day.hide_group} disabled={saving} onChange={toggleGroupVisibility} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
-                  <span className="text-xs text-white/75">Don’t show group workout today
-                    <span className="block text-[11px] text-white/45">Hides this group workout from the athlete for this day and drops it from their planned km.</span>
-                  </span>
-                </label>
+                <div className="mt-3 pt-2.5 border-t border-white/10">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={pendingHide} disabled={saving} onChange={(e) => setPendingHide(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                    <span className="text-xs text-white/75">Don’t show group workout today
+                      <span className="block text-[11px] text-white/45">Hides this group workout from the athlete for this day and drops it from their planned km.</span>
+                    </span>
+                  </label>
+                  {pendingHide !== !!selected.day.hide_group && (
+                    <button onClick={applyGroupHide} disabled={saving}
+                      className="mt-2 w-full bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2 text-xs font-semibold disabled:opacity-50 transition">
+                      {saving ? 'Applying…' : 'Apply'}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1132,7 +1145,7 @@ export default function TrackingDashboardPage() {
                         <button onClick={() => seedForm(t)} className="min-w-0 text-left flex-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tm.color}`}>{tm.label}</span>
-                            {isMain && (selected.day.targets || []).length > 1 && <span className="text-[9px] text-yellow-300 font-semibold">★ main</span>}
+                            {isMain && !t.hidden && (selected.day.targets || []).length > 1 && <span className="text-[9px] text-yellow-300 font-semibold">★ main</span>}
                             {t.hidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
                             {t.additional && <span className="text-[10px] text-blue-200">+ with group</span>}
                           </div>
@@ -1142,7 +1155,7 @@ export default function TrackingDashboardPage() {
                           </p>
                         </button>
                         <div className="flex flex-col gap-1 shrink-0">
-                          {!isMain && (
+                          {!isMain && !t.hidden && (
                             <button
                               onClick={async () => { setSaving(true); try { await promoteTarget(t.id); await refreshSelectedDay(); fetchData(); } finally { setSaving(false); } }}
                               disabled={saving}
@@ -1416,12 +1429,12 @@ export default function TrackingDashboardPage() {
                               </p>
                             )}
                             {totalKm > 0 && (
-                              <p className="text-[11px] font-bold leading-none mt-auto self-end">
-                                {kmParts.length > 1 && (
-                                  <span className="text-white/50 font-semibold">{kmParts.map(fmtKm).join(' + ')} = </span>
+                              <div className={`flex items-end mt-auto ${multi && (active?.distance_km || 0) > 0 ? 'justify-between' : 'justify-end'}`}>
+                                {multi && (active?.distance_km || 0) > 0 && (
+                                  <span className="text-[10px] text-white/50 font-semibold leading-none">{fmtKm(active.distance_km)} km</span>
                                 )}
-                                <span className="text-white">{fmtKm(totalKm)} km</span>
-                              </p>
+                                <span className="text-[11px] font-bold leading-none text-white">{fmtKm(totalKm)} km</span>
+                              </div>
                             )}
                           </div>
 

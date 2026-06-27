@@ -45,6 +45,8 @@ export default function GroupWorkoutsTab({ group }) {
   const [selectedDay, setSelectedDay] = useState(null);
   // editingId: null → list view; 'new' → creating; number → editing that workout
   const [editingId, setEditingId] = useState(null);
+  // Which day-list workout has its athlete roster expanded (toggled by 👥 button).
+  const [athletesOpenId, setAthletesOpenId] = useState(null);
   const [form, setForm] = useState({
     workout_type: 'simple',
     title: '',
@@ -186,6 +188,7 @@ export default function GroupWorkoutsTab({ group }) {
 
   const openDay = (day) => {
     setSelectedDay(day);
+    setAthletesOpenId(null);
     setEditingId(null);  // start in list view
     setForm(emptyForm);
     setSelectedRecipientIds([]);
@@ -279,6 +282,27 @@ export default function GroupWorkoutsTab({ group }) {
 
       await refetchDay(selectedDay.date);
       cancelEdit();
+    } catch (err) { console.error(err); }
+    finally { setSaving(false); }
+  };
+
+  // Quick-add an athlete to a workout straight from the roster popover. Mirrors the
+  // edit form's rule: an athlete belongs to one workout per day, so adding them here
+  // removes them from any other targeted workout that day (deleting it if it empties).
+  const addAthleteToWorkout = async (gw, athleteId) => {
+    setSaving(true);
+    try {
+      const newRecips = [...(gw.recipient_ids || []), athleteId];
+      await updateGroupWorkoutById(gw.id, { recipient_ids: newRecips });
+      const others = (selectedDay.group_workouts || []).filter(o => o.id !== gw.id);
+      for (const o of others) {
+        const list = o.recipient_ids || [];
+        if (list.length === 0 || !list.includes(athleteId)) continue;  // broadcast or unaffected
+        const pruned = list.filter(aid => aid !== athleteId);
+        if (pruned.length === 0) await deleteGroupWorkoutById(o.id);
+        else await updateGroupWorkoutById(o.id, { recipient_ids: pruned });
+      }
+      await refetchDay(selectedDay.date);
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
   };
@@ -475,7 +499,7 @@ export default function GroupWorkoutsTab({ group }) {
       )}
 
       {/* Workout edit modal */}
-      <Modal open={!!selectedDay} onClose={() => { setSelectedDay(null); cancelEdit(); }} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
+      <Modal open={!!selectedDay} onClose={() => { setSelectedDay(null); setAthletesOpenId(null); cancelEdit(); }} title={selectedDay ? format(new Date(selectedDay.date + 'T00:00'), 'EEEE, MMM d') : ''} panelClassName="bg-[#131314] border-t border-white/10">
         {selectedDay && editingId == null && (
           <div className="space-y-3">
             <p className="text-xs text-white/50">
@@ -486,34 +510,85 @@ export default function GroupWorkoutsTab({ group }) {
             {(selectedDay.group_workouts || []).map((gw) => {
               const tm = typeMeta(gw.workout_type);
               const recCount = gw.recipient_ids?.length || 0;
-              const recNames = recCount > 0 && groupDetail
-                ? groupDetail.members.filter(m => gw.recipient_ids.includes(m.id)).map(m => m.full_name)
-                : [];
-              const snippet = workoutSnippet(gw);
+              const members = groupDetail?.members || [];
+              // Athletes who got this workout: the named recipients, or every group
+              // member when it's a broadcast (no explicit recipient list).
+              const registered = recCount === 0
+                ? members
+                : members.filter(m => gw.recipient_ids.includes(m.id));
+              // Group members not on this workout — offered to add. A broadcast already
+              // includes everyone, so there's nobody to add.
+              const notRegistered = recCount === 0
+                ? []
+                : members.filter(m => !gw.recipient_ids.includes(m.id));
+              const gwIsRace = gw.workout_type === 'race';
+              const open = athletesOpenId === gw.id;
               return (
-                <div key={gw.id} className={`rounded-lg p-3 border ${gw.workout_type === 'race' ? 'border-[#8083ff]/40 bg-[#8083ff]/10' : 'border-white/10 bg-white/5'}`}>
-                  <div className="flex items-start justify-between gap-2 mb-1">
+                <div key={gw.id} className={`rounded-lg p-3 border ${gwIsRace ? 'border-[#8083ff]/40 bg-[#8083ff]/10' : 'border-white/10 bg-white/5'}`}>
+                  <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${tm.color}`}>{tm.label}</span>
                         {gw.draft_content && <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-300">Draft</span>}
+                        {gw.distance_km > 0 && <span className="text-sm font-semibold text-white/75">{fmtKm(gw.distance_km)} km</span>}
                       </div>
-                      {(gw.title || snippet) && (
-                        <p className="text-sm font-medium text-white/90 mt-1 truncate">{gw.title || snippet}</p>
+                      {gw.title && (
+                        <p className="text-sm font-semibold text-white mt-1">{gwIsRace && '🏁 '}{gw.title}</p>
                       )}
-                      <p className="text-[11px] text-white/50 mt-1">
-                        {recCount === 0
-                          ? '👥 All athletes (broadcast)'
-                          : `👥 ${recCount}: ${recNames.length ? recNames.join(', ') : `${recCount} athlete${recCount === 1 ? '' : 's'}`}`}
-                      </p>
+                      {tm.structured ? (
+                        <div className="text-sm text-white/80 space-y-0.5 mt-1">
+                          {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-white/40">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
+                          {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-white/40">{tm.mainLabel || 'Main'} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                          {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-white/40">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
+                        </div>
+                      ) : (
+                        gw.content && <p className="text-sm text-white/80 whitespace-pre-wrap mt-1">{gw.content}</p>
+                      )}
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex flex-col gap-1 shrink-0 w-20">
                       <button onClick={() => openWorkoutForEdit(gw)}
                         className="text-xs px-2 py-1 rounded border border-[#c0c1ff]/40 text-[#c0c1ff] hover:bg-[#c0c1ff]/10 transition">Edit</button>
                       <button onClick={() => handleDeleteOne(gw.id)} disabled={saving}
                         className="text-xs px-2 py-1 rounded border border-red-400/30 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50 transition">Delete</button>
+                      <button onClick={() => setAthletesOpenId(id => id === gw.id ? null : gw.id)}
+                        className={`text-xs px-2 py-1 rounded border transition ${open ? 'border-white/40 bg-white/10 text-white' : 'border-white/20 text-white/70 hover:bg-white/10'}`}>
+                        👥 {recCount === 0 ? 'All' : recCount}
+                      </button>
                     </div>
                   </div>
+                  {open && (
+                    <div className="mt-2 pt-2 border-t border-white/10 space-y-2.5">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">
+                          In this workout{recCount === 0 ? ' · all of the group (broadcast)' : ` · ${recCount}`}
+                        </p>
+                        {!groupDetail ? (
+                          <p className="text-xs text-white/40 italic">Loading…</p>
+                        ) : registered.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {registered.map((m) => (
+                              <span key={m.id} className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/80">{m.full_name}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-white/40 italic">No athletes.</p>
+                        )}
+                      </div>
+                      {notRegistered.length > 0 && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1.5">Not in this workout · tap to add</p>
+                          <div className="flex flex-wrap gap-1">
+                            {notRegistered.map((m) => (
+                              <button key={m.id} onClick={() => addAthleteToWorkout(gw, m.id)} disabled={saving}
+                                className="text-xs px-2 py-0.5 rounded-full border border-[#c0c1ff]/40 text-[#c0c1ff] hover:bg-[#c0c1ff]/10 disabled:opacity-50 transition">
+                                + {m.full_name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -943,13 +943,14 @@ export default function CalendarPage() {
                               const kmParts = wlist.map((w) => w.distance_km || 0).filter((k) => k > 0);
                               const totalKm = kmParts.reduce((a, b) => a + b, 0);
                               if (totalKm <= 0) return null;
+                              const showPer = multi && (active?.distance_km || 0) > 0;
                               return (
-                                <p className="text-[11px] font-bold leading-none mt-auto self-end">
-                                  {kmParts.length > 1 && (
-                                    <span className="text-white/50 font-semibold">{kmParts.map(fmtKm).join(' + ')} = </span>
+                                <div className={`flex items-end mt-auto ${showPer ? 'justify-between' : 'justify-end'}`}>
+                                  {showPer && (
+                                    <span className="text-[10px] text-white/50 font-semibold leading-none">{fmtKm(active.distance_km)} km</span>
                                   )}
-                                  <span className="text-white">{fmtKm(totalKm)} km</span>
-                                </p>
+                                  <span className="text-[11px] font-bold leading-none text-white">{fmtKm(totalKm)} km</span>
+                                </div>
                               );
                             })()}
                           </div>

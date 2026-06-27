@@ -367,15 +367,20 @@ def apply_template_to_athlete(
     created = 0
     last_date = start_monday
     target_dates = set()
+    # Preserve per-day ordering so the first plan workout on a day is the "main".
+    pos_by_date: dict = {}
     for d in days:
         target = targets[d]
         last_date = max(last_date, target)
         target_dates.add(target)
+        position = pos_by_date.get(target, 0)
+        pos_by_date[target] = position + 1
         db.add(IndividualTarget(
             team_id=active_team_id,
             athlete_id=body.athlete_id,
             date=target,
             note="",
+            position=position,
             # "Override the group workout" → the plan's sessions always show
             # (additional) and we hide the group workout on those days (below).
             additional=body.override_group,

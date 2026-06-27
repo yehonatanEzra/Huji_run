@@ -156,7 +156,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
             {/* Planned distance — this workout, then the daily total when multiple */}
             {workout?.distance_km > 0 && (
               <p className={`text-sm font-bold mt-2 ${bodyText}`}>
-                <span className={`text-[10px] uppercase tracking-wider ${labelText}`}>{middleLabel} · </span>
+                <span className={`text-[10px] uppercase tracking-wider ${labelText}`}>Distance · </span>
                 {Number(workout.distance_km.toFixed(1))} km
               </p>
             )}

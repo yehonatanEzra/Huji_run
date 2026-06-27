@@ -28,6 +28,9 @@ const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 // (Sunday first) — the stored day_of_week value is unchanged.
 const DOW_ORDER = [6, 0, 1, 2, 3, 4, 5];
 const cellKey = (w, d) => `${w}-${d}`;
+// Sum the planned distance across a cell's list of workouts.
+const cellKm = (list) => (list || []).reduce((s, w) => s + (parseFloat(w.distance_km) || 0), 0);
+const EMPTY_DAY = { workout_type: 'easy', title: '', content: '', warmup: '', main_session: '', cooldown: '', distance_km: '' };
 
 // Builder styling (glass panels + vivid grid cells)
 const PANEL = 'bg-slate-800/60 backdrop-blur-xl border border-white/5';
@@ -52,19 +55,24 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description || '');
   const [weeks, setWeeks] = useState(initial.weeks_count);
-  // day map: "week-dow" -> {workout_type, title, content, warmup, main_session, cooldown}
+  // day map: "week-dow" -> [ {workout_type, title, content, warmup, main_session, cooldown, distance_km}, ... ]
+  // Multiple workouts may share a day; the array order is the saved `position` order.
   const [dayMap, setDayMap] = useState(() => {
     const m = {};
     (initial.days || []).forEach((d) => {
-      m[cellKey(d.week_number, d.day_of_week)] = {
+      const k = cellKey(d.week_number, d.day_of_week);
+      (m[k] ||= []).push({
         workout_type: d.workout_type, title: d.title || '', content: d.content || '',
         warmup: d.warmup || '', main_session: d.main_session || '', cooldown: d.cooldown || '',
         distance_km: d.distance_km ?? '',
-      };
+      });
     });
     return m;
   });
   const [editCell, setEditCell] = useState(null); // {week, dow}
+  // Carousel index per cell ("week-dow" -> index) so a multi-workout day can show
+  // the main first and switch through the rest, like the athlete training log.
+  const [cellIdx, setCellIdx] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -123,16 +131,14 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
   const setTarget = (week, val) => setWeekTargets((p) => ({ ...p, [String(week)]: val }));
 
   // Sum of distances written into a week's cells (the "written" km).
-  const writtenKm = (week) => DOW_ORDER.reduce((s, dow) => {
-    const c = dayMap[cellKey(week, dow)];
-    return s + (c?.distance_km ? (parseFloat(c.distance_km) || 0) : 0);
-  }, 0);
+  const writtenKm = (week) => DOW_ORDER.reduce((s, dow) => s + cellKm(dayMap[cellKey(week, dow)]), 0);
 
-  const setCell = (week, dow, value) => {
+  // Replace a cell's whole workout list. An empty list removes the cell.
+  const setCell = (week, dow, list) => {
     setDayMap((prev) => {
       const next = { ...prev };
-      if (value === null) delete next[cellKey(week, dow)];
-      else next[cellKey(week, dow)] = value;
+      if (!list || list.length === 0) delete next[cellKey(week, dow)];
+      else next[cellKey(week, dow)] = list;
       return next;
     });
   };
@@ -141,14 +147,19 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
     if (!name.trim()) { setError('Name is required'); return; }
     setSaving(true);
     setError('');
-    const days = Object.entries(dayMap)
-      .map(([k, v]) => {
-        const [w, d] = k.split('-').map(Number);
-        const day = { week_number: w, day_of_week: d, ...v };
-        day.distance_km = !tracksDistance(day.workout_type) || day.distance_km === '' || day.distance_km == null ? null : parseFloat(day.distance_km);
-        return day;
-      })
-      .filter((d) => d.week_number <= weeks);
+    // Flatten each cell's list into individual day rows. Arrival order within a
+    // cell becomes the backend `position` (the calendar shows them in this order).
+    const days = [];
+    Object.entries(dayMap).forEach(([k, list]) => {
+      const [w, d] = k.split('-').map(Number);
+      if (w > weeks) return;
+      (list || []).forEach((v) => {
+        days.push({
+          week_number: w, day_of_week: d, ...v,
+          distance_km: !tracksDistance(v.workout_type) || v.distance_km === '' || v.distance_km == null ? null : parseFloat(v.distance_km),
+        });
+      });
+    });
     const week_targets = {};
     Object.entries(weekTargets).forEach(([w, v]) => {
       const n = parseFloat(v);
@@ -260,23 +271,35 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
               <div key={week} className="grid grid-cols-[1rem_repeat(7,1fr)_1.6rem] gap-1 items-center px-1 py-0.5 hover:bg-white/5 rounded-lg transition-colors">
                 <div className="text-white/50 font-medium text-[10px]">W{week}</div>
                 {DOW_ORDER.map((dow) => {
-                  const cell = dayMap[cellKey(week, dow)];
-                  const meta = cell ? typeMeta(cell.workout_type) : null;
+                  const key = cellKey(week, dow);
+                  const list = dayMap[key] || [];
+                  const multi = list.length > 1;
+                  const idx = Math.min(cellIdx[key] || 0, Math.max(0, list.length - 1));
+                  const active = list[idx];
+                  const meta = active ? typeMeta(active.workout_type) : null;
                   return (
                     <button
                       key={dow}
                       onClick={() => setEditCell({ week, dow })}
-                      className={`h-10 rounded-lg px-0.5 flex flex-col items-center justify-center text-center leading-none transition ${
-                        cell
-                          ? `${CELL_COLOR[cell.workout_type] || 'bg-slate-500/85'} text-white shadow-md`
+                      className={`relative h-10 rounded-lg px-0.5 flex flex-col items-center justify-center text-center leading-none transition ${
+                        active
+                          ? `${CELL_COLOR[active.workout_type] || 'bg-slate-500/85'} text-white shadow-md`
                           : 'bg-slate-700/40 border border-dashed border-slate-400/30 text-slate-400 hover:bg-slate-700/60 hover:border-slate-400/60'
                       }`}
                     >
-                      {cell ? (
+                      {active ? (
                         <>
+                          {multi && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [key]: (idx + 1) % list.length })); }}
+                              className="absolute top-0.5 right-0.5 text-[7px] font-bold bg-black/40 hover:bg-black/60 rounded px-0.5 leading-none cursor-pointer"
+                            >{idx + 1}/{list.length}</span>
+                          )}
                           <span className="text-[7px] font-medium leading-tight line-clamp-2">{meta.label}</span>
-                          {parseFloat(cell.distance_km) > 0 && (
-                            <span className="text-[8px] font-bold mt-0.5">{Number(parseFloat(cell.distance_km).toFixed(1))} km</span>
+                          {parseFloat(active.distance_km) > 0 && (
+                            <span className="text-[8px] font-bold mt-0.5">{Number(parseFloat(active.distance_km).toFixed(1))} km</span>
                           )}
                         </>
                       ) : '+'}
@@ -342,35 +365,59 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
                 return (
                   <div key={week} className="grid gap-1 items-stretch" style={{ gridTemplateColumns: 'repeat(7, 1fr) 130px' }}>
                     {DOW_ORDER.map((dow) => {
-                      const cell = dayMap[cellKey(week, dow)];
-                      const meta = cell ? typeMeta(cell.workout_type) : null;
-                      const isRace = cell?.workout_type === 'race';
-                      const body = cell ? (cell.content || cell.main_session || cell.warmup || '') : '';
+                      const key = cellKey(week, dow);
+                      const list = dayMap[key] || [];
+                      const multi = list.length > 1;
+                      const idx = Math.min(cellIdx[key] || 0, Math.max(0, list.length - 1));
+                      const active = list[idx];
+                      const meta = active ? typeMeta(active.workout_type) : null;
+                      const isRace = active?.workout_type === 'race';
+                      const body = active ? (active.content || active.main_session || active.warmup || '') : '';
+                      const activeKm = active ? (parseFloat(active.distance_km) || 0) : 0;
                       return (
                         <button
                           key={dow}
                           onClick={() => setEditCell({ week, dow })}
                           className={`rounded-lg ${isRace ? 'border-2 border-[#8083ff]' : 'border border-white/10'} flex flex-col text-left transition overflow-hidden ${
-                            cell ? 'bg-white/[0.07] hover:bg-white/[0.12]' : 'bg-white/[0.02] hover:bg-white/[0.06] border-dashed'
+                            active ? 'bg-white/[0.07] hover:bg-white/[0.12]' : 'bg-white/[0.02] hover:bg-white/[0.06] border-dashed'
                           }`}
                           style={{ minHeight: '116px' }}
                         >
                           <div className="flex items-start justify-between px-2 pt-1.5 gap-1">
-                            <span className="text-[10px] text-white/40 font-semibold leading-none">W{week}</span>
+                            <span className="flex items-center gap-1">
+                              <span className="text-[10px] text-white/40 font-semibold leading-none">W{week}</span>
+                              {multi && (
+                                <span
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [key]: (idx + 1) % list.length })); }}
+                                  className="text-[9px] text-[#c0c1ff] font-bold leading-none px-1 py-0.5 rounded bg-white/10 hover:bg-white/25 cursor-pointer transition"
+                                  title="Switch workout"
+                                >{idx + 1}/{list.length} ›</span>
+                              )}
+                            </span>
                             {meta && (
                               <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${meta.color}`}>{meta.label}</span>
                             )}
                           </div>
                           <div className="flex-1 px-2 py-1 min-h-0 flex flex-col">
-                            {cell?.title && (
-                              <p className="text-xs font-semibold leading-tight line-clamp-2 text-white">{isRace && '🏁 '}{cell.title}</p>
+                            {active?.title && (
+                              <p className="text-xs font-semibold leading-tight line-clamp-2 text-white">{isRace && '🏁 '}{active.title}</p>
                             )}
-                            {!cell?.title && isRace && <p className="text-xs font-semibold leading-tight text-[#c0c1ff]">🏁 Race</p>}
+                            {!active?.title && isRace && <p className="text-xs font-semibold leading-tight text-[#c0c1ff]">🏁 Race</p>}
                             {body && <p className="text-[10px] text-white/60 leading-tight line-clamp-3 mt-0.5 whitespace-pre-wrap">{body}</p>}
-                            {cell && parseFloat(cell.distance_km) > 0 && (
-                              <p className="text-[11px] text-[#c0c1ff] font-bold leading-none mt-auto self-end">{Number(parseFloat(cell.distance_km).toFixed(1))} km</p>
-                            )}
-                            {!cell && <span className="text-white/25 text-lg m-auto">+</span>}
+                            {(() => {
+                              const total = cellKm(list);
+                              if (total <= 0) return null;
+                              const showPer = multi && activeKm > 0;
+                              return (
+                                <div className={`flex items-end mt-auto ${showPer ? 'justify-between' : 'justify-end'}`}>
+                                  {showPer && <span className="text-[10px] text-white/55 font-semibold leading-none">{Number(activeKm.toFixed(1))} km</span>}
+                                  <span className="text-[11px] text-[#c0c1ff] font-bold leading-none">{Number(total.toFixed(1))} km</span>
+                                </div>
+                              );
+                            })()}
+                            {!active && <span className="text-white/25 text-lg m-auto">+</span>}
                           </div>
                         </button>
                       );
@@ -407,110 +454,146 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
           week={editCell.week}
           dow={editCell.dow}
           value={dayMap[cellKey(editCell.week, editCell.dow)]}
+          onChange={(list) => setCell(editCell.week, editCell.dow, list)}
           onClose={() => setEditCell(null)}
-          onSave={(v) => { setCell(editCell.week, editCell.dow, v); setEditCell(null); }}
-          onClear={() => { setCell(editCell.week, editCell.dow, null); setEditCell(null); }}
         />
       )}
     </div>
   );
 }
 
-function CellEditor({ week, dow, value, onClose, onSave, onClear }) {
-  const [form, setForm] = useState(value || {
-    workout_type: 'easy', title: '', content: '', warmup: '', main_session: '', cooldown: '', distance_km: '',
-  });
+// Multi-workout cell editor. Shows the day's workout list (add / edit / delete),
+// committing the whole list back to the parent on every change via `onChange`.
+function CellEditor({ week, dow, value, onChange, onClose }) {
+  const [list, setList] = useState(() => (value || []).map((w) => ({ ...w })));
+  // null = list view; 'new' = adding; number = editing that index.
+  const [editingIdx, setEditingIdx] = useState((value || []).length === 0 ? 'new' : null);
+  const [form, setForm] = useState(EMPTY_DAY);
   const meta = typeMeta(form.workout_type);
   const upd = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const applyList = (next) => { setList(next); onChange(next); };
+
+  const openForm = (idx) => {
+    setForm(idx === 'new' ? EMPTY_DAY : { ...list[idx] });
+    setEditingIdx(idx);
+  };
+  const saveForm = () => {
+    const next = editingIdx === 'new' ? [...list, form] : list.map((w, i) => (i === editingIdx ? form : w));
+    applyList(next);
+    setEditingIdx(next.length === 0 ? 'new' : null);
+  };
+  const deleteAt = (idx) => {
+    const next = list.filter((_, i) => i !== idx);
+    applyList(next);
+  };
+  // "Main" = first in the cell (shown first on the calendar). Move this one to front.
+  const makeMain = (idx) => applyList([list[idx], ...list.filter((_, i) => i !== idx)]);
+
+  const INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
 
   return (
     <Modal open onClose={onClose} panelClassName="bg-[#131314] border-t border-white/10">
       <h3 className="font-semibold mb-1 text-white">Week {week} · {DOW[dow]}</h3>
-      <div className="space-y-3 mt-2">
-        <div className="flex flex-wrap gap-1">
-          {WORKOUT_TYPES.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => upd('workout_type', t.value)}
-              className={`text-xs px-2 py-1 rounded-full border ${
-                form.workout_type === t.value ? t.color + ' border-transparent font-medium' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
 
-        <input
-          type="text"
-          placeholder="Title (optional)"
-          value={form.title}
-          onChange={(e) => upd('title', e.target.value)}
-          className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-        />
-
-        {tracksDistance(form.workout_type) && (
-          <input
-            type="number"
-            inputMode="decimal"
-            placeholder="Distance (km)"
-            value={form.distance_km}
-            onChange={(e) => upd('distance_km', e.target.value)}
-            className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-          />
-        )}
-
-        {meta.structured ? (
-          <>
-            <textarea
-              placeholder="Warm-up"
-              value={form.warmup}
-              onChange={(e) => upd('warmup', e.target.value)}
-              rows={2}
-              className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-            />
-            <textarea
-              placeholder={meta.mainLabel || 'Main session'}
-              value={form.main_session}
-              onChange={(e) => upd('main_session', e.target.value)}
-              rows={2}
-              className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-            />
-            <textarea
-              placeholder="Cool-down"
-              value={form.cooldown}
-              onChange={(e) => upd('cooldown', e.target.value)}
-              rows={2}
-              className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-            />
-          </>
-        ) : (
-          <textarea
-            placeholder="Details (optional)"
-            value={form.content}
-            onChange={(e) => upd('content', e.target.value)}
-            rows={3}
-            className="w-full bg-[#1c1b1c]/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20"
-          />
-        )}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={() => onSave(form)}
-            className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff]"
-          >
-            Set
+      {editingIdx === null ? (
+        // ── List of the day's workouts ──────────────────────────────────────
+        <div className="space-y-2 mt-2">
+          {list.map((w, idx) => {
+            const tm = typeMeta(w.workout_type);
+            const km = parseFloat(w.distance_km) || 0;
+            return (
+              <div key={idx} className="rounded-xl border border-white/10 bg-white/[0.05] p-3 flex items-start justify-between gap-2">
+                <button onClick={() => openForm(idx)} className="min-w-0 text-left flex-1">
+                  <span className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${tm.color}`}>{tm.label}</span>
+                    {idx === 0 && list.length > 1 && <span className="text-[10px] text-yellow-300 font-semibold">★ main</span>}
+                    {km > 0 && <span className="text-[11px] font-semibold text-[#c0c1ff]">{Number(km.toFixed(1))} km</span>}
+                  </span>
+                  {(w.title || w.workout_type === 'race') && (
+                    <p className="text-sm font-semibold text-white mt-1">{w.workout_type === 'race' && '🏁 '}{w.title || tm.label}</p>
+                  )}
+                  {tm.structured ? (
+                    <div className="text-xs text-white/75 space-y-0.5 mt-1">
+                      {w.warmup && <p><span className="text-[10px] uppercase tracking-wider text-white/40">WU · </span><span className="whitespace-pre-wrap">{w.warmup}</span></p>}
+                      {w.main_session && <p><span className="text-[10px] uppercase tracking-wider text-white/40">{tm.mainLabel || 'Main'} · </span><span className="whitespace-pre-wrap">{w.main_session}</span></p>}
+                      {w.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-white/40">CD · </span><span className="whitespace-pre-wrap">{w.cooldown}</span></p>}
+                    </div>
+                  ) : (
+                    w.content && <p className="text-xs text-white/75 whitespace-pre-wrap mt-1">{w.content}</p>
+                  )}
+                </button>
+                <div className="flex flex-col gap-1 shrink-0">
+                  {idx !== 0 && (
+                    <button onClick={() => makeMain(idx)}
+                      className="text-[11px] px-2 py-1 rounded border border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/15"
+                      title="Make this the main workout (shown first)">★ Main</button>
+                  )}
+                  <button onClick={() => deleteAt(idx)}
+                    className="text-[11px] px-2 py-1 rounded border border-red-400/30 text-red-300 hover:bg-red-500/15">Delete</button>
+                </div>
+              </div>
+            );
+          })}
+          <button onClick={() => openForm('new')}
+            className="w-full border border-[#c0c1ff]/40 text-[#c0c1ff] rounded-xl py-2.5 text-sm font-bold hover:bg-[#c0c1ff]/10">
+            + Add workout
           </button>
-          {value && (
-            <button
-              onClick={onClear}
-              className="px-4 border border-red-400/30 bg-red-500/10 text-red-300 rounded-lg py-2 text-sm hover:bg-red-500/20 transition"
-            >
-              Clear
-            </button>
-          )}
+          <button onClick={onClose}
+            className="w-full border border-white/20 text-white/70 rounded-xl py-2.5 text-sm font-medium hover:bg-white/10">
+            Done
+          </button>
         </div>
-      </div>
+      ) : (
+        // ── Add / edit one workout ──────────────────────────────────────────
+        <div className="space-y-3 mt-2">
+          {list.length > 0 && (
+            <button onClick={() => setEditingIdx(null)} className="text-xs text-white/50 hover:text-white">← Back to day</button>
+          )}
+          <div className="flex flex-wrap gap-1">
+            {WORKOUT_TYPES.map((t) => (
+              <button
+                key={t.value}
+                onClick={() => upd('workout_type', t.value)}
+                className={`text-xs px-2 py-1 rounded-full border ${
+                  form.workout_type === t.value ? t.color + ' border-transparent font-medium' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <input type="text" placeholder="Title (optional)" value={form.title}
+            onChange={(e) => upd('title', e.target.value)} className={INPUT} />
+
+          {tracksDistance(form.workout_type) && (
+            <input type="number" inputMode="decimal" placeholder="Distance (km)" value={form.distance_km}
+              onChange={(e) => upd('distance_km', e.target.value)} className={INPUT} />
+          )}
+
+          {meta.structured ? (
+            <>
+              <textarea placeholder="Warm-up" value={form.warmup} onChange={(e) => upd('warmup', e.target.value)} rows={2} className={INPUT} />
+              <textarea placeholder={meta.mainLabel || 'Main session'} value={form.main_session} onChange={(e) => upd('main_session', e.target.value)} rows={2} className={INPUT} />
+              <textarea placeholder="Cool-down" value={form.cooldown} onChange={(e) => upd('cooldown', e.target.value)} rows={2} className={INPUT} />
+            </>
+          ) : (
+            <textarea placeholder="Details (optional)" value={form.content} onChange={(e) => upd('content', e.target.value)} rows={3} className={INPUT} />
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={saveForm}
+              className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff]">
+              {editingIdx === 'new' ? 'Add' : 'Save'}
+            </button>
+            <button onClick={() => (list.length === 0 ? onClose() : setEditingIdx(null))}
+              className="px-4 border border-white/20 text-white/70 rounded-lg py-2 text-sm hover:bg-white/10 transition">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }

@@ -51,7 +51,7 @@ export default function CoachHomePage() {
       const todayReports = athletes
         .map((a) => {
           const day = (a.days || []).find((d) => d.date === today && d.log);
-          return day ? { name: a.full_name, group: a.group_name, status: day.log.status, km: day.log.distance_km, loggedAt: day.log.logged_at } : null;
+          return day ? { id: a.id, date: today, name: a.full_name, group: a.group_name, status: day.log.status, km: day.log.distance_km, loggedAt: day.log.logged_at } : null;
         })
         .filter(Boolean)
         .sort((x, y) => new Date(y.loggedAt) - new Date(x.loggedAt))
@@ -127,7 +127,7 @@ export default function CoachHomePage() {
                 data.todayReports.map((r, i) => {
                   const pill = STATUS_PILL[r.status] || STATUS_PILL.missed;
                   return (
-                    <button key={i} onClick={() => navigate('/coach/dashboard')}
+                    <button key={i} onClick={() => navigate('/coach/dashboard', { state: { openAthleteId: r.id, openDate: r.date, athleteName: r.name, groupName: r.group } })}
                       className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.04] transition ${i > 0 ? 'border-t border-white/5' : ''}`}>
                       <div className="w-9 h-9 rounded-full bg-[#8083ff]/25 border border-[#8083ff]/30 flex items-center justify-center font-bold text-[#c0c1ff] shrink-0">
                         {(r.name || '?').charAt(0).toUpperCase()}

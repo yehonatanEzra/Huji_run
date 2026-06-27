@@ -22,7 +22,7 @@ logging.basicConfig(format="%(message)s", level=logging.WARNING)
 
 log = structlog.get_logger()
 from .models import User, TrainingGroup, GroupWorkout, IndividualTarget, WorkoutLog, Race, Heat, Result, RaceRegistration, HallOfFame, HealthProfessional, HealthReview, Kudos, Announcement, AnnouncementReaction, AnnouncementComment, Challenge
-from .models.workout import WorkoutLogComment  # noqa: F401
+from .models.workout import WorkoutLogComment, GroupWorkoutHide  # noqa: F401
 from .models.notification import Notification  # noqa: F401
 from .models.team import Team, TeamMembership  # noqa: F401
 from .models.group_coach import GroupCoach  # noqa: F401

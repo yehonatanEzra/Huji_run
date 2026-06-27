@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_coach, get_active_team_id
 from ..models.user import User
-from ..models.workout import GroupWorkout, IndividualTarget
+from ..models.workout import GroupWorkout, IndividualTarget, GroupWorkoutHide
 from ..models.workout_template import WorkoutTemplate, WorkoutTemplateDay
 from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
@@ -357,18 +357,28 @@ def apply_template_to_athlete(
     if conflicts:
         existing.delete(synchronize_session=False)
         replaced = conflicts
+    # Clear any stale "hide group" rows in the range so a re-apply starts clean.
+    db.query(GroupWorkoutHide).filter(
+        GroupWorkoutHide.athlete_id == body.athlete_id,
+        GroupWorkoutHide.date >= start_monday,
+        GroupWorkoutHide.date < range_end_excl,
+    ).delete(synchronize_session=False)
 
     created = 0
     last_date = start_monday
+    target_dates = set()
     for d in days:
         target = targets[d]
         last_date = max(last_date, target)
+        target_dates.add(target)
         db.add(IndividualTarget(
             team_id=active_team_id,
             athlete_id=body.athlete_id,
             date=target,
             note="",
-            override_group=body.override_group,
+            # "Override the group workout" → the plan's sessions always show
+            # (additional) and we hide the group workout on those days (below).
+            additional=body.override_group,
             workout_type=d.workout_type,
             title=d.title,
             content=d.content,
@@ -379,6 +389,18 @@ def apply_template_to_athlete(
             created_by=coach.id,
         ))
         created += 1
+
+    if body.override_group:
+        # Hide the group workout on every day the plan fills.
+        existing_hide = {
+            h.date for h in db.query(GroupWorkoutHide.date).filter(
+                GroupWorkoutHide.athlete_id == body.athlete_id,
+                GroupWorkoutHide.date.in_(target_dates),
+            ).all()
+        }
+        for td in target_dates:
+            if td not in existing_hide:
+                db.add(GroupWorkoutHide(athlete_id=body.athlete_id, date=td, created_by=coach.id))
 
     if created:
         notify_many(

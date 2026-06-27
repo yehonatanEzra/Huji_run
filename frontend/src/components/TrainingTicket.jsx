@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { format } from 'date-fns';
 import { NoiseBackground } from './ui/NoiseBackground';
+import { dayWorkouts } from '../constants/workouts';
 
 const TYPE = {
   simple:    { label: 'Other',     color: 'bg-gray-100 text-gray-700' },
-  easy:      { label: 'Easy run',  color: 'bg-emerald-100 text-emerald-700' },
+  easy:      { label: 'Easy',      color: 'bg-emerald-100 text-emerald-700' },
   rest:      { label: 'Rest day',  color: 'bg-slate-100 text-slate-700' },
   tempo:     { label: 'Tempo',     color: 'bg-orange-100 text-orange-700' },
   long:      { label: 'Long run',  color: 'bg-purple-100 text-purple-700' },
@@ -12,17 +14,20 @@ const TYPE = {
   race:      { label: 'Race',      color: 'bg-indigo-100 text-indigo-700' },
 };
 
-function pickWorkout(today) {
-  if (!today) return null;
-  if (today.individual_target?.override_group) return { kind: 'personal', w: today.individual_target };
-  if (today.group_workout) return { kind: 'group', w: today.group_workout };
-  if (today.individual_target) return { kind: 'personal', w: today.individual_target };
-  return null;
+// Today's workouts as the athlete sees them. The backend already applies the
+// visibility model (hidden drafts stripped, group hidden when set, non-additional
+// personals suppressed by a group workout), so we just read the list in order.
+function orderedWorkouts(today) {
+  return dayWorkouts(today);
 }
 
 export default function TrainingTicket({ today, weekKm, runs, lastRace, group, onOpenWorkout, hasBgImage = false }) {
-  const picked = pickWorkout(today);
-  const workout = picked?.w;
+  const workouts = orderedWorkouts(today);
+  const [idx, setIdx] = useState(0);
+  const multi = workouts.length > 1;
+  const cur = Math.min(idx, Math.max(0, workouts.length - 1));
+  const workout = workouts[cur] || null;
+  const totalKm = workouts.reduce((s, w) => s + (w.distance_km || 0), 0);
   const wt = workout?.workout_type || 'simple';
   const isRace = wt === 'race';
   const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(wt);
@@ -99,8 +104,12 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
           className={`relative rounded-2xl shadow-xl ring-1 ${cardRing} overflow-hidden transition-transform duration-500 ease-out group-hover:[transform:rotateX(3deg)_rotateY(-3deg)_scale(1.01)]`}
           style={{ transformStyle: 'preserve-3d' }}
         >
-          {/* TOP — body */}
-          <div className={`relative px-4 pt-3 pb-4 ${bodyBg}`}>
+          {/* TOP — body. Tapping it opens today's workout to report on it. */}
+          <div
+            className={`relative px-4 pt-3 pb-4 ${bodyBg} ${workout ? 'cursor-pointer' : ''}`}
+            onClick={workout ? onOpenWorkout : undefined}
+            role={workout ? 'button' : undefined}
+          >
             {/* Logo + type pill */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
@@ -113,11 +122,22 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
               )}
             </div>
 
-            {/* Title */}
+            {/* Title + workout switcher when the day has more than one */}
             {workout && (
-              <h1 className={`text-2xl font-black leading-tight uppercase ${titleGrad} bg-clip-text text-transparent`}>
-                {titleDisplay}
-              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className={`text-2xl font-black leading-tight uppercase ${titleGrad} bg-clip-text text-transparent`}>
+                  {titleDisplay}
+                </h1>
+                {multi && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setIdx((cur + 1) % workouts.length); }}
+                    className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full transition ${g ? 'bg-white/20 hover:bg-white/30 text-white' : 'bg-blue-100 hover:bg-blue-200 text-blue-700'}`}
+                    title="Switch workout"
+                  >
+                    {cur + 1}/{workouts.length} ›
+                  </button>
+                )}
+              </div>
             )}
             <p className={`text-xs mt-0.5 mb-2 ${metaText}`}>
               {dateStr}
@@ -131,10 +151,16 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
               </p>
             )}
 
-            {/* Planned distance the coach set */}
+            {/* Planned distance — this workout, then the daily total when multiple */}
             {workout?.distance_km > 0 && (
               <p className={`text-sm font-bold mt-2 ${bodyText}`}>
+                <span className={`text-[10px] uppercase tracking-wider ${labelText}`}>{middleLabel} · </span>
                 {Number(workout.distance_km.toFixed(1))} km
+              </p>
+            )}
+            {multi && totalKm > 0 && (
+              <p className={`text-sm font-bold mt-1 ${bodyText}`}>
+                Total today · {Number(totalKm.toFixed(1))} km
               </p>
             )}
           </div>
@@ -197,7 +223,7 @@ export default function TrainingTicket({ today, weekKm, runs, lastRace, group, o
                   </p>
                 </div>
               ) : (
-                <p className={`text-xs italic ${emptyText}`}>No race yet — your first will show up here.</p>
+                <p className={`text-xs italic ${emptyText}`}>No race yet, your first will show up here.</p>
               )}
             </div>
           </div>

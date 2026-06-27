@@ -3,6 +3,7 @@ import { parseISO, format, getISOWeek, getISOWeekYear, startOfWeek, addDays, add
 import { useAuth } from '../../contexts/AuthContext';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import { visibleDayWorkouts } from '../../constants/workouts';
 import {
   listGroups, getGroup, createGroup, renameGroup, deleteGroup,
   addMemberToGroup, removeMemberFromGroup, listAthletes,
@@ -335,9 +336,7 @@ function AthletesTab({ group, onChanged, groups }) {
 function DayDot({ day }) {
   if (!day) return <span className="inline-block w-8 h-8 rounded-full bg-white/[0.06]" />;
   const log = day.log;
-  const isRace = day.target?.override_group
-    ? day.target?.workout_type === 'race'
-    : day.group_workout?.workout_type === 'race';
+  const isRace = visibleDayWorkouts(day)[0]?.workout_type === 'race';
   let bg = 'bg-white/[0.06]', txt = 'text-white/25', text = '·';
   if (log) {
     const st = log.status || (log.completed ? 'completed' : 'missed');

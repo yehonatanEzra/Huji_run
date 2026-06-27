@@ -37,3 +37,24 @@ export function dayWorkouts(day) {
 export function dayPlannedKm(day) {
   return dayWorkouts(day).reduce((s, w) => s + (w.distance_km || 0), 0);
 }
+
+// What the athlete actually sees on a day, given the visibility model. Use this
+// on COACH data (which carries every workout + the flags) to mirror the athlete's
+// view; athlete responses are already filtered server-side. Rules:
+//   - `day.hide_group` ("don't show group workout today") drops the group sessions
+//   - hidden personal targets are coach-only drafts → excluded
+//   - when a group workout is still visible, only `additional` personals also show;
+//     a non-additional personal is suppressed by the group workout
+//   - with no visible group workout, all (non-hidden) personals show
+export function visibleDayWorkouts(day) {
+  const all = dayWorkouts(day);
+  const groups = day?.hide_group ? [] : all.filter((w) => w._source === 'group');
+  const personals = all.filter((w) => w._source === 'personal' && !w.hidden);
+  const shownPersonals = groups.length > 0 ? personals.filter((w) => w.additional) : personals;
+  return [...groups, ...shownPersonals];
+}
+
+// Sum of planned distance across the workouts the athlete actually sees.
+export function visibleDayPlannedKm(day) {
+  return visibleDayWorkouts(day).reduce((s, w) => s + (w.distance_km || 0), 0);
+}

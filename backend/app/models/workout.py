@@ -54,7 +54,12 @@ class IndividualTarget(Base):
     athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     note: Mapped[str] = mapped_column(Text, nullable=False)  # supplementary coach note (shown on day-click only)
+    # DEPRECATED (v2.x): replaced by `additional` (per-workout) + GroupWorkoutHide
+    # (per-day "don't show group workout"). Kept for back-compat; no longer read.
     override_group: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When True this personal workout is shown *in addition to* the group workout
+    # (athlete sees both). When False, an existing group workout suppresses it.
+    additional: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     # Coach-only draft: when True the athlete never sees this target (not on
     # their calendar, not counted, never auto-missed) until the coach shares it.
     hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
@@ -74,6 +79,21 @@ class IndividualTarget(Base):
     )
 
     athlete = relationship("User", foreign_keys=[athlete_id], back_populates="individual_targets")
+
+
+class GroupWorkoutHide(Base):
+    """Day-level "don't show the group workout" for one athlete. Presence of a row
+    for (athlete_id, date) means the group workout is hidden from that athlete on
+    that day (and excluded from their planned/expected volume)."""
+    __tablename__ = "group_workout_hides"
+    __table_args__ = (UniqueConstraint("athlete_id", "date", name="uq_group_hide_athlete_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True)
+    athlete_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    created_by: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class WorkoutLog(Base):

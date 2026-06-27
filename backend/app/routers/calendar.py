@@ -6,7 +6,7 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from sqlalchemy import func as sa_func
-from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog, WorkoutLogComment
+from ..models.workout import GroupWorkout, GroupWorkoutRecipient, IndividualTarget, WorkoutLog, WorkoutLogComment, GroupWorkoutHide
 from ..models.kudos import Kudos
 from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
@@ -82,6 +82,14 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
     # other athletes' calendars and we don't want a side effect from that.
     if not is_coach:
         backfill_missed(db, athlete, week_start, week_start + timedelta(days=7), date.today())
+    # Days where the coach said "don't show group workout" for this athlete.
+    hide_dates = {
+        h.date for h in db.query(GroupWorkoutHide.date).filter(
+            GroupWorkoutHide.athlete_id == athlete.id,
+            GroupWorkoutHide.date >= week_start,
+            GroupWorkoutHide.date < week_start + timedelta(days=7),
+        ).all()
+    }
     days = []
     logs = []
     for i in range(7):
@@ -105,12 +113,17 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
             WorkoutLog.athlete_id == athlete.id,
             WorkoutLog.date == day,
         ).first()
-        # Hidden targets are coach-only: strip them from athlete views entirely.
+        # Visibility rules (athlete view only; coaches get everything + the flag):
+        #   - hidden targets are coach-only drafts → stripped
+        #   - "don't show group workout today" (hide_dates) → drop the group list
+        #   - when a group workout is still visible, a non-`additional` personal
+        #     target is suppressed by it; `additional` targets always show
         if not is_coach:
             targets = [t for t in targets if not t.hidden]
-            # A personal override suppresses the group sessions for the athlete.
-            if any(t.override_group for t in targets):
+            if day in hide_dates:
                 gws = []
+            if gws:
+                targets = [t for t in targets if t.additional]
         if log:
             logs.append(log)
         gw_outs = []
@@ -130,6 +143,7 @@ def _build_week(athlete: User, week_start: date, db: Session, is_coach: bool = F
             # old single-value behavior for the not-yet-migrated calendar UI).
             group_workout=gw_outs[-1] if gw_outs else None,
             individual_target=target_outs[0] if target_outs else None,
+            hide_group=(day in hide_dates),
             workout_log=WorkoutLogOut.model_validate(log) if log else None,
         ))
 
@@ -414,6 +428,7 @@ def _write_target_fields(it: IndividualTarget, body: IndividualTargetUpsert):
     """Apply upsert body onto a target. workout_type only changes when valid."""
     it.note = body.note or ""
     it.override_group = body.override_group
+    it.additional = body.additional
     it.hidden = body.hidden
     if body.workout_type is not None and body.workout_type in _TARGET_TYPES:
         it.workout_type = body.workout_type
@@ -513,6 +528,57 @@ def update_individual_target(
     db.commit()
     db.refresh(it)
     return it
+
+
+@router.post("/individual-targets/{target_id}/promote", status_code=200)
+def promote_individual_target(
+    target_id: int,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    """Set this target as position 0 (the primary shown in cells) and renumber siblings."""
+    it = db.get(IndividualTarget, target_id)
+    if it is None:
+        raise HTTPException(status_code=404, detail="Target not found")
+    athlete = db.get(User, it.athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
+        raise HTTPException(status_code=404, detail="Target not found")
+    siblings = (
+        db.query(IndividualTarget)
+        .filter(IndividualTarget.athlete_id == it.athlete_id, IndividualTarget.date == it.date)
+        .order_by(IndividualTarget.position.asc(), IndividualTarget.id.asc())
+        .all()
+    )
+    it.position = 0
+    for i, s in enumerate(x for x in siblings if x.id != target_id):
+        s.position = i + 1
+    db.commit()
+    return {"ok": True}
+
+
+@router.put("/group-visibility/{athlete_id}/{day}", status_code=200)
+def set_group_visibility(
+    athlete_id: int,
+    day: date,
+    body: dict,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    """Day-level "don't show group workout today" toggle for one athlete.
+    body = {"hide_group": bool}. Presence of a GroupWorkoutHide row = hidden."""
+    athlete = db.get(User, athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    hide = bool(body.get("hide_group"))
+    existing = db.query(GroupWorkoutHide).filter(
+        GroupWorkoutHide.athlete_id == athlete_id, GroupWorkoutHide.date == day,
+    ).first()
+    if hide and not existing:
+        db.add(GroupWorkoutHide(athlete_id=athlete_id, date=day, created_by=coach.id))
+    elif not hide and existing:
+        db.delete(existing)
+    db.commit()
+    return {"hide_group": hide}
 
 
 @router.delete("/individual-targets/{target_id}", status_code=204)

@@ -43,3 +43,10 @@ export const updateTargetById = (targetId, body) =>
 
 export const deleteTargetById = (targetId) =>
   client.delete(`/calendar/individual-targets/${targetId}`);
+
+export const promoteTarget = (targetId) =>
+  client.post(`/calendar/individual-targets/${targetId}/promote`);
+
+// Day-level "don't show group workout today" for one athlete.
+export const setGroupVisibility = (athleteId, date, hideGroup) =>
+  client.put(`/calendar/group-visibility/${athleteId}/${date}`, { hide_group: hideGroup });

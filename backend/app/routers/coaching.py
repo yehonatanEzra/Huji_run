@@ -9,7 +9,7 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach
 from ..models.user import User
 from ..models.coach_request import CoachRequest
-from ..models.workout import IndividualTarget
+from ..models.workout import IndividualTarget, GroupWorkoutHide
 from ..models.group_add_request import GroupAddRequest
 from ..models.group_coach import GroupCoach
 from ..models.athlete_transfer import AthleteTransfer
@@ -200,6 +200,10 @@ def leave_coach(
         IndividualTarget.athlete_id == current_user.id,
         IndividualTarget.date >= date.today(),
     ).delete(synchronize_session=False)
+    db.query(GroupWorkoutHide).filter(
+        GroupWorkoutHide.athlete_id == current_user.id,
+        GroupWorkoutHide.date >= date.today(),
+    ).delete(synchronize_session=False)
     # The personal-coach relationship is ending → any pending group-add is stale.
     db.query(GroupAddRequest).filter(
         GroupAddRequest.athlete_id == current_user.id
@@ -302,6 +306,10 @@ def remove_athlete_from_roster(
     db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == athlete.id,
         IndividualTarget.date >= date.today(),
+    ).delete(synchronize_session=False)
+    db.query(GroupWorkoutHide).filter(
+        GroupWorkoutHide.athlete_id == athlete.id,
+        GroupWorkoutHide.date >= date.today(),
     ).delete(synchronize_session=False)
     # Relationship ending → drop any pending group-add for this athlete.
     db.query(GroupAddRequest).filter(

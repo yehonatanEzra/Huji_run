@@ -104,19 +104,19 @@ function AddEmailModal({ onClose }) {
     }
   };
 
-  const INPUT = 'w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition';
+  const INPUT = 'w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-base font-semibold mb-1">Add email address</h3>
-        <p className="text-xs text-gray-500 mb-4">
+      <div className="bg-gray-900 rounded-2xl w-full max-w-sm p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-semibold mb-1 text-white">Add email address</h3>
+        <p className="text-xs text-white/60 mb-4">
           {step === 1 ? 'Secure your account and enable password reset.' : `Enter the code sent to ${email}`}
         </p>
 
         {error && (
-          <div className="mb-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2">
-            <p className="text-xs text-red-600">{error}</p>
+          <div className="mb-3 rounded-lg bg-red-950/40 border border-red-900/50 px-3 py-2">
+            <p className="text-xs text-red-300">{error}</p>
           </div>
         )}
 
@@ -134,13 +134,13 @@ function AddEmailModal({ onClose }) {
               {loading ? 'Verifying…' : 'Verify & Save'}
             </button>
             <button type="button" onClick={() => { setStep(1); setCode(''); setError(''); }} disabled={cooldown > 0}
-              className="w-full text-xs text-gray-400 hover:text-gray-600 transition disabled:opacity-40">
+              className="w-full text-xs text-white/50 hover:text-white/70 transition disabled:opacity-40">
               {cooldown > 0 ? `Resend in ${cooldown}s` : 'Back / resend code'}
             </button>
           </form>
         )}
 
-        <button onClick={onClose} className="mt-4 w-full text-xs text-gray-400 hover:text-gray-600 transition">
+        <button onClick={onClose} className="mt-4 w-full text-xs text-white/50 hover:text-white/70 transition">
           Maybe later
         </button>
       </div>

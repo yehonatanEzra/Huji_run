@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns';
 import { getAthleteWeek } from '../../api/coach';
-import { createTarget, updateTargetById, deleteTargetById } from '../../api/calendar';
-import { dayWorkouts } from '../../constants/workouts';
+import { createTarget, updateTargetById, deleteTargetById, setGroupVisibility } from '../../api/calendar';
+import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm } from '../../constants/workouts';
 import Modal from '../ui/Modal';
 import Spinner from '../ui/Spinner';
 
@@ -18,11 +18,12 @@ const TYPES = [
 ];
 const typeMetaFor = (t) => TYPES.find((x) => x.value === t) || TYPES[0];
 const DEFAULT_TITLES = new Set(TYPES.map((t) => t.label));
-// Planned km across all of a day's workouts (group + personal, per the merge rule).
-const plannedKmOf = (day) => dayWorkouts(day).reduce((s, w) => s + (w.distance_km || 0), 0);
+// Planned km = the workouts the athlete actually sees (group unless hidden for the
+// day + 'additional' personals).
+const plannedKmOf = (day) => visibleDayPlannedKm(day);
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
 
-const EMPTY = { workout_type: 'simple', title: '', content: '', note: '', warmup: '', main_session: '', cooldown: '', override_group: false, distance_km: '', hidden: false };
+const EMPTY = { workout_type: 'simple', title: '', content: '', note: '', warmup: '', main_session: '', cooldown: '', additional: false, distance_km: '', hidden: false };
 const INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
 
 export default function AthleteLogModal({ athlete, onClose }) {
@@ -108,7 +109,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
       warmup: t?.warmup || '',
       main_session: t?.main_session || '',
       cooldown: t?.cooldown || '',
-      override_group: t?.override_group || false,
+      additional: t?.additional || false,
       distance_km: t?.distance_km ?? '',
       hidden: t?.hidden || false,
     });
@@ -127,6 +128,17 @@ export default function AthleteLogModal({ athlete, onClose }) {
     setSaving(true);
     try { await deleteTargetById(t.id); await refetchInto(editDay.date); }
     catch (err) { console.error(err); }
+    finally { setSaving(false); }
+  };
+
+  // Day-level "don't show group workout today" toggle.
+  const toggleGroupHide = async () => {
+    if (!editDay) return;
+    setSaving(true);
+    try {
+      await setGroupVisibility(athlete.id, editDay.date, !editDay.hide_group);
+      await refetchInto(editDay.date);
+    } catch (err) { console.error(err); }
     finally { setSaving(false); }
   };
 
@@ -151,7 +163,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
       if (hasAny) {
         const body = {
           note: form.note,
-          override_group: form.override_group,
+          additional: form.additional,
           workout_type: form.workout_type,
           title: form.title,
           content: meta.structured ? '' : (form.content || ''),
@@ -190,12 +202,18 @@ export default function AthleteLogModal({ athlete, onClose }) {
             </h3>
 
             {editDay.group_workout && (
-              <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3">
-                <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1">Group workout this day</p>
-                <p className="text-sm text-white/75">
+              <div className="rounded-xl bg-white/[0.04] border border-white/10 p-3 space-y-2">
+                <p className="text-[10px] uppercase tracking-widest text-white/40 mb-1">Group workout this day{editDay.hide_group && <span className="text-white/35"> · hidden from athlete</span>}</p>
+                <p className={`text-sm text-white/75 ${editDay.hide_group ? 'line-through opacity-50' : ''}`}>
                   {editDay.group_workout.title || typeMetaFor(editDay.group_workout.workout_type).label}
                   {editDay.group_workout.main_session ? ` · ${editDay.group_workout.main_session}` : editDay.group_workout.content ? ` · ${editDay.group_workout.content}` : ''}
                 </p>
+                <label className="flex items-start gap-2 cursor-pointer pt-1.5 border-t border-white/10">
+                  <input type="checkbox" checked={!!editDay.hide_group} disabled={saving} onChange={toggleGroupHide} className="mt-0.5 w-4 h-4 rounded accent-[#c0c1ff]" />
+                  <span className="text-xs text-white/60">Don’t show group workout today
+                    <span className="block text-[11px] text-white/40">Hides it from the athlete this day and drops it from their planned km.</span>
+                  </span>
+                </label>
               </div>
             )}
 
@@ -212,7 +230,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tm.color}`}>{tm.label}</span>
                         {t.hidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
-                        {t.override_group && <span className="text-[10px] text-[#c0c1ff]">overrides group</span>}
+                        {t.additional && <span className="text-[10px] text-[#c0c1ff]">+ with group</span>}
                       </div>
                       <p className="text-sm text-white mt-1 truncate">
                         {t.title || tm.label}
@@ -278,9 +296,11 @@ export default function AthleteLogModal({ athlete, onClose }) {
 
             {hasAny && (
               <>
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={form.override_group} onChange={(e) => setField('override_group', e.target.checked)} className="w-4 h-4 rounded accent-[#c0c1ff]" />
-                  <span className="text-xs text-white/60">Show this instead of the group workout</span>
+                <label className="flex items-start gap-2">
+                  <input type="checkbox" checked={form.additional} onChange={(e) => setField('additional', e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-[#c0c1ff]" />
+                  <span className="text-xs text-white/60">Show in addition to group workout
+                    <span className="block text-[11px] text-white/40">Athlete sees this even when a group workout exists. If unchecked, a group workout that day replaces it.</span>
+                  </span>
                 </label>
                 <label className="flex items-start gap-2">
                   <input type="checkbox" checked={form.hidden} onChange={(e) => setField('hidden', e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-[#c0c1ff]" />
@@ -345,7 +365,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
                             const isToday = key === format(new Date(), 'yyyy-MM-dd');
                             const log = day?.log;
                             const logStatus = log?.status || (log?.completed ? 'completed' : (log?.missed ? 'missed' : null));
-                            const wl = dayWorkouts(day);
+                            const wl = visibleDayWorkouts(day);
                             const _active = wl.find((w) => w.workout_type === 'race') || wl[0];
                             const activeType = _active?.workout_type;
                             const tm = activeType ? typeMetaFor(activeType) : null;
@@ -430,7 +450,7 @@ export default function AthleteLogModal({ athlete, onClose }) {
                         const key = format(d, 'yyyy-MM-dd');
                         const day = dayOf(d);
                         const inMonth = isSameMonth(d, monthDate);
-                        const wl = dayWorkouts(day);
+                        const wl = visibleDayWorkouts(day);
                         const active = wl.find((w) => w.workout_type === 'race') || wl[0];
                         const useTarget = active?._source === 'personal';
                         const tm = active ? typeMetaFor(active.workout_type) : null;

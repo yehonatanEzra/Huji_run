@@ -10,7 +10,7 @@ from ..models.user import User
 from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
 from ..models.group_add_request import GroupAddRequest
-from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog
+from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog, GroupWorkoutHide
 from ..models.race import Race, Heat, Result
 from ..schemas.auth import UserOut
 from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut, IndividualTargetOut, GroupWorkoutOut
@@ -429,6 +429,13 @@ def dashboard_week(
     for t in targets:
         targets_by_key.setdefault((t.athlete_id, t.date), []).append(t)
 
+    # (athlete_id, date) pairs where the coach hid the group workout for the day.
+    hide_set = {
+        (h.athlete_id, h.date)
+        for h in db.query(GroupWorkoutHide.athlete_id, GroupWorkoutHide.date)
+        .filter(GroupWorkoutHide.date.in_(week_dates)).all()
+    }
+
     # All workouts in this week's date range, newest-first per (group, date).
     group_workouts = (
         db.query(GroupWorkout)
@@ -515,6 +522,7 @@ def dashboard_week(
                 "targets": [IndividualTargetOut.model_validate(t) for t in day_targets],
                 "target": IndividualTargetOut.model_validate(day_targets[0]) if day_targets else None,
                 "group_workout": GroupWorkoutOut.model_validate(gw) if gw else None,
+                "hide_group": (athlete.id, d) in hide_set,
             })
         rows.append(AthleteWeekRow(
             id=athlete.id,
@@ -753,6 +761,7 @@ def get_athlete_week(
             "id": t.id,
             "note": t.note,
             "override_group": t.override_group,
+            "additional": t.additional,
             "hidden": t.hidden,
             "position": t.position,
             "workout_type": t.workout_type,
@@ -763,6 +772,13 @@ def get_athlete_week(
             "cooldown": t.cooldown,
             "distance_km": t.distance_km,
         }
+
+    hide_set = {
+        h.date for h in db.query(GroupWorkoutHide.date).filter(
+            GroupWorkoutHide.athlete_id == athlete_id,
+            GroupWorkoutHide.date.in_(week_dates),
+        ).all()
+    }
 
     days = []
     for d in week_dates:
@@ -775,6 +791,7 @@ def get_athlete_week(
             "targets": [_target_payload(t) for t in day_targets],
             # compat: primary (first) target for the not-yet-migrated UI
             "target": _target_payload(day_targets[0]) if day_targets else None,
+            "hide_group": d in hide_set,
             "group_workout": {
                 "content": gw.content,
                 "workout_type": gw.workout_type,

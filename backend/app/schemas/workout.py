@@ -35,7 +35,9 @@ class GroupWorkoutOut(BaseModel):
 
 class IndividualTargetUpsert(BaseModel):
     note: str = ""
-    override_group: bool = False
+    override_group: bool = False  # deprecated; kept for back-compat
+    # Show this personal workout in addition to the group workout (athlete sees both).
+    additional: bool = False
     workout_type: Optional[str] = None
     title: Optional[str] = None
     content: Optional[str] = None  # body for simple/easy/rest
@@ -52,6 +54,7 @@ class IndividualTargetOut(BaseModel):
     date: date
     note: str
     override_group: bool
+    additional: bool = False
     workout_type: str = "simple"
     title: Optional[str] = None
     content: Optional[str] = None
@@ -107,6 +110,10 @@ class DayData(BaseModel):
     # workout of each list. Remove once all frontends read the lists.
     group_workout: Optional[GroupWorkoutOut] = None
     individual_target: Optional[IndividualTargetOut] = None
+    # True when the coach set "don't show group workout today" for this athlete/day.
+    # The group workout is excluded for athletes; coaches still get the list (to edit)
+    # but should render it as hidden and exclude it from planned volume.
+    hide_group: bool = False
     workout_log: Optional[WorkoutLogOut]
 
 

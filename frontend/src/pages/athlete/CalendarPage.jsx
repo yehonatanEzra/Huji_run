@@ -24,6 +24,8 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
+  // Carousel index per day in the expanded monthly grid: { 'YYYY-MM-DD': index }.
+  const [cellIdx, setCellIdx] = useState({});
   // When a day is opened from the expanded month view, closing it should return
   // there rather than dropping back to the compact calendar.
   const [returnToExpanded, setReturnToExpanded] = useState(false);
@@ -222,7 +224,7 @@ export default function CalendarPage() {
   // Dark-glass workout-type palette (matches the dark training-log design).
   const TYPE_GLASS = {
     simple:    { label: 'Other',     color: 'bg-white/10 text-white/70' },
-    easy:      { label: 'Easy run',  color: 'bg-emerald-400/20 text-emerald-200' },
+    easy:      { label: 'Easy',      color: 'bg-emerald-400/20 text-emerald-200' },
     rest:      { label: 'Rest day',  color: 'bg-slate-400/20 text-slate-200' },
     tempo:     { label: 'Tempo',     color: 'bg-orange-400/20 text-orange-200' },
     long:      { label: 'Long run',  color: 'bg-purple-400/20 text-purple-200' },
@@ -247,17 +249,24 @@ export default function CalendarPage() {
     const isToday = day.date === format(new Date(), 'yyyy-MM-dd');
     const log = day.workout_log;
     const list = dayWorkouts(day);
-    // Lead with a race if present, else the first workout.
-    const active = list.find((w) => w.workout_type === 'race') || list[0];
+    const multi = list.length > 1;
+    // Default to leading with a race if present, else the first workout; once the
+    // athlete taps the switcher, honour their chosen index.
+    const raceIdx = list.findIndex((w) => w.workout_type === 'race');
+    const defaultIdx = raceIdx >= 0 ? raceIdx : 0;
+    const cur = cellIdx[day.date] != null
+      ? Math.min(cellIdx[day.date], Math.max(0, list.length - 1))
+      : defaultIdx;
+    const active = list[cur];
     const activeType = active?.workout_type;
     const isRace = activeType === 'race';
     const typeMeta = activeType ? TYPE_GLASS[activeType] : null;
-    const extra = list.length - 1;
 
-    // Overview shows the lead workout (+N more); note is detail-only (on day-click).
+    // Overview shows the active workout; note is detail-only (on day-click).
     const lead = active?.title || active?.content || active?.main_session || active?.warmup;
-    const snippet = lead ? (extra > 0 ? `${lead} +${extra} more` : lead) : null;
+    const snippet = lead || null;
     const note = null;
+    const dispKm = multi ? (active?.distance_km || 0) : plannedKmForDay(day);
 
     const km = log?.distance_km;
     const kudos = log?.kudos_count;
@@ -274,12 +283,23 @@ export default function CalendarPage() {
       >
         <div className="flex justify-between items-start gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-white/50">
-              {isRace && '🏁 '}{format(date, 'EEE, MMM d')}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-white/50">
+                {isRace && '🏁 '}{format(date, 'EEE, MMM d')}
+              </p>
+              {multi && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [day.date]: (cur + 1) % list.length })); }}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#c0c1ff] bg-white/10 hover:bg-white/20 rounded-full px-2 py-0.5 transition"
+                  title="Switch workout"
+                >
+                  {cur + 1}/{list.length} · next ›
+                </button>
+              )}
+            </div>
             {snippet ? (
               <p className="text-[17px] leading-snug text-[#e5e2e3] mt-0.5 truncate">
-                {snippet}{plannedKmForDay(day) > 0 && <span className="text-sm text-white/45 font-normal"> · {fmtKm(plannedKmForDay(day))} km</span>}
+                {snippet}{dispKm > 0 && <span className="text-sm text-white/45 font-normal"> · {fmtKm(dispKm)} km</span>}
               </p>
             ) : (
               <p className="text-[17px] italic text-white/35 mt-0.5">No workout scheduled</p>
@@ -294,6 +314,9 @@ export default function CalendarPage() {
           <div className="flex flex-col items-end gap-1.5 shrink-0">
             {typeMeta && (
               <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${typeMeta.color}`}>{typeMeta.label}</span>
+            )}
+            {multi && plannedKmForDay(day) > 0 && (
+              <span className="text-xs font-semibold text-white/70">Daily: {fmtKm(plannedKmForDay(day))} km</span>
             )}
             {log && (
               <div className="flex items-center gap-1.5">
@@ -381,24 +404,31 @@ export default function CalendarPage() {
                 const hasLog = day.workout_log;
                 const inMonth = dayDate.getMonth() === currentDate.getMonth();
                 const _list = dayWorkouts(day);
-                const _active = _list.find((w) => w.workout_type === 'race') || _list[0];
+                const _multi = _list.length > 1;
+                const _cidx = Math.min(cellIdx[day.date] || 0, Math.max(0, _list.length - 1));
+                const _active = _list[_cidx];
                 const activeType = _active?.workout_type;
                 const isRace = activeType === 'race';
                 const tag = activeType ? TYPE_ABBR_GLASS[activeType] : null;
-                const _extra = _list.length - 1;
                 return (
                   <button
                     key={day.date}
                     onClick={() => openDay(day)}
                     style={glass}
-                    className={`flex flex-col items-center justify-start py-1 px-1 rounded-xl relative transition active:scale-95 border ${
+                    className={`flex flex-col items-center justify-start py-2 px-1 min-h-[78px] rounded-xl relative transition active:scale-95 border ${
                       !inMonth ? 'opacity-40 border-white/10' :
                       isRace ? 'border-[#8083ff]/45 bg-[#8083ff]/10' :
                       isToday ? 'border-[#c0c1ff]/40 bg-[#c0c1ff]/10' : 'border-white/10'
                     }`}
                   >
-                    {_extra > 0 && (
-                      <span className="absolute top-0.5 right-0.5 text-[7px] font-bold text-white/70 bg-white/15 rounded px-0.5 leading-none">+{_extra}</span>
+                    {_multi && (
+                      <button
+                        className="absolute top-0.5 right-0.5 text-[7px] font-bold text-white/80 bg-white/15 hover:bg-white/30 rounded px-0.5 leading-none transition"
+                        onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [day.date]: ((m[day.date] || 0) + 1) % _list.length })); }}
+                        title="Switch workout"
+                      >
+                        {_cidx + 1}/{_list.length}
+                      </button>
                     )}
                     {/* Workout-type tag at the top */}
                     <span className="h-3 flex items-center">
@@ -410,7 +440,7 @@ export default function CalendarPage() {
                     </span>
                     {/* Km run this day — "-" when zero */}
                     <span className={`text-[10px] font-bold leading-none mt-0.5 ${hasLog?.distance_km ? 'text-[#c0c1ff]' : 'text-white/35'}`}>
-                      {hasLog?.distance_km ? Number(hasLog.distance_km).toFixed(1) : '-'}
+                      {hasLog?.distance_km ? `${Number(hasLog.distance_km).toFixed(1)}k` : '-'}
                     </span>
                     <span className={`text-xl font-semibold leading-none mt-0.5 ${isToday ? 'text-[#c0c1ff]' : 'text-white'}`}>
                       {format(dayDate, 'd')}
@@ -840,17 +870,18 @@ export default function CalendarPage() {
                         status === 'partial' ? 'bg-yellow-500/35 border-yellow-400/45 hover:bg-yellow-500/45' :
                         status === 'missed' ? 'bg-red-500/35 border-red-400/45 hover:bg-red-500/45' :
                         'bg-white/20 border-white/30 hover:bg-white/30';
-                      const cellHeight = 150;
+                      const cellHeight = 195;
                       const wlist = dayWorkouts(d);
-                      const active = wlist.find((w) => w.workout_type === 'race') || wlist[0];
+                      const multi = wlist.length > 1;
+                      const cidx = Math.min(cellIdx[d.date] || 0, Math.max(0, wlist.length - 1));
+                      const active = wlist[cidx];
                       const personalOverride = active?._source === 'personal';
-                      const extraCount = wlist.length - 1;
                       const workoutTitle = active?.title || (personalOverride ? 'Personal' : '');
                       const workoutBody = active?.content || active?.main_session || active?.warmup || '';
                       const hasPersonal = wlist.some((w) => w._source === 'personal');
                       const TYPE_FULL = {
                         simple:    { label: 'Other',     color: 'bg-white/10 text-white/70' },
-                        easy:      { label: 'Easy run',  color: 'bg-emerald-400/20 text-emerald-200' },
+                        easy:      { label: 'Easy',      color: 'bg-emerald-400/20 text-emerald-200' },
                         rest:      { label: 'Rest day',  color: 'bg-slate-400/20 text-slate-200' },
                         tempo:     { label: 'Tempo',     color: 'bg-orange-400/20 text-orange-200' },
                         long:      { label: 'Long run',  color: 'bg-purple-400/20 text-purple-200' },
@@ -868,7 +899,18 @@ export default function CalendarPage() {
                           style={{ minHeight: `${cellHeight}px` }}
                         >
                           <div className="flex items-start justify-between px-2 pt-1.5">
-                            <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}</span>
+                            <span className="flex items-center gap-1">
+                              <span className="text-[11px] text-white/75 font-semibold leading-none">{format(dayDate, 'd')}</span>
+                              {multi && (
+                                <button
+                                  className="text-[9px] text-[#c0c1ff] font-bold leading-none flex items-center px-1 py-px rounded bg-white/10 hover:bg-white/25 transition"
+                                  onClick={(e) => { e.stopPropagation(); setCellIdx((m) => ({ ...m, [d.date]: ((m[d.date] || 0) + 1) % wlist.length })); }}
+                                  title="Switch workout"
+                                >
+                                  {cidx + 1}/{wlist.length}
+                                </button>
+                              )}
+                            </span>
                             {typeChip && (
                               <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold leading-none ${typeChip.color}`}>
                                 {typeChip.label}
@@ -889,12 +931,19 @@ export default function CalendarPage() {
                             {workoutBody && (
                               <p className="text-[10px] text-white/65 leading-tight line-clamp-2 mt-0.5 whitespace-pre-wrap">{workoutBody}</p>
                             )}
-                            {extraCount > 0 && (
-                              <p className="text-[9px] text-[#c0c1ff] font-semibold mt-0.5">+{extraCount} more</p>
-                            )}
-                            {plannedKmForDay(d) > 0 && (
-                              <p className="text-[11px] text-white font-bold leading-none mt-auto self-end">{fmtKm(plannedKmForDay(d))} km</p>
-                            )}
+                            {(() => {
+                              const kmParts = wlist.map((w) => w.distance_km || 0).filter((k) => k > 0);
+                              const totalKm = kmParts.reduce((a, b) => a + b, 0);
+                              if (totalKm <= 0) return null;
+                              return (
+                                <p className="text-[11px] font-bold leading-none mt-auto self-end">
+                                  {kmParts.length > 1 && (
+                                    <span className="text-white/50 font-semibold">{kmParts.map(fmtKm).join(' + ')} = </span>
+                                  )}
+                                  <span className="text-white">{fmtKm(totalKm)} km</span>
+                                </p>
+                              );
+                            })()}
                           </div>
 
                           {/* Divider */}

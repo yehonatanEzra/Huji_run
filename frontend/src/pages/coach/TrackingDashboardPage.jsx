@@ -243,18 +243,15 @@ export default function TrackingDashboardPage() {
   useEffect(() => {
     const st = location.state;
     if (!st?.openAthleteId || !st?.openDate) return;
-    let alive = true;
+    // Clear nav state immediately so the back button doesn't re-open the modal.
+    navigate(location.pathname, { replace: true, state: null });
     (async () => {
       try {
         const { data } = await getAthleteWeek(st.openAthleteId, st.openDate);
         const day = data.days.find((x) => x.date === st.openDate);
-        if (alive && day) {
-          openCell({ id: st.openAthleteId, full_name: st.athleteName || '', group_name: st.groupName || '' }, day);
-        }
+        if (day) openCell({ id: st.openAthleteId, full_name: st.athleteName || '', group_name: st.groupName || '' }, day);
       } catch (e) { console.error(e); }
     })();
-    navigate(location.pathname, { replace: true, state: null });
-    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
@@ -1007,7 +1004,7 @@ export default function TrackingDashboardPage() {
 
       <Modal open={!!selected} onClose={closeSelected}
         title={selected ? (showTargetForm ? (editingTargetId ? 'Edit workout' : 'Add workout') : format(new Date(selected.day.date + 'T00:00'), 'EEEE, MMM d')) : ''}
-        panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
+        panelClassName="bg-[#0a0a0a] border-t border-white/10">
         {selected && (
           <div className="space-y-4">
             {showTargetForm ? (
@@ -1357,7 +1354,7 @@ export default function TrackingDashboardPage() {
         onClose={() => setMonthExpanded(false)}
         title="Training log"
         fullScreen
-        panelClassName="bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-950"
+        panelClassName="bg-[#0a0a0a]"
       >
         {profileMonth && profile && (
           <div>

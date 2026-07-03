@@ -188,8 +188,11 @@ def request_code(body: RequestCodeRequest, background: BackgroundTasks, db: Anno
 def register(body: RegisterRequest, db: Annotated[Session, Depends(get_db)]):
     email = body.email.lower()
 
-    # Validate email code first
-    _validate_and_consume(db, email, "register", body.code)
+    # Validate email code — only when verification is required. Otherwise anyone
+    # can register with any email (no code), and it's marked verified so the
+    # "add your email" banner doesn't nag.
+    if settings.REQUIRE_EMAIL_VERIFICATION:
+        _validate_and_consume(db, email, "register", body.code)
 
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="Username already taken")

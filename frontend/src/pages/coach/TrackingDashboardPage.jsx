@@ -50,6 +50,9 @@ export default function TrackingDashboardPage() {
   // Local checkbox state for "don't show group workout today" — applied only when
   // the coach clicks Apply, so it's not conflated with the personal-workout Add.
   const [pendingHide, setPendingHide] = useState(false);
+  // The add/edit personal-workout form is collapsed until the coach opens it via
+  // "+ Add workout" or "Edit" on an existing one.
+  const [showTargetForm, setShowTargetForm] = useState(false);
   // null = the form is creating a new personal workout; id = editing that one.
   const [editingTargetId, setEditingTargetId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -68,6 +71,7 @@ export default function TrackingDashboardPage() {
   const [returnToExpanded, setReturnToExpanded] = useState(false);
   const [expandedZoom, setExpandedZoom] = useState(0.75);
   const expandedScrollRef = useRef(null);
+  const addFormRef = useRef(null);  // the bottom add/edit form, for scroll-into-view
   const pinchRef = useRef({ startDist: 0, startZoom: 1 });
 
   useEffect(() => {
@@ -221,10 +225,16 @@ export default function TrackingDashboardPage() {
     setEditingTargetId(t?.id || null);
   };
 
+  const openTargetForm = (t) => {
+    seedForm(t);
+    setShowTargetForm(true);
+  };
+
   const openCell = (athlete, dayData, fromExpanded = false) => {
     setReturnToExpanded(fromExpanded);
     setSelected({ athlete, day: dayData });
     setPendingHide(!!dayData.hide_group);
+    setShowTargetForm(false);  // add/edit form starts collapsed
     seedForm(null);  // existing workouts show in a list; the form starts as "add"
   };
 
@@ -262,6 +272,19 @@ export default function TrackingDashboardPage() {
     setSaving(true);
     try {
       await setGroupVisibility(selected.athlete.id, selected.day.date, pendingHide);
+      await refreshSelectedDay();
+      fetchData();
+    } catch (err) { console.error(err); }
+    finally { setSaving(false); }
+  };
+
+  const toggleGroupHide = async () => {
+    if (!selected) return;
+    const next = !selected.day.hide_group;
+    setSaving(true);
+    try {
+      await setGroupVisibility(selected.athlete.id, selected.day.date, next);
+      setPendingHide(next);
       await refreshSelectedDay();
       fetchData();
     } catch (err) { console.error(err); }
@@ -312,6 +335,7 @@ export default function TrackingDashboardPage() {
         await deleteTargetById(editingTargetId);
       }
       seedForm(null);            // reset to "add" so the coach can add another
+      setShowTargetForm(false);  // collapse the form back down after saving
       await refreshSelectedDay();  // refresh the day's list in place
       fetchData();
       if (profile && profile.id === selected.athlete.id) {
@@ -982,63 +1006,232 @@ export default function TrackingDashboardPage() {
       </Modal>
 
       <Modal open={!!selected} onClose={closeSelected}
-        title={selected ? format(new Date(selected.day.date + 'T00:00'), 'EEEE, MMM d') : ''}
+        title={selected ? (showTargetForm ? (editingTargetId ? 'Edit workout' : 'Add workout') : format(new Date(selected.day.date + 'T00:00'), 'EEEE, MMM d')) : ''}
         panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10">
         {selected && (
           <div className="space-y-4">
-            <p className="text-xs text-white/60 -mt-2">{selected.athlete.full_name}</p>
-            {/* Group workout section */}
+            {showTargetForm ? (
+              /* ── Form card (replaces day view when adding/editing) ── */
+              <div className="space-y-3">
+                <button
+                  onClick={() => { seedForm(null); setShowTargetForm(false); }}
+                  className="flex items-center gap-1.5 text-xs text-white/60 hover:text-white transition mb-1"
+                >
+                  ← Back
+                </button>
+                <p className="text-xs text-white/50">{selected.athlete.full_name}</p>
+                {(() => {
+                  const meta = typeMetaFor(personalForm.workout_type);
+                  const setF = (k, v) => setPersonalForm(f => ({ ...f, [k]: v }));
+                  const selectType = (value) => setPersonalForm(f => {
+                    const wasDefault = !f.title.trim() || DEFAULT_TITLES.has(f.title.trim());
+                    const nextTitle = wasDefault ? (value === 'simple' ? '' : typeMetaFor(value).label) : f.title;
+                    return { ...f, workout_type: value, title: nextTitle };
+                  });
+                  const hasAny = (meta.structured
+                    ? (personalForm.warmup.trim() || personalForm.main_session.trim() || personalForm.cooldown.trim() || personalForm.title.trim())
+                    : ((personalForm.content || '').trim() || personalForm.title.trim()))
+                    || (personalForm.note || '').trim();
+                  const inputCls = 'w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-400';
+                  return (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {WORKOUT_TYPES.map(t => (
+                          <button key={t.value} onClick={() => selectType(t.value)}
+                            className={`text-xs px-2 py-1 rounded-lg font-medium border transition ${
+                              personalForm.workout_type === t.value
+                                ? `${t.color} border-current`
+                                : 'bg-white/5 text-white/60 border-white/15 hover:bg-white/15'
+                            }`}>
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                      <input type="text" value={personalForm.title}
+                        onChange={(e) => setF('title', e.target.value)}
+                        placeholder="Title (shown on calendar)"
+                        className={inputCls} />
+
+                      {tracksDistance(personalForm.workout_type) && (
+                        <input type="number" inputMode="decimal" value={personalForm.distance_km}
+                          onChange={(e) => setF('distance_km', e.target.value)}
+                          placeholder="Distance (km)"
+                          className={inputCls} />
+                      )}
+
+                      {meta.structured ? (
+                        <>
+                          <textarea value={personalForm.warmup} onChange={(e) => setF('warmup', e.target.value)}
+                            placeholder="Warm-up" rows={1}
+                            className={inputCls} />
+                          <textarea value={personalForm.main_session} onChange={(e) => setF('main_session', e.target.value)}
+                            placeholder={meta.mainLabel || 'Main session'} rows={2}
+                            className={inputCls} />
+                          <textarea value={personalForm.cooldown} onChange={(e) => setF('cooldown', e.target.value)}
+                            placeholder="Cool-down" rows={1}
+                            className={inputCls} />
+                        </>
+                      ) : (
+                        <textarea value={personalForm.content} onChange={(e) => setF('content', e.target.value)}
+                          placeholder="Workout (what to do)…" rows={2}
+                          className={inputCls} />
+                      )}
+
+                      <textarea value={personalForm.note} onChange={(e) => setF('note', e.target.value)}
+                        placeholder="Note for the athlete (optional)…" rows={2}
+                        className={inputCls} />
+
+                      {hasAny && (
+                        <>
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox" checked={additional} onChange={(e) => setAdditional(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                            <span className="text-xs text-white/75">Show in addition to group workout
+                              <span className="block text-[11px] text-white/45">Athlete sees this even when a group workout exists. If unchecked, a group workout that day replaces it.</span>
+                            </span>
+                          </label>
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                            <span className="text-xs text-white/75">Hide from athlete
+                              <span className="block text-[11px] text-white/45">They won't see it until you share. You (and the group's coaches) still see it in gray.</span>
+                            </span>
+                          </label>
+                        </>
+                      )}
+
+                      <div className="flex gap-2 mt-3">
+                        <button onClick={() => handleSavePersonal()} disabled={saving}
+                          className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition">
+                          {saving ? 'Saving...' : editingTargetId ? (hidden ? 'Update (hidden)' : 'Update') : (hidden ? 'Add (hidden)' : 'Add')}
+                        </button>
+                        <button onClick={() => { seedForm(null); setShowTargetForm(false); }}
+                          className="flex-1 border border-white/25 text-white/75 hover:text-white hover:bg-white/10 rounded-lg py-2.5 text-sm font-medium transition">
+                          Cancel
+                        </button>
+                      </div>
+                      {hidden && (
+                        <button onClick={() => handleSavePersonal(false)} disabled={saving}
+                          className="w-full mt-2 border border-blue-400/50 text-blue-200 rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-400/10 disabled:opacity-50 transition">
+                          Share with athlete now
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+            /* ── Day view ── */
+            <><p className="text-xs text-white/60 -mt-2">{selected.athlete.full_name}</p>
+            {/* Workouts — everything the athlete has this day (group + personal),
+                each labelled. "No workout today" when there's genuinely nothing. */}
             <div className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-lg p-3">
-              <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50 mb-1.5">
-                Group Workout ({selected.athlete.group_name || 'No group'})
-              </p>
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-white/50 mb-2">Workouts</p>
               {(() => {
                 const gw = selected.day.group_workout;
-                if (!gw) return <p className="text-sm text-white/40 italic">No group workout for this day</p>;
-                const isStructured = ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(gw.workout_type);
+                // Hidden (coach-only draft) workouts sink to the bottom of the list;
+                // stable sort keeps the saved order within each group.
+                const targets = [...(selected.day.targets || [])].sort((a, b) => (a.hidden ? 1 : 0) - (b.hidden ? 1 : 0));
+                if (!gw && targets.length === 0) {
+                  return <p className="text-sm text-white/40 italic">No workout today</p>;
+                }
                 const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling' };
-                const MAIN_LABEL = { race: 'Race' };
-                const middleLabel = MAIN_LABEL[gw.workout_type] || 'Main';
-                const gwIsRace = gw.workout_type === 'race';
+                const structured = (ty) => ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(ty);
+                const gwHidden = !!selected.day.hide_group;
+                const gwCard = gw && (() => {
+                  const gwIsRace = gw.workout_type === 'race';
+                  const middleLabel = gwIsRace ? 'Race' : 'Main';
+                  return (
+                    <div className={`rounded-lg border p-2.5 ${gwHidden ? 'border-dashed border-white/20 bg-white/[0.03] opacity-60' : gwIsRace ? 'border-indigo-400/50 bg-indigo-400/15' : 'border-white/10 bg-white/[0.05]'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-indigo-400/25 text-indigo-100">Group</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-white/10 text-white/70">{TYPE_LABELS[gw.workout_type] || 'Other'}</span>
+                          {gwHidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
+                        </div>
+                        <button
+                          onClick={toggleGroupHide}
+                          disabled={saving}
+                          className={`shrink-0 text-[11px] px-2 py-1 rounded border disabled:opacity-50 ${gwHidden ? 'border-green-400/40 text-green-300 hover:bg-green-500/15' : 'border-white/25 text-white/50 hover:bg-white/10'}`}
+                          title={gwHidden ? 'Show group workout to athlete' : 'Hide group workout from athlete'}
+                        >{gwHidden ? 'Show' : 'Hide'}</button>
+                      </div>
+                      {(gw.title || gwIsRace) && (
+                        <p className="text-sm font-semibold text-white mt-0.5">{gwIsRace && '🏁 '}{gw.title || 'Race day'}
+                          {gw.distance_km > 0 && <span className="text-white/45 font-normal"> · {Number(gw.distance_km).toFixed(1)} km</span>}
+                        </p>
+                      )}
+                      {structured(gw.workout_type) ? (
+                        <div className="text-xs text-white/80 space-y-0.5 mt-1">
+                          {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-white/40">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
+                          {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
+                          {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-white/40">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
+                        </div>
+                      ) : (
+                        gw.content && <p className="text-xs text-white/80 whitespace-pre-wrap mt-1">{gw.content}</p>
+                      )}
+                    </div>
+                  );
+                })();
                 return (
-                  <div className={`space-y-1.5 ${gwIsRace ? '-m-3 p-3 rounded-lg bg-indigo-400/20 border-2 border-indigo-400/60' : ''}`}>
-                    {(gw.title || gw.workout_type) && (
-                      <div className="flex items-center gap-2">
-                        {gw.title && <p className="text-sm font-semibold text-white">{gwIsRace && '🏁 '}{gw.title}</p>}
-                        {!gw.title && gwIsRace && <p className="text-sm font-semibold text-white">🏁 Race day</p>}
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/20 text-white/75 font-medium">
-                          {TYPE_LABELS[gw.workout_type] || 'Simple'}
-                        </span>
-                      </div>
-                    )}
-                    {isStructured ? (
-                      <div className="text-sm space-y-1 text-white/85">
-                        {gw.warmup && <p><span className="text-[10px] uppercase tracking-wider text-white/40">WU · </span><span className="whitespace-pre-wrap">{gw.warmup}</span></p>}
-                        {gw.main_session && <p><span className="text-[10px] uppercase tracking-wider text-white/40">{middleLabel} · </span><span className="whitespace-pre-wrap">{gw.main_session}</span></p>}
-                        {gw.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-white/40">CD · </span><span className="whitespace-pre-wrap">{gw.cooldown}</span></p>}
-                      </div>
-                    ) : (
-                      gw.content && <p className="text-sm whitespace-pre-wrap text-white/85">{gw.content}</p>
-                    )}
+                  <div className="space-y-2">
+                    {/* Group workout shown first unless hidden — then it sinks below personal workouts */}
+                    {!gwHidden && gwCard}
+                    {targets.map((t, idx) => {
+                      const tm = typeMetaFor(t.workout_type);
+                      const isMain = idx === 0;
+                      return (
+                        <div key={t.id} className={`rounded-lg border p-2.5 flex items-start justify-between gap-2 ${t.hidden ? 'border-dashed border-white/15 bg-white/[0.015] opacity-60' : 'border-white/10 bg-white/[0.05]'}`}>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded font-semibold bg-blue-400/25 text-blue-100">Personal</span>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tm.color}`}>{tm.label}</span>
+                              {isMain && !t.hidden && targets.length > 1 && <span className="text-[9px] text-yellow-300 font-semibold">★ main</span>}
+                              {t.hidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
+                              {t.additional && <span className="text-[10px] text-blue-200">+ with group</span>}
+                            </div>
+                            {(t.title || t.workout_type === 'race') && (
+                              <p className="text-sm font-semibold text-white mt-0.5">{t.workout_type === 'race' && '🏁 '}{t.title || tm.label}
+                                {t.distance_km > 0 && <span className="text-white/45 font-normal"> · {Number(t.distance_km).toFixed(1)} km</span>}
+                              </p>
+                            )}
+                            {tm.structured ? (
+                              <div className="text-xs text-white/75 space-y-0.5 mt-1">
+                                {t.warmup && <p><span className="text-[10px] uppercase tracking-wider text-white/40">WU · </span><span className="whitespace-pre-wrap">{t.warmup}</span></p>}
+                                {t.main_session && <p><span className="text-[10px] uppercase tracking-wider text-white/40">{tm.mainLabel || 'Main'} · </span><span className="whitespace-pre-wrap">{t.main_session}</span></p>}
+                                {t.cooldown && <p><span className="text-[10px] uppercase tracking-wider text-white/40">CD · </span><span className="whitespace-pre-wrap">{t.cooldown}</span></p>}
+                              </div>
+                            ) : (
+                              t.content && <p className="text-xs text-white/75 whitespace-pre-wrap mt-1">{t.content}</p>
+                            )}
+                            {t.note && <p className="text-[11px] text-white/50 italic mt-1">Note: {t.note}</p>}
+                          </div>
+                          <div className="flex flex-col gap-1 shrink-0">
+                            <button onClick={() => openTargetForm(t)} disabled={saving}
+                              className="text-[11px] px-2 py-1 rounded border border-[#c0c1ff]/40 text-[#c0c1ff] hover:bg-[#c0c1ff]/10 disabled:opacity-50">Edit</button>
+                            {!isMain && !t.hidden && (
+                              <button
+                                onClick={async () => { setSaving(true); try { await promoteTarget(t.id); await refreshSelectedDay(); fetchData(); } finally { setSaving(false); } }}
+                                disabled={saving}
+                                className="text-[11px] px-2 py-1 rounded border border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/15 disabled:opacity-50"
+                                title="Set as main workout (shown first in calendar)"
+                              >★ Main</button>
+                            )}
+                            <button
+                              onClick={async () => { setSaving(true); try { await updateTargetById(t.id, { hidden: !t.hidden }); await refreshSelectedDay(); fetchData(); } finally { setSaving(false); } }}
+                              disabled={saving}
+                              className={`text-[11px] px-2 py-1 rounded border disabled:opacity-50 ${t.hidden ? 'border-green-400/40 text-green-300 hover:bg-green-500/15' : 'border-white/25 text-white/50 hover:bg-white/10'}`}
+                              title={t.hidden ? 'Share with athlete' : 'Hide from athlete'}
+                            >{t.hidden ? 'Show' : 'Hide'}</button>
+                            <button onClick={() => deleteTargetRow(t)} disabled={saving}
+                              className="text-[11px] px-2 py-1 rounded border border-red-400/30 text-red-300 hover:bg-red-500/15 disabled:opacity-50">Delete</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* Hidden group workout sinks to the bottom */}
+                    {gwHidden && gwCard}
                   </div>
                 );
               })()}
-              {selected.day.group_workout && (
-                <div className="mt-3 pt-2.5 border-t border-white/10">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="checkbox" checked={pendingHide} disabled={saving} onChange={(e) => setPendingHide(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
-                    <span className="text-xs text-white/75">Don’t show group workout today
-                      <span className="block text-[11px] text-white/45">Hides this group workout from the athlete for this day and drops it from their planned km.</span>
-                    </span>
-                  </label>
-                  {pendingHide !== !!selected.day.hide_group && (
-                    <button onClick={applyGroupHide} disabled={saving}
-                      className="mt-2 w-full bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2 text-xs font-semibold disabled:opacity-50 transition">
-                      {saving ? 'Applying…' : 'Apply'}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Athlete report section */}
@@ -1130,147 +1323,30 @@ export default function TrackingDashboardPage() {
               <WorkoutCommentThread workoutLogId={selected.day.log.id} />
             )}
 
-            {/* Personal workout section */}
-            <div className="border-t border-white/15 pt-4">
-              <p className="text-base font-bold text-white mb-3">Personal Workouts</p>
-
-              {/* Existing personal workouts for this day */}
-              {(selected.day.targets || []).length > 0 && (
-                <div className="space-y-2 mb-3">
-                  {(selected.day.targets || []).map((t, idx) => {
-                    const tm = typeMetaFor(t.workout_type);
-                    const isMain = idx === 0;
-                    return (
-                      <div key={t.id} className={`rounded-lg border p-2.5 flex items-start justify-between gap-2 ${editingTargetId === t.id ? 'border-blue-400/60 bg-blue-400/10' : t.hidden ? 'border-dashed border-white/20 bg-white/[0.03]' : 'border-white/10 bg-white/[0.05]'}`}>
-                        <button onClick={() => seedForm(t)} className="min-w-0 text-left flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${tm.color}`}>{tm.label}</span>
-                            {isMain && !t.hidden && (selected.day.targets || []).length > 1 && <span className="text-[9px] text-yellow-300 font-semibold">★ main</span>}
-                            {t.hidden && <span className="text-[10px] text-white/40">🙈 hidden</span>}
-                            {t.additional && <span className="text-[10px] text-blue-200">+ with group</span>}
-                          </div>
-                          <p className="text-sm text-white mt-0.5 truncate">
-                            {t.title || tm.label}
-                            {t.distance_km > 0 && <span className="text-white/45 font-normal"> · {Number(t.distance_km).toFixed(1)} km</span>}
-                          </p>
-                        </button>
-                        <div className="flex flex-col gap-1 shrink-0">
-                          {!isMain && !t.hidden && (
-                            <button
-                              onClick={async () => { setSaving(true); try { await promoteTarget(t.id); await refreshSelectedDay(); fetchData(); } finally { setSaving(false); } }}
-                              disabled={saving}
-                              className="text-[11px] px-2 py-1 rounded border border-yellow-400/40 text-yellow-300 hover:bg-yellow-500/15 disabled:opacity-50"
-                              title="Set as main workout (shown first in calendar)"
-                            >★ Main</button>
-                          )}
-                          <button onClick={() => deleteTargetRow(t)} disabled={saving}
-                            className="text-[11px] px-2 py-1 rounded border border-red-400/30 text-red-300 hover:bg-red-500/15 disabled:opacity-50">Delete</button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <p className="text-xs font-semibold text-white/55 mb-2">{editingTargetId ? 'Edit workout' : 'Add a workout'}</p>
-              {(() => {
-                const meta = typeMetaFor(personalForm.workout_type);
-                const setF = (k, v) => setPersonalForm(f => ({ ...f, [k]: v }));
-                const selectType = (value) => setPersonalForm(f => {
-                  const wasDefault = !f.title.trim() || DEFAULT_TITLES.has(f.title.trim());
-                  const nextTitle = wasDefault ? (value === 'simple' ? '' : typeMetaFor(value).label) : f.title;
-                  return { ...f, workout_type: value, title: nextTitle };
-                });
-                const hasAny = (meta.structured
-                  ? (personalForm.warmup.trim() || personalForm.main_session.trim() || personalForm.cooldown.trim() || personalForm.title.trim())
-                  : ((personalForm.content || '').trim() || personalForm.title.trim()))
-                  || (personalForm.note || '').trim();
-                const inputCls = 'w-full bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-blue-400';
-                return (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {WORKOUT_TYPES.map(t => (
-                        <button key={t.value} onClick={() => selectType(t.value)}
-                          className={`text-xs px-2 py-1 rounded-lg font-medium border transition ${
-                            personalForm.workout_type === t.value
-                              ? `${t.color} border-current`
-                              : 'bg-white/5 text-white/60 border-white/15 hover:bg-white/15'
-                          }`}>
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-                    <input type="text" value={personalForm.title}
-                      onChange={(e) => setF('title', e.target.value)}
-                      placeholder="Title (shown on calendar)"
-                      className={inputCls} />
-
-                    {tracksDistance(personalForm.workout_type) && (
-                      <input type="number" inputMode="decimal" value={personalForm.distance_km}
-                        onChange={(e) => setF('distance_km', e.target.value)}
-                        placeholder="Distance (km)"
-                        className={inputCls} />
-                    )}
-
-                    {meta.structured ? (
-                      <>
-                        <textarea value={personalForm.warmup} onChange={(e) => setF('warmup', e.target.value)}
-                          placeholder="Warm-up" rows={1}
-                          className={inputCls} />
-                        <textarea value={personalForm.main_session} onChange={(e) => setF('main_session', e.target.value)}
-                          placeholder={meta.mainLabel || 'Main session'} rows={2}
-                          className={inputCls} />
-                        <textarea value={personalForm.cooldown} onChange={(e) => setF('cooldown', e.target.value)}
-                          placeholder="Cool-down" rows={1}
-                          className={inputCls} />
-                      </>
-                    ) : (
-                      <textarea value={personalForm.content} onChange={(e) => setF('content', e.target.value)}
-                        placeholder="Workout (what to do)…" rows={2}
-                        className={inputCls} />
-                    )}
-
-                    {/* Always-available note — shown to the athlete only when they open the day */}
-                    <textarea value={personalForm.note} onChange={(e) => setF('note', e.target.value)}
-                      placeholder="Note for the athlete (optional)…" rows={2}
-                      className={inputCls} />
-
-                    {hasAny && (
-                      <>
-                        <label className="flex items-start gap-2 cursor-pointer">
-                          <input type="checkbox" checked={additional} onChange={(e) => setAdditional(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
-                          <span className="text-xs text-white/75">Show in addition to group workout
-                            <span className="block text-[11px] text-white/45">Athlete sees this even when a group workout exists. If unchecked, a group workout that day replaces it.</span>
-                          </span>
-                        </label>
-                        <label className="flex items-start gap-2 cursor-pointer">
-                          <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
-                          <span className="text-xs text-white/75">Hide from athlete
-                            <span className="block text-[11px] text-white/45">They won’t see it until you share. You (and the group’s coaches) still see it in gray.</span>
-                          </span>
-                        </label>
-                      </>
-                    )}
-                  </div>
-                );
-              })()}
-              <div className="flex gap-2 mt-3">
-                <button onClick={() => handleSavePersonal()} disabled={saving}
-                  className="flex-1 bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2.5 text-sm font-semibold disabled:opacity-50 transition">
-                  {saving ? 'Saving...' : editingTargetId ? (hidden ? 'Update (hidden)' : 'Update') : (hidden ? 'Add (hidden)' : 'Add')}
-                </button>
-                <button onClick={() => (editingTargetId ? seedForm(null) : closeSelected())}
-                  className="flex-1 border border-white/25 text-white/75 hover:text-white hover:bg-white/10 rounded-lg py-2.5 text-sm font-medium transition">
-                  {editingTargetId ? 'Cancel edit' : 'Close'}
-                </button>
+            {/* Bottom controls: hide-group toggle + add workout button */}
+            <div className="border-t border-white/15 pt-4 space-y-3">
+              <div>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={pendingHide} disabled={saving} onChange={(e) => setPendingHide(e.target.checked)} className="mt-0.5 w-4 h-4 rounded accent-blue-500" />
+                  <span className="text-xs text-white/75">Don’t show group workout today
+                    <span className="block text-[11px] text-white/45">{selected.day.group_workout
+                      ? "Hides this group workout from the athlete for this day and drops it from their planned km."
+                      : "The athlete won’t see any group workout added for this day (and it won’t count toward their km)."}</span>
+                  </span>
+                </label>
+                {pendingHide !== !!selected.day.hide_group && (
+                  <button onClick={applyGroupHide} disabled={saving}
+                    className="mt-2 w-full bg-blue-500 hover:bg-blue-400 text-white rounded-lg py-2 text-xs font-semibold disabled:opacity-50 transition">
+                    {saving ? "Applying…" : "Apply"}
+                  </button>
+                )}
               </div>
-              {hidden && (
-                <button onClick={() => handleSavePersonal(false)} disabled={saving}
-                  className="w-full mt-2 border border-blue-400/50 text-blue-200 rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-400/10 disabled:opacity-50 transition">
-                  Share with athlete now
-                </button>
-              )}
+              <button onClick={() => openTargetForm(null)}
+                className="w-full border border-[#c0c1ff]/40 text-[#c0c1ff] rounded-xl py-2.5 text-sm font-bold hover:bg-[#c0c1ff]/10">
+                + Add workout
+              </button>
             </div>
+            </>)}
           </div>
         )}
       </Modal>

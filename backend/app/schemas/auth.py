@@ -15,7 +15,8 @@ class RegisterRequest(BaseModel):
     gender: Literal["M", "F"]
     role: Optional[Literal["athlete", "coach"]] = "athlete"
     email: EmailStr
-    code: str
+    # Verification code — only required when REQUIRE_EMAIL_VERIFICATION is on.
+    code: str = ""
 
 
 class ForgotPasswordRequest(BaseModel):

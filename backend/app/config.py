@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     STRAVA_REDIRECT_URI: str = "http://localhost:8000/api/v1/strava/callback"
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # When False, registration skips email verification (register with any email,
+    # no code). Flip to True at launch once a sending domain is verified in Resend.
+    REQUIRE_EMAIL_VERIFICATION: bool = False
+
     # Email delivery. Preference order: Resend HTTPS API → SMTP → console stub.
     # Render's free tier blocks outbound SMTP, so RESEND_API_KEY is the prod path.
     RESEND_API_KEY: str = ""

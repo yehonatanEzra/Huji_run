@@ -7,6 +7,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getMyTeams } from '../../api/teams';
 import { requestAddEmail, addEmail } from '../../api/auth';
 
+// Email verification is paused until a sending domain is verified in Resend.
+// Flip to true (and re-enable the two-step register flow) at launch.
+const EMAIL_VERIFICATION_UI = false;
+
 const ROOT_PATHS = new Set([
   '/home', '/find-coach', '/calendar', '/races', '/hall-of-fame', '/health-wellness',
   '/profile', '/feed', '/coach/home', '/coach/dashboard', '/coach/requests', '/admin/pending',
@@ -223,7 +227,7 @@ export default function AppShell() {
       </header>
 
       {/* Email banner — shown to users who haven't verified an email yet */}
-      {user && !user.email_verified && !emailBannerDismissed && (
+      {EMAIL_VERIFICATION_UI && user && !user.email_verified && !emailBannerDismissed && (
         <div className="shrink-0 bg-indigo-600 text-white text-xs flex items-center justify-between px-4 py-2 gap-2">
           <span className="opacity-90">Secure your account — add an email to enable password reset.</span>
           <div className="flex items-center gap-3 shrink-0">

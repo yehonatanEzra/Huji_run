@@ -11,8 +11,16 @@ log = logging.getLogger(__name__)
 RESEND_ENDPOINT = "https://api.resend.com/emails"
 
 
-def _from_address() -> str:
-    return settings.EMAIL_FROM or settings.SMTP_FROM or "Huji Run <onboarding@resend.dev>"
+# Resend requires the sender to be a domain you've verified with them. Never fall
+# back to SMTP_FROM here — that's a login/relay address (often a gmail), which
+# Resend rejects with a 403. Use EMAIL_FROM if set, else Resend's shared sandbox
+# sender (which delivers to the Resend account owner's email).
+def _resend_from() -> str:
+    return settings.EMAIL_FROM or "Huji Run <onboarding@resend.dev>"
+
+
+def _smtp_from() -> str:
+    return settings.SMTP_FROM or settings.EMAIL_FROM or "Huji Run <onboarding@resend.dev>"
 
 
 def send_email(to: str, subject: str, body: str) -> None:
@@ -37,7 +45,7 @@ def _send_via_resend(to: str, subject: str, body: str) -> None:
         resp = httpx.post(
             RESEND_ENDPOINT,
             headers={"Authorization": f"Bearer {settings.RESEND_API_KEY}"},
-            json={"from": _from_address(), "to": [to], "subject": subject, "text": body},
+            json={"from": _resend_from(), "to": [to], "subject": subject, "text": body},
             timeout=10.0,
         )
         if resp.status_code >= 400:
@@ -49,7 +57,7 @@ def _send_via_resend(to: str, subject: str, body: str) -> None:
 def _send_via_smtp(to: str, subject: str, body: str) -> None:
     msg = MIMEText(body)
     msg["Subject"] = subject
-    msg["From"] = _from_address()
+    msg["From"] = _smtp_from()
     msg["To"] = to
     try:
         with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as smtp:

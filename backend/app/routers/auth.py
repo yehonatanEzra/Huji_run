@@ -6,7 +6,7 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -166,7 +166,7 @@ def _token_response(db: Session, user: User, active_team_id: Optional[int] = Non
 # --- Endpoints ---
 
 @router.post("/request-code", status_code=status.HTTP_200_OK)
-def request_code(body: RequestCodeRequest, db: Annotated[Session, Depends(get_db)]):
+def request_code(body: RequestCodeRequest, background: BackgroundTasks, db: Annotated[Session, Depends(get_db)]):
     """Send a verification code to `email`. Generic 200 even if email is already taken,
     so we don't leak account existence for the register flow."""
     email = body.email.lower()
@@ -179,7 +179,8 @@ def request_code(body: RequestCodeRequest, db: Annotated[Session, Depends(get_db
 
     _throttle_check(db, email, body.purpose)
     code = _create_verification(db, email, body.purpose)
-    _send_code(email, body.purpose, code)
+    # Send after the response returns so SMTP latency never blocks the request.
+    background.add_task(_send_code, email, body.purpose, code)
     return {"detail": "Code sent"}
 
 
@@ -256,14 +257,14 @@ def me(
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
-def forgot_password(body: ForgotPasswordRequest, db: Annotated[Session, Depends(get_db)]):
+def forgot_password(body: ForgotPasswordRequest, background: BackgroundTasks, db: Annotated[Session, Depends(get_db)]):
     """Always returns 200 to avoid leaking whether the email is registered."""
     email = body.email.lower()
     user = db.query(User).filter(User.email == email, User.email_verified == True).first()  # noqa: E712
     if user:
         _throttle_check(db, email, "reset")
         code = _create_verification(db, email, "reset")
-        _send_code(email, "reset", code)
+        background.add_task(_send_code, email, "reset", code)
     return {"detail": "If that email is registered, we sent a reset code"}
 
 
@@ -284,6 +285,7 @@ def reset_password(body: ResetPasswordRequest, db: Annotated[Session, Depends(ge
 @router.post("/request-add-email", status_code=status.HTTP_200_OK)
 def request_add_email(
     body: RequestAddEmailRequest,
+    background: BackgroundTasks,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
@@ -294,7 +296,7 @@ def request_add_email(
 
     _throttle_check(db, email, "register")
     code = _create_verification(db, email, "register")
-    _send_code(email, "register", code)
+    background.add_task(_send_code, email, "register", code)
     return {"detail": "Code sent"}
 
 

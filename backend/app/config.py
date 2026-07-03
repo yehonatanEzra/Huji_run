@@ -18,6 +18,13 @@ class Settings(BaseSettings):
     STRAVA_REDIRECT_URI: str = "http://localhost:8000/api/v1/strava/callback"
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Email delivery. Preference order: Resend HTTPS API → SMTP → console stub.
+    # Render's free tier blocks outbound SMTP, so RESEND_API_KEY is the prod path.
+    RESEND_API_KEY: str = ""
+    # Verified sender ("Name <you@yourdomain.com>"). Falls back to SMTP_FROM, then
+    # Resend's onboarding sandbox address (which only delivers to the account owner).
+    EMAIL_FROM: str = ""
+
     # Optional SMTP settings. When SMTP_HOST is empty, emails are logged to console only.
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

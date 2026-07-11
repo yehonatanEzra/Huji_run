@@ -32,6 +32,7 @@ class User(Base):
     strava_access_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     strava_refresh_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     strava_token_expires_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    strava_last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     @property

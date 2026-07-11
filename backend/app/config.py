@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     STRAVA_CLIENT_SECRET: str = ""
     STRAVA_REDIRECT_URI: str = "http://localhost:8000/api/v1/strava/callback"
     FRONTEND_URL: str = "http://localhost:5173"
+    DISABLE_STRAVA: bool = False
 
     # When False, registration skips email verification (register with any email,
     # no code). Flip to True at launch once a sending domain is verified in Resend.

@@ -19,5 +19,7 @@ export const adminListStravaUsers = () =>
   api.get('/strava/admin/users');
 export const adminDisconnectStrava = (userId) =>
   api.post(`/strava/admin/disconnect/${userId}`);
+export const adminDisconnectAllStrava = () =>
+  api.post('/strava/admin/disconnect-all');
 export const adminGetStravaStatus = () =>
   api.get('/strava/admin/status');

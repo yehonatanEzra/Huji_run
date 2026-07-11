@@ -49,6 +49,7 @@ router = APIRouter(prefix="/strava", tags=["strava"])
 
 STRAVA_AUTH_URL = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
+STRAVA_DEAUTH_URL = "https://www.strava.com/oauth/deauthorize"
 STRAVA_ACTIVITIES_URL = "https://www.strava.com/api/v3/athlete/activities"
 
 # Sport types that count toward the running km total. Other types (Walk, Ride,
@@ -89,6 +90,44 @@ def _ensure_fresh_token(user: User, db: Session) -> str:
     user.strava_token_expires_at = d["expires_at"]
     db.commit()
     return user.strava_access_token
+
+
+def _deauthorize_strava(user: User, db: Session) -> bool:
+    """Best-effort: tell Strava to release this athlete's slot (so they no longer
+    count against the app's athlete limit), then clear our stored tokens.
+
+    Unlike a plain token-wipe, this hits Strava's /oauth/deauthorize so the
+    connection is dropped on Strava's side too. Always clears our DB fields even
+    if the Strava call fails (a broken token can't be deauthorized, but we still
+    want it gone locally). Returns True if Strava confirmed the deauthorization.
+    """
+    deauthorized = False
+    if user.strava_access_token:
+        token = user.strava_access_token
+        try:
+            # Refresh first so we deauthorize with a currently-valid token.
+            token = _ensure_fresh_token(user, db)
+        except Exception:
+            log.warning("strava_deauth_refresh_failed", user_id=user.id)
+        try:
+            r = httpx.post(
+                STRAVA_DEAUTH_URL,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=STRAVA_HTTP_TIMEOUT,
+            )
+            deauthorized = r.status_code < 400
+            if not deauthorized:
+                log.warning("strava_deauth_failed", user_id=user.id, status=r.status_code, body=r.text[:200])
+        except Exception:
+            log.warning("strava_deauth_error", user_id=user.id)
+
+    user.strava_athlete_id = None
+    user.strava_access_token = None
+    user.strava_refresh_token = None
+    user.strava_token_expires_at = None
+    user.strava_last_synced_at = None
+    db.commit()
+    return deauthorized
 
 
 def _fetch_activities_for_date(access_token: str, date_str: str) -> list:
@@ -254,11 +293,8 @@ def disconnect_strava(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    current_user.strava_athlete_id = None
-    current_user.strava_access_token = None
-    current_user.strava_refresh_token = None
-    current_user.strava_token_expires_at = None
-    db.commit()
+    # Deauthorize on Strava too, so the athlete's slot is freed on Strava's side.
+    _deauthorize_strava(current_user, db)
     return {"ok": True}
 
 
@@ -519,17 +555,38 @@ def admin_disconnect_strava(
     _admin: Annotated[User, Depends(require_admin)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Admin-only: disconnect a user's Strava account."""
+    """Admin-only: disconnect a user's Strava account and free their Strava slot."""
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.strava_athlete_id = None
-    user.strava_access_token = None
-    user.strava_refresh_token = None
-    user.strava_token_expires_at = None
-    user.strava_last_synced_at = None
-    db.commit()
-    return {"ok": True, "message": f"Disconnected Strava for {user.username}"}
+    deauthorized = _deauthorize_strava(user, db)
+    return {
+        "ok": True,
+        "deauthorized": deauthorized,
+        "message": f"Disconnected Strava for {user.username}",
+    }
+
+
+@router.post("/admin/disconnect-all")
+def admin_disconnect_all_strava(
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Admin-only: disconnect EVERY connected user and free all Strava slots.
+
+    Deauthorizes each athlete on Strava so they stop counting against the app's
+    athlete limit. Best-effort per user — a failed Strava call still clears our
+    side. Returns how many were processed and how many Strava confirmed.
+    """
+    users = db.query(User).filter(User.strava_access_token.isnot(None)).all()
+    processed = 0
+    deauthorized = 0
+    for user in users:
+        processed += 1
+        if _deauthorize_strava(user, db):
+            deauthorized += 1
+    log.info("strava_admin_disconnect_all", processed=processed, deauthorized=deauthorized)
+    return {"ok": True, "processed": processed, "deauthorized": deauthorized}
 
 
 @router.get("/admin/status")

@@ -5,7 +5,7 @@ import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import { listPending, approveRace, rejectRace, approveResult, rejectResult } from '../../api/adminReview';
 import { listAllUsers, patchUser, deleteUser } from '../../api/adminUsers';
-import { adminListStravaUsers, adminDisconnectStrava, adminGetStravaStatus } from '../../api/strava';
+import { adminListStravaUsers, adminDisconnectStrava, adminDisconnectAllStrava, adminGetStravaStatus } from '../../api/strava';
 
 const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
 const GLASS_INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
@@ -441,14 +441,29 @@ function StravaTab() {
   }, [fetchData]);
 
   const handleDisconnect = useCallback(async (userId, username) => {
-    if (!confirm(`Disconnect Strava for ${username}? They'll need to reconnect.`)) return;
+    if (!confirm(`Disconnect Strava for ${username}? This frees their Strava slot and they'll need to fully reconnect.`)) return;
     setDisconnecting(userId);
     try {
       await adminDisconnectStrava(userId);
-      setUsers(users.map(u => u.id === userId ? { ...u, strava_connected: false } : u));
+      setUsers(users.map(u => u.id === userId ? { ...u, strava_connected: false, strava_last_synced_at: null } : u));
     } catch (e) {
       console.error('Failed to disconnect', e);
       alert('Failed to disconnect');
+    } finally {
+      setDisconnecting(null);
+    }
+  }, [users]);
+
+  const handleDisconnectAll = useCallback(async () => {
+    if (!confirm('Disconnect ALL members from Strava? This deauthorizes every athlete on Strava (freeing all your slots). Everyone will need to reconnect.')) return;
+    setDisconnecting('all');
+    try {
+      const { data } = await adminDisconnectAllStrava();
+      setUsers(users.map(u => ({ ...u, strava_connected: false, strava_last_synced_at: null })));
+      alert(`Disconnected ${data.processed} member(s). Strava confirmed ${data.deauthorized} slot(s) freed.`);
+    } catch (e) {
+      console.error('Failed to disconnect all', e);
+      alert('Failed to disconnect all');
     } finally {
       setDisconnecting(null);
     }
@@ -478,6 +493,15 @@ function StravaTab() {
             <p className="text-2xl font-bold text-[#c0c1ff]">{connectedCount} / {users.length}</p>
           </div>
         </div>
+        {connectedCount > 0 && (
+          <button
+            onClick={handleDisconnectAll}
+            disabled={disconnecting === 'all'}
+            className="mt-3 w-full text-xs font-bold px-3 py-2 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-500/15 disabled:opacity-50 transition"
+          >
+            {disconnecting === 'all' ? 'Disconnecting all…' : `Disconnect all (${connectedCount}) & free Strava slots`}
+          </button>
+        )}
       </div>
 
       {/* Users list */}

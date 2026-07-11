@@ -448,23 +448,26 @@ def sync_strava(
         ]
         notes = "Strava: " + " · ".join(parts)
 
-        # Check if a workout log already exists for this athlete on this date
-        log = db.query(WorkoutLog).filter(
+        # Check if a workout log already exists for this athlete on this date.
+        # NB: don't name this `log` — that shadows the module-level structlog
+        # logger for the whole function scope and makes the `log.warning(...)`
+        # calls in the except blocks above raise UnboundLocalError.
+        existing_log = db.query(WorkoutLog).filter(
             WorkoutLog.athlete_id == current_user.id,
             WorkoutLog.date == day,
         ).first()
 
         # If manual override is enabled, skip to avoid overwriting coach/user changes
-        if log and log.manual_override:
+        if existing_log and existing_log.manual_override:
             skipped += 1
             continue
 
         # Update existing log or create a brand new WorkoutLog entry
-        if log:
-            log.status = "completed"
-            log.completed = True
-            log.distance_km = round(total_km, 2)
-            log.notes = notes
+        if existing_log:
+            existing_log.status = "completed"
+            existing_log.completed = True
+            existing_log.distance_km = round(total_km, 2)
+            existing_log.notes = notes
             updated += 1
         else:
             db.add(WorkoutLog(

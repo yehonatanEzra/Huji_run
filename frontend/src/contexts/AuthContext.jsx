@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
 import { switchTeam as apiSwitchTeam } from '../api/teams';
+import { syncStrava } from '../api/strava';
+
+const STRAVA_AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
 const AuthContext = createContext(null);
 
@@ -18,6 +21,7 @@ const mergeUser = (data) => ({
   active_team_name: data.active_team_name ?? null,
   email: data.email ?? null,
   email_verified: data.email_verified ?? false,
+  strava_last_synced_at: data.strava_last_synced_at ?? null,
 });
 
 export function AuthProvider({ children }) {
@@ -36,6 +40,15 @@ export function AuthProvider({ children }) {
       const merged = mergeUser(data);
       localStorage.setItem('user', JSON.stringify(merged));
       setUser(merged);
+      // Auto-sync Strava for athletes who have connected, if 30+ min since last sync.
+      if (merged.role === 'athlete' && merged.strava_connected) {
+        const lastSynced = merged.strava_last_synced_at ? new Date(merged.strava_last_synced_at).getTime() : 0;
+        if (Date.now() - lastSynced > STRAVA_AUTO_SYNC_INTERVAL_MS) {
+          syncStrava(2).then(() => {
+            window.dispatchEvent(new CustomEvent('strava-synced'));
+          }).catch(() => {});
+        }
+      }
       return merged;
     }).catch(() => null);
   }, []);

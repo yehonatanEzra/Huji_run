@@ -5,6 +5,7 @@ import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import { listPending, approveRace, rejectRace, approveResult, rejectResult } from '../../api/adminReview';
 import { listAllUsers, patchUser, deleteUser } from '../../api/adminUsers';
+import { adminListStravaUsers, adminDisconnectStrava, adminGetStravaStatus } from '../../api/strava';
 
 const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
 const GLASS_INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
@@ -46,10 +47,12 @@ export default function AdminPage() {
           )}
         </button>
         <button onClick={() => setTab('users')} className={`${TAB} ${tab === 'users' ? TAB_ACTIVE : TAB_INACTIVE}`}>Users</button>
+        <button onClick={() => setTab('strava')} className={`${TAB} ${tab === 'strava' ? TAB_ACTIVE : TAB_INACTIVE}`}>Strava</button>
       </div>
 
       {tab === 'review' && <ReviewTab pending={pending} onChanged={refreshPending} />}
       {tab === 'users' && <UsersTab />}
+      {tab === 'strava' && <StravaTab />}
     </>
   );
 }
@@ -407,5 +410,109 @@ function UserEditModal({ target, isSelf, adminCount, onClose, onSaved }) {
         </div>
       )}
     </Modal>
+  );
+}
+
+// ── Strava tab: manage Strava connections ────────────────────────
+function StravaTab() {
+  const [users, setUsers] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [disconnecting, setDisconnecting] = useState(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [usersRes, statusRes] = await Promise.all([
+        adminListStravaUsers(),
+        adminGetStravaStatus(),
+      ]);
+      setUsers(usersRes.data || []);
+      setStatus(statusRes.data || {});
+    } catch (e) {
+      console.error('Failed to fetch Strava data', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleDisconnect = useCallback(async (userId, username) => {
+    if (!confirm(`Disconnect Strava for ${username}? They'll need to reconnect.`)) return;
+    setDisconnecting(userId);
+    try {
+      await adminDisconnectStrava(userId);
+      setUsers(users.map(u => u.id === userId ? { ...u, strava_connected: false } : u));
+    } catch (e) {
+      console.error('Failed to disconnect', e);
+      alert('Failed to disconnect');
+    } finally {
+      setDisconnecting(null);
+    }
+  }, [users]);
+
+  const connectedCount = users.filter(u => u.strava_connected).length;
+
+  return (
+    <div className="space-y-4">
+      {/* Status */}
+      <div className={`p-3 rounded-lg ${GLASS}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-white/60 uppercase tracking-wider font-semibold mb-1">Strava Status</p>
+            <p className="text-sm">
+              {status?.disabled ? (
+                <span className="text-red-300">🔴 Strava connections disabled globally</span>
+              ) : status?.configured ? (
+                <span className="text-green-300">🟢 Strava is configured and enabled</span>
+              ) : (
+                <span className="text-yellow-300">🟡 Strava not configured</span>
+              )}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-white/60 uppercase tracking-wider font-semibold">Connected Users</p>
+            <p className="text-2xl font-bold text-[#c0c1ff]">{connectedCount} / {users.length}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Users list */}
+      <div className={`rounded-lg overflow-hidden ${GLASS}`}>
+        {loading ? (
+          <div className="p-4 flex items-center justify-center"><Spinner /></div>
+        ) : users.length === 0 ? (
+          <p className="p-4 text-sm text-white/40">No users found</p>
+        ) : (
+          <div className="divide-y divide-white/10">
+            {users.map(u => (
+              <div key={u.id} className="p-3 flex items-center justify-between hover:bg-white/5 transition">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white">{u.full_name}</p>
+                  <p className="text-xs text-white/60">{u.username} · {u.role}</p>
+                  {u.strava_connected && u.strava_last_synced_at && (
+                    <p className="text-xs text-green-400/70 mt-0.5">Last synced: {format(new Date(u.strava_last_synced_at), 'MMM d, HH:mm')}</p>
+                  )}
+                </div>
+                {u.strava_connected ? (
+                  <button
+                    onClick={() => handleDisconnect(u.id, u.full_name)}
+                    disabled={disconnecting === u.id}
+                    className="text-xs px-3 py-1.5 rounded border border-red-400/40 text-red-300 hover:bg-red-500/15 disabled:opacity-50 transition shrink-0 ml-2"
+                  >
+                    {disconnecting === u.id ? 'Disconnecting…' : 'Disconnect'}
+                  </button>
+                ) : (
+                  <span className="text-xs text-white/40 ml-2 shrink-0">Not connected</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

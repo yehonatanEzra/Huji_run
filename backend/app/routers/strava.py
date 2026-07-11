@@ -10,7 +10,7 @@ import httpx
 from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
-from ..dependencies import get_current_user, require_coach
+from ..dependencies import get_current_user, require_coach, require_admin
 from ..models.user import User
 from ..models.workout import WorkoutLog
 
@@ -191,6 +191,8 @@ def get_connect_url(
     redirect after the OAuth dance — useful for local dev where the frontend
     runs on multiple ports (5173 / 5174 / etc.).
     """
+    if settings.DISABLE_STRAVA:
+        raise HTTPException(status_code=503, detail="Strava integration is disabled")
     if not settings.STRAVA_CLIENT_ID:
         raise HTTPException(status_code=503, detail="Strava integration is not configured")
     state = _encode_state(current_user.id, origin)
@@ -475,10 +477,9 @@ def sync_strava(
             ))
             created += 1
 
-    # Commit all changes to the database
+    current_user.strava_last_synced_at = datetime.now(timezone.utc)
     db.commit()
-    
-    # 6. Return sync statistics payload back to the frontend
+
     return {
         "activities": len(activities),
         "days_with_activity": len(by_date),
@@ -486,4 +487,54 @@ def sync_strava(
         "updated": updated,
         "skipped_manual": skipped,
         "skipped_non_run_days": skipped_non_run_days,
+    }
+
+@router.get("/admin/users")
+def admin_list_strava_users(
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Admin-only: list all users with Strava connection status."""
+    users = db.query(User).order_by(User.id).all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "full_name": u.full_name,
+            "role": u.role,
+            "strava_connected": u.strava_connected,
+            "strava_athlete_id": u.strava_athlete_id,
+            "strava_last_synced_at": u.strava_last_synced_at.isoformat() if u.strava_last_synced_at else None,
+        }
+        for u in users
+    ]
+
+
+@router.post("/admin/disconnect/{user_id}")
+def admin_disconnect_strava(
+    user_id: int,
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Admin-only: disconnect a user's Strava account."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.strava_athlete_id = None
+    user.strava_access_token = None
+    user.strava_refresh_token = None
+    user.strava_token_expires_at = None
+    user.strava_last_synced_at = None
+    db.commit()
+    return {"ok": True, "message": f"Disconnected Strava for {user.username}"}
+
+
+@router.get("/admin/status")
+def admin_strava_status(
+    _admin: Annotated[User, Depends(require_admin)],
+):
+    """Admin-only: check if Strava is globally disabled."""
+    return {
+        "disabled": settings.DISABLE_STRAVA,
+        "configured": bool(settings.STRAVA_CLIENT_ID),
     }

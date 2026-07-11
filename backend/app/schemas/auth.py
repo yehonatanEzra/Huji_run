@@ -68,5 +68,6 @@ class UserOut(BaseModel):
     active_team_name: Optional[str] = None
     email: Optional[str] = None
     email_verified: bool = False
+    strava_last_synced_at: Optional[str] = None
 
     model_config = {"from_attributes": True}

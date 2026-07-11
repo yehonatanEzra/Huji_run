@@ -13,3 +13,11 @@ export const getMyActivityDetail = (activityId) =>
   api.get(`/strava/my-activity/${activityId}`);
 export const getAthleteActivityDetail = (athleteId, activityId) =>
   api.get(`/strava/activity/${athleteId}/${activityId}`);
+
+// Admin
+export const adminListStravaUsers = () =>
+  api.get('/strava/admin/users');
+export const adminDisconnectStrava = (userId) =>
+  api.post(`/strava/admin/disconnect/${userId}`);
+export const adminGetStravaStatus = () =>
+  api.get('/strava/admin/status');

@@ -256,6 +256,7 @@ def me(
         active_team_name=active_team_name,
         email=current_user.email,
         email_verified=current_user.email_verified,
+        strava_last_synced_at=current_user.strava_last_synced_at.isoformat() if current_user.strava_last_synced_at else None,
     )
 
 

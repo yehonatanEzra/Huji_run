@@ -38,6 +38,7 @@ export default function GroupHubPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [tab, setTab] = useState('workouts');
   const [showSettings, setShowSettings] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   const reload = useCallback(() => {
     return listGroups().then(({ data }) => {
@@ -71,7 +72,9 @@ export default function GroupHubPage() {
           </div>
           <h2 className="text-xl font-bold text-white mb-1">No groups yet</h2>
           <p className="text-sm text-white/60 mb-5 max-w-xs">Create your first training group to start adding athletes, planning workouts, and seeing insights.</p>
-          <CreateGroupButton onCreated={reload} />
+          <div className="w-full max-w-xs">
+            <CreateGroupPanel onCreated={async (newId) => { await reload(); if (newId) setSelectedId(newId); }} />
+          </div>
         </div>
       </>
     );
@@ -106,6 +109,13 @@ export default function GroupHubPage() {
             {g.name}
           </button>
         ))}
+        <button
+          onClick={() => setShowCreate(true)}
+          aria-label="Create new group"
+          className="px-3.5 py-1.5 rounded-full text-sm font-bold whitespace-nowrap border border-dashed border-[#c0c1ff]/40 text-[#c0c1ff] hover:bg-[#c0c1ff]/10 active:scale-95 transition"
+        >
+          + New
+        </button>
       </div>
 
       {/* Tabs */}
@@ -123,6 +133,17 @@ export default function GroupHubPage() {
 
       <Modal open={showSettings} onClose={() => setShowSettings(false)} panelClassName="bg-[#131314] border-t border-white/10">
         {selected && <SettingsPanel group={selected} onClose={() => setShowSettings(false)} onChanged={reload} />}
+      </Modal>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} panelClassName="bg-[#131314] border-t border-white/10">
+        <CreateGroupPanel
+          onClose={() => setShowCreate(false)}
+          onCreated={async (newId) => {
+            await reload();
+            if (newId) setSelectedId(newId);
+            setShowCreate(false);
+          }}
+        />
       </Modal>
     </>
   );
@@ -836,10 +857,6 @@ function SettingsPanel({ group, onClose, onChanged }) {
       <div className="mt-6 pt-4 border-t border-white/10">
         <TeamPublicSection />
       </div>
-
-      <div className="mt-6 pt-4 border-t border-white/10">
-        <CreateGroupButton onCreated={() => { onChanged(); onClose(); }} />
-      </div>
     </div>
   );
 }
@@ -910,16 +927,36 @@ function TeamPublicSection() {
   );
 }
 
-function CreateGroupButton({ onCreated }) {
-  const [open, setOpen] = useState(false);
+// Top-level create-group flow. Used in the create modal (from the "+ New" pill)
+// and inline in the zero-group doorway.
+function CreateGroupPanel({ onCreated, onClose }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
-  const create = async () => { if (!name.trim()) return; setBusy(true); try { await createGroup(name.trim()); setName(''); setOpen(false); onCreated(); } finally { setBusy(false); } };
-  if (!open) return <button onClick={() => setOpen(true)} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-xl py-2.5 text-sm font-bold hover:scale-[1.01] active:scale-95 transition">+ Create group</button>;
+  const [err, setErr] = useState('');
+  const create = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const { data } = await createGroup(name.trim());
+      setName('');
+      await onCreated(data?.id ?? null);
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Could not create group. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <div className="flex gap-2">
-      <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={20} placeholder="Group name…" className={GLASS_INPUT} onKeyDown={(e) => e.key === 'Enter' && create()} />
-      <button disabled={busy} onClick={create} className="bg-[#c0c1ff] text-[#1000a9] text-sm px-4 rounded-xl font-bold disabled:opacity-40">Create</button>
+    <div>
+      <h3 className="text-base font-bold text-white mb-4">New group</h3>
+      <label className="text-[11px] uppercase tracking-widest text-white/50 font-semibold">Name</label>
+      <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={20} placeholder="e.g. Sprinters, Beginners…" className={`${GLASS_INPUT} mt-1 mb-2`} onKeyDown={(e) => e.key === 'Enter' && create()} />
+      {err ? <p className="text-xs text-red-300 mb-3">{err}</p> : <div className="mb-3" />}
+      <div className="flex gap-2">
+        {onClose && <button onClick={onClose} className="flex-1 border border-white/15 text-white/70 rounded-xl py-2.5 text-sm font-semibold hover:bg-white/5 transition">Cancel</button>}
+        <button disabled={busy || !name.trim()} onClick={create} className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 active:scale-95 transition">{busy ? 'Creating…' : 'Create group'}</button>
+      </div>
     </div>
   );
 }

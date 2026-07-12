@@ -118,8 +118,11 @@ def create_group(
     body: TrainingGroupCreate,
     db: Session = Depends(get_db),
     coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
 ):
-    g = TrainingGroup(name=body.name.strip(), created_by=coach.id, coach_id=coach.id)
+    # Attach to the active team so it's visible under team scoping (admins list
+    # groups filtered by team_id; a team-less group would silently never appear).
+    g = TrainingGroup(name=body.name.strip(), created_by=coach.id, coach_id=coach.id, team_id=active_team_id)
     db.add(g)
     db.flush()
     # The creator becomes the main coach — GroupCoach is the source of truth.

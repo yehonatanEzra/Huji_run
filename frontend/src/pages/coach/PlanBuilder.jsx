@@ -143,6 +143,36 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
     });
   };
 
+  // Reset confirmation: null | { type: 'plan' } | { type: 'week', week }
+  const [confirmReset, setConfirmReset] = useState(null);
+
+  const resetPlan = () => { setDayMap({}); setWeekTargets({}); setCellIdx({}); };
+  const resetWeek = (week) => {
+    setDayMap((prev) => {
+      const next = {};
+      Object.entries(prev).forEach(([k, v]) => {
+        if (Number(k.split('-')[0]) !== week) next[k] = v;
+      });
+      return next;
+    });
+    setWeekTargets((prev) => { const next = { ...prev }; delete next[String(week)]; return next; });
+  };
+  const doReset = () => {
+    if (confirmReset?.type === 'plan') resetPlan();
+    else if (confirmReset?.type === 'week') resetWeek(confirmReset.week);
+    setConfirmReset(null);
+  };
+
+  // Unsaved-changes guard on Back. Any edit to plan content flips `dirty`.
+  const [confirmExit, setConfirmExit] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    setDirty(true);
+  }, [name, description, weeks, dayMap, weekTargets]);
+  const handleBack = () => { if (dirty) setConfirmExit(true); else onClose(); };
+
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
     setSaving(true);
@@ -187,16 +217,24 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
       <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.40) 0%, rgba(0,0,0,0.48) 100%)' }} />
       {/* Top action bar */}
       <div className="flex items-center justify-between">
-        <button onClick={onClose} className="text-white/60 hover:text-white flex items-center gap-2 transition-colors text-sm">
+        <button onClick={handleBack} className="text-white/60 hover:text-white flex items-center gap-2 transition-colors text-sm">
           <span className="text-base leading-none">←</span> Back
         </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="bg-[#c0c1ff] hover:bg-[#a9aaff] text-[#1000a9] px-5 py-2 rounded-lg font-medium shadow-lg shadow-[#c0c1ff]/30 transition active:scale-95 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Save plan'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setConfirmReset({ type: 'plan' })}
+            className="bg-red-500 hover:bg-red-400 text-black px-3 py-2 rounded-lg text-sm font-medium transition active:scale-95"
+          >
+            Reset plan
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-[#c0c1ff] hover:bg-[#a9aaff] text-[#1000a9] px-5 py-2 rounded-lg font-medium shadow-lg shadow-[#c0c1ff]/30 transition active:scale-95 disabled:opacity-50"
+          >
+            {saving ? 'Saving…' : 'Save plan'}
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded-lg p-2">{error}</p>}
@@ -255,11 +293,12 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
       <div className={`${PANEL} rounded-2xl p-4 overflow-x-auto`}>
         <div className="w-full">
           {/* Days header */}
-          <div className="grid grid-cols-[1rem_repeat(7,1fr)_1.6rem] gap-1 mb-1.5 px-1">
+          <div className="grid grid-cols-[1rem_repeat(7,1fr)_1.6rem_1.25rem] gap-1 mb-1.5 px-1">
             <div />
             {DOW_ORDER.map((dow) => (
               <div key={dow} className="text-center text-white/50 text-[9px] font-semibold uppercase tracking-wider">{DOW[dow]}</div>
             ))}
+            <div />
             <div />
           </div>
           {/* Week rows */}
@@ -268,7 +307,7 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
               const weekKm = writtenKm(week);
               const target = parseFloat(weekTargets[week]) || 0;
               return (
-              <div key={week} className="grid grid-cols-[1rem_repeat(7,1fr)_1.6rem] gap-1 items-center px-1 py-0.5 hover:bg-white/5 rounded-lg transition-colors">
+              <div key={week} className="grid grid-cols-[1rem_repeat(7,1fr)_1.6rem_1.25rem] gap-1 items-center px-1 py-0.5 hover:bg-white/5 rounded-lg transition-colors">
                 <div className="text-white/50 font-medium text-[10px]">W{week}</div>
                 {DOW_ORDER.map((dow) => {
                   const key = cellKey(week, dow);
@@ -310,6 +349,12 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
                   <span className={target > 0 && weekKm >= target ? 'text-emerald-300' : 'text-white'}>{weekKm > 0 ? Number(weekKm.toFixed(1)) : '0'}</span>
                   {target > 0 && <span className="text-white/45">/{Number(target)}</span>}
                 </div>
+                <button
+                  onClick={() => setConfirmReset({ type: 'week', week })}
+                  title={`Reset week ${week}`}
+                  aria-label={`Reset week ${week}`}
+                  className="h-10 w-full rounded-lg flex items-center justify-center text-white/30 hover:text-red-300 hover:bg-red-500/10 transition text-sm"
+                >↺</button>
               </div>
               );
             })}
@@ -439,6 +484,10 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
                           className="w-16 bg-slate-900/50 border border-slate-600/40 rounded-md px-1.5 py-1 text-xs text-white text-right placeholder-slate-500 focus:outline-none focus:border-[#c0c1ff]"
                         />
                       </div>
+                      <button
+                        onClick={() => setConfirmReset({ type: 'week', week })}
+                        className="text-[10px] text-white/40 hover:text-red-300 transition mt-0.5"
+                      >↺ Reset week</button>
                     </div>
                   </div>
                 );
@@ -446,6 +495,42 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
             </div>
             <p className="text-[10px] text-white/40 mt-3">Tap any day to edit. Set a weekly target to track written vs planned km — the written total turns green once you reach it.</p>
           </div>
+        </div>
+      </Modal>
+
+      <Modal open={confirmExit} onClose={() => setConfirmExit(false)} panelClassName="bg-[#131314] border-t border-white/10">
+        <h3 className="text-base font-bold text-white mb-2">Save changes?</h3>
+        <p className="text-sm text-white/60 mb-5">You have unsaved changes to this plan.</p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => { setConfirmExit(false); handleSave(); }}
+            disabled={saving}
+            className="bg-[#c0c1ff] hover:bg-[#a9aaff] text-[#1000a9] rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 transition active:scale-95"
+          >
+            {saving ? 'Saving…' : 'Save & exit'}
+          </button>
+          <button
+            onClick={() => { setConfirmExit(false); onClose(); }}
+            className="bg-red-500 hover:bg-red-400 text-black rounded-xl py-2.5 text-sm font-bold transition active:scale-95"
+          >
+            Exit without saving
+          </button>
+          <button onClick={() => setConfirmExit(false)} className="border border-white/15 text-white/70 rounded-xl py-2.5 text-sm font-semibold hover:bg-white/5 transition">Cancel</button>
+        </div>
+      </Modal>
+
+      <Modal open={!!confirmReset} onClose={() => setConfirmReset(null)} panelClassName="bg-[#131314] border-t border-white/10">
+        <h3 className="text-base font-bold text-white mb-2">
+          {confirmReset?.type === 'plan' ? 'Reset entire plan?' : `Reset week ${confirmReset?.week}?`}
+        </h3>
+        <p className="text-sm text-white/60 mb-5">
+          {confirmReset?.type === 'plan'
+            ? 'This clears every workout and weekly target across all weeks. It only takes effect once you save — leave without saving to undo.'
+            : 'This clears every workout and the target for this week. It only takes effect once you save — leave without saving to undo.'}
+        </p>
+        <div className="flex gap-2">
+          <button onClick={() => setConfirmReset(null)} className="flex-1 border border-white/15 text-white/70 rounded-xl py-2.5 text-sm font-semibold hover:bg-white/5 transition">Cancel</button>
+          <button onClick={doReset} className="flex-1 bg-red-500/90 hover:bg-red-500 text-white rounded-xl py-2.5 text-sm font-bold active:scale-95 transition">Reset</button>
         </div>
       </Modal>
 

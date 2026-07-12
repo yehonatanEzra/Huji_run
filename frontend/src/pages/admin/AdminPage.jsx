@@ -419,6 +419,8 @@ function StravaTab() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState(null);
+  const [filter, setFilter] = useState('all'); // all | enabled | connected | blocked
+  const [search, setSearch] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -527,7 +529,25 @@ function StravaTab() {
   }, [users]);
 
   const connectedCount = users.filter(u => u.strava_connected).length;
+  const enabledCount = users.filter(u => u.strava_enabled !== false).length;
+  const blockedCount = users.filter(u => u.strava_enabled === false).length;
   const blocked = !!status?.block_all;
+
+  const q = search.trim().toLowerCase();
+  const filteredUsers = users.filter(u => {
+    if (filter === 'enabled' && u.strava_enabled === false) return false;
+    if (filter === 'blocked' && u.strava_enabled !== false) return false;
+    if (filter === 'connected' && !u.strava_connected) return false;
+    if (q && !(`${u.full_name} ${u.username}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  const FILTERS = [
+    { key: 'all', label: `All (${users.length})` },
+    { key: 'enabled', label: `Enabled (${enabledCount})` },
+    { key: 'connected', label: `Connected (${connectedCount})` },
+    { key: 'blocked', label: `Blocked (${blockedCount})` },
+  ];
 
   return (
     <div className="space-y-4">
@@ -594,15 +614,39 @@ function StravaTab() {
         )}
       </div>
 
+      {/* Filters + search */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          {FILTERS.map(f => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${filter === f.key ? 'bg-[#c0c1ff] text-[#1000a9] border-transparent' : 'border-white/15 text-white/60 hover:bg-white/10'}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name…"
+          className={GLASS_INPUT}
+        />
+      </div>
+
       {/* Users list */}
       <div className={`rounded-lg overflow-hidden ${GLASS}`}>
         {loading ? (
           <div className="p-4 flex items-center justify-center"><Spinner /></div>
         ) : users.length === 0 ? (
           <p className="p-4 text-sm text-white/40">No users found</p>
+        ) : filteredUsers.length === 0 ? (
+          <p className="p-4 text-sm text-white/40">No matching users</p>
         ) : (
           <div className="divide-y divide-white/10">
-            {users.map(u => (
+            {filteredUsers.map(u => (
               <div key={u.id} className="p-3 flex items-center justify-between hover:bg-white/5 transition">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white flex items-center gap-1.5">

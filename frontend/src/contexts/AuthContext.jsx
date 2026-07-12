@@ -16,6 +16,7 @@ const mergeUser = (data) => ({
   training_group_id: data.training_group_id,
   coach_id: data.coach_id ?? null,
   strava_connected: data.strava_connected ?? false,
+  strava_can_connect: data.strava_can_connect ?? true,
   has_photo: data.has_photo ?? false,
   active_team_id: data.active_team_id ?? null,
   active_team_name: data.active_team_name ?? null,

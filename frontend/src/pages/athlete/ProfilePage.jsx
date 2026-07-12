@@ -345,6 +345,10 @@ export default function ProfilePage() {
                 {stravaDisconnecting ? 'Disconnecting…' : 'Disconnect'}
               </button>
             </div>
+          ) : user?.strava_can_connect === false ? (
+            <span className="text-xs text-white/40 border border-white/15 px-3 py-1.5 rounded-lg">
+              Strava unavailable
+            </span>
           ) : (
             <button
               onClick={handleConnectStrava}

@@ -22,6 +22,7 @@ from ..schemas.auth import (
     RequestAddEmailRequest, AddEmailRequest,
 )
 from ..services.email import send_email
+from ..services import app_settings
 from ..config import settings
 
 log = logging.getLogger(__name__)
@@ -242,6 +243,11 @@ def me(
     if active_team_id is not None:
         team = db.get(Team, active_team_id)
         active_team_name = team.name if team else None
+    strava_can_connect = (
+        not settings.DISABLE_STRAVA
+        and not app_settings.get_bool(db, app_settings.STRAVA_BLOCK_ALL)
+        and current_user.strava_enabled
+    )
     return UserOut(
         id=current_user.id,
         full_name=current_user.full_name,
@@ -251,6 +257,7 @@ def me(
         training_group_id=current_user.training_group_id,
         coach_id=current_user.coach_id,
         strava_connected=current_user.strava_connected,
+        strava_can_connect=strava_can_connect,
         has_photo=current_user.has_photo,
         active_team_id=active_team_id,
         active_team_name=active_team_name,

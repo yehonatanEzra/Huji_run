@@ -63,6 +63,7 @@ class UserOut(BaseModel):
     training_group_id: Optional[int] = None
     coach_id: Optional[int] = None
     strava_connected: bool = False
+    strava_can_connect: bool = True
     has_photo: bool = False
     active_team_id: Optional[int] = None
     active_team_name: Optional[str] = None

@@ -5,7 +5,7 @@ import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import { listPending, approveRace, rejectRace, approveResult, rejectResult } from '../../api/adminReview';
 import { listAllUsers, patchUser, deleteUser } from '../../api/adminUsers';
-import { adminListStravaUsers, adminDisconnectStrava, adminDisconnectAllStrava, adminGetStravaStatus } from '../../api/strava';
+import { adminListStravaUsers, adminDisconnectStrava, adminDisconnectAllStrava, adminGetStravaStatus, adminBlockAllStrava, adminReleaseStrava, adminEnableAllStrava, adminSetStravaEnabled } from '../../api/strava';
 
 const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
 const GLASS_INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
@@ -469,7 +469,65 @@ function StravaTab() {
     }
   }, [users]);
 
+  const handleBlockAll = useCallback(async () => {
+    if (!confirm('Block Strava for EVERYONE? This disconnects every connected member (freeing all Strava slots) and locks the connect option for all members and new members until you release it.')) return;
+    setDisconnecting('block');
+    try {
+      const { data } = await adminBlockAllStrava();
+      setUsers(users.map(u => ({ ...u, strava_connected: false, strava_enabled: false, strava_last_synced_at: null })));
+      setStatus(s => ({ ...s, block_all: true }));
+      alert(`Blocked. Disconnected ${data.processed} member(s); Strava confirmed ${data.deauthorized} slot(s) freed.`);
+    } catch (e) {
+      console.error('Failed to block all', e);
+      alert('Failed to block all');
+    } finally {
+      setDisconnecting(null);
+    }
+  }, [users]);
+
+  const handleRelease = useCallback(async () => {
+    setDisconnecting('release');
+    try {
+      await adminReleaseStrava();
+      setStatus(s => ({ ...s, block_all: false }));
+    } catch (e) {
+      console.error('Failed to release', e);
+      alert('Failed to release');
+    } finally {
+      setDisconnecting(null);
+    }
+  }, []);
+
+  const handleEnableAll = useCallback(async () => {
+    if (!confirm('Enable Strava for everyone? This lifts the lock and enables every member to connect.')) return;
+    setDisconnecting('enable');
+    try {
+      await adminEnableAllStrava();
+      setUsers(users.map(u => ({ ...u, strava_enabled: true })));
+      setStatus(s => ({ ...s, block_all: false }));
+    } catch (e) {
+      console.error('Failed to enable all', e);
+      alert('Failed to enable all');
+    } finally {
+      setDisconnecting(null);
+    }
+  }, [users]);
+
+  const handleToggleEnabled = useCallback(async (userId, enabled) => {
+    setDisconnecting(`toggle-${userId}`);
+    try {
+      await adminSetStravaEnabled(userId, enabled);
+      setUsers(users.map(u => u.id === userId ? { ...u, strava_enabled: enabled } : u));
+    } catch (e) {
+      console.error('Failed to update access', e);
+      alert('Failed to update access');
+    } finally {
+      setDisconnecting(null);
+    }
+  }, [users]);
+
   const connectedCount = users.filter(u => u.strava_connected).length;
+  const blocked = !!status?.block_all;
 
   return (
     <div className="space-y-4">
@@ -480,7 +538,9 @@ function StravaTab() {
             <p className="text-xs text-white/60 uppercase tracking-wider font-semibold mb-1">Strava Status</p>
             <p className="text-sm">
               {status?.disabled ? (
-                <span className="text-red-300">🔴 Strava connections disabled globally</span>
+                <span className="text-red-300">🔴 Strava disabled globally (env)</span>
+              ) : blocked ? (
+                <span className="text-red-300">🔴 Strava blocked for everyone (rollout locked)</span>
               ) : status?.configured ? (
                 <span className="text-green-300">🟢 Strava is configured and enabled</span>
               ) : (
@@ -493,14 +553,44 @@ function StravaTab() {
             <p className="text-2xl font-bold text-[#c0c1ff]">{connectedCount} / {users.length}</p>
           </div>
         </div>
-        {connectedCount > 0 && (
-          <button
-            onClick={handleDisconnectAll}
-            disabled={disconnecting === 'all'}
-            className="mt-3 w-full text-xs font-bold px-3 py-2 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-500/15 disabled:opacity-50 transition"
-          >
-            {disconnecting === 'all' ? 'Disconnecting all…' : `Disconnect all (${connectedCount}) & free Strava slots`}
-          </button>
+
+        {/* Access-control actions */}
+        {blocked ? (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={handleRelease}
+              disabled={disconnecting === 'release'}
+              className="text-xs font-bold px-3 py-2 rounded-lg border border-white/25 text-white/70 hover:bg-white/10 disabled:opacity-50 transition"
+            >
+              {disconnecting === 'release' ? 'Releasing…' : 'Release (enable individually)'}
+            </button>
+            <button
+              onClick={handleEnableAll}
+              disabled={disconnecting === 'enable'}
+              className="text-xs font-bold px-3 py-2 rounded-lg border border-green-400/40 text-green-300 hover:bg-green-500/15 disabled:opacity-50 transition"
+            >
+              {disconnecting === 'enable' ? 'Enabling…' : 'Enable all (open to everyone)'}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            <button
+              onClick={handleBlockAll}
+              disabled={disconnecting === 'block'}
+              className="w-full text-xs font-bold px-3 py-2 rounded-lg border border-red-400/40 text-red-300 hover:bg-red-500/15 disabled:opacity-50 transition"
+            >
+              {disconnecting === 'block' ? 'Blocking…' : 'Block all (disconnect everyone & lock)'}
+            </button>
+            {connectedCount > 0 && (
+              <button
+                onClick={handleDisconnectAll}
+                disabled={disconnecting === 'all'}
+                className="w-full text-xs font-bold px-3 py-2 rounded-lg border border-white/25 text-white/60 hover:bg-white/10 disabled:opacity-50 transition"
+              >
+                {disconnecting === 'all' ? 'Disconnecting all…' : `Disconnect all (${connectedCount}) — free slots, no lock`}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -515,23 +605,38 @@ function StravaTab() {
             {users.map(u => (
               <div key={u.id} className="p-3 flex items-center justify-between hover:bg-white/5 transition">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white">{u.full_name}</p>
+                  <p className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    {u.full_name}
+                    {u.strava_enabled === false && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">blocked</span>
+                    )}
+                  </p>
                   <p className="text-xs text-white/60">{u.username} · {u.role}</p>
                   {u.strava_connected && u.strava_last_synced_at && (
                     <p className="text-xs text-green-400/70 mt-0.5">Last synced: {format(new Date(u.strava_last_synced_at), 'MMM d, HH:mm')}</p>
                   )}
                 </div>
-                {u.strava_connected ? (
+                <div className="flex items-center gap-2 ml-2 shrink-0">
                   <button
-                    onClick={() => handleDisconnect(u.id, u.full_name)}
-                    disabled={disconnecting === u.id}
-                    className="text-xs px-3 py-1.5 rounded border border-red-400/40 text-red-300 hover:bg-red-500/15 disabled:opacity-50 transition shrink-0 ml-2"
+                    onClick={() => handleToggleEnabled(u.id, !u.strava_enabled)}
+                    disabled={disconnecting === `toggle-${u.id}`}
+                    className={`text-xs px-3 py-1.5 rounded border disabled:opacity-50 transition ${u.strava_enabled === false ? 'border-green-400/40 text-green-300 hover:bg-green-500/15' : 'border-white/25 text-white/60 hover:bg-white/10'}`}
+                    title={u.strava_enabled === false ? 'Enable Strava for this athlete' : 'Block Strava for this athlete'}
                   >
-                    {disconnecting === u.id ? 'Disconnecting…' : 'Disconnect'}
+                    {disconnecting === `toggle-${u.id}` ? '…' : (u.strava_enabled === false ? 'Enable' : 'Disable')}
                   </button>
-                ) : (
-                  <span className="text-xs text-white/40 ml-2 shrink-0">Not connected</span>
-                )}
+                  {u.strava_connected ? (
+                    <button
+                      onClick={() => handleDisconnect(u.id, u.full_name)}
+                      disabled={disconnecting === u.id}
+                      className="text-xs px-3 py-1.5 rounded border border-red-400/40 text-red-300 hover:bg-red-500/15 disabled:opacity-50 transition"
+                    >
+                      {disconnecting === u.id ? 'Disconnecting…' : 'Disconnect'}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-white/40">Not connected</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>

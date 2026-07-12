@@ -12,6 +12,8 @@ export default function StravaSyncIconButton() {
   // Only athletes log workouts; coaches and admins don't need to connect/sync Strava.
   if (user.role !== 'athlete') return null;
   const connected = !!user.strava_connected;
+  // Admin blocked/disabled Strava for this athlete: hide the Connect affordance.
+  if (!connected && user.strava_can_connect === false) return null;
 
   const handleSync = async () => {
     setBusy(true);

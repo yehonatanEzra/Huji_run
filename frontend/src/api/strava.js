@@ -23,3 +23,11 @@ export const adminDisconnectAllStrava = () =>
   api.post('/strava/admin/disconnect-all');
 export const adminGetStravaStatus = () =>
   api.get('/strava/admin/status');
+export const adminBlockAllStrava = () =>
+  api.post('/strava/admin/block-all');
+export const adminReleaseStrava = () =>
+  api.post('/strava/admin/release');
+export const adminEnableAllStrava = () =>
+  api.post('/strava/admin/enable-all');
+export const adminSetStravaEnabled = (userId, enabled) =>
+  api.post(`/strava/admin/set-enabled/${userId}`, { enabled });

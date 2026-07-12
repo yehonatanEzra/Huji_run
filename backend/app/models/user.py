@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import Integer, String, Boolean, Enum, DateTime, ForeignKey, Text, LargeBinary, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql.expression import false
+from sqlalchemy.sql.expression import false, true
 from ..database import Base
 
 
@@ -33,6 +33,9 @@ class User(Base):
     strava_refresh_token: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     strava_token_expires_at: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     strava_last_synced_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Admin-controlled per-athlete Strava access. Default on; flipped off by
+    # block-all, re-granted individually or via enable-all.
+    strava_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     @property

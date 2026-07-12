@@ -4,7 +4,7 @@ import structlog
 from datetime import datetime, timezone, timedelta, date as date_type
 from typing import Annotated, List, Optional
 from urllib.parse import urlencode
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 import httpx
 from sqlalchemy.orm import Session
@@ -13,10 +13,31 @@ from ..database import get_db
 from ..dependencies import get_current_user, require_coach, require_admin
 from ..models.user import User
 from ..models.workout import WorkoutLog
+from ..services import app_settings
 
 log = structlog.get_logger()
 
 STRAVA_HTTP_TIMEOUT = 15.0
+
+
+def _strava_blocked_reason(user: User, db: Session) -> Optional[str]:
+    """Return a human reason if this user may NOT connect Strava, else None.
+
+    Effective gate = env kill-switch AND global block-all AND per-user flag.
+    """
+    if settings.DISABLE_STRAVA:
+        return "Strava integration is disabled"
+    if app_settings.get_bool(db, app_settings.STRAVA_BLOCK_ALL):
+        return "Strava connections are currently blocked by the admin"
+    if not user.strava_enabled:
+        return "Strava is not enabled for your account yet"
+    return None
+
+
+def _assert_strava_allowed(user: User, db: Session) -> None:
+    reason = _strava_blocked_reason(user, db)
+    if reason:
+        raise HTTPException(status_code=503, detail=reason)
 
 
 def _encode_state(user_id: int, origin: Optional[str]) -> str:
@@ -222,6 +243,7 @@ def _fetch_activity_detail(access_token: str, activity_id: int) -> dict:
 @router.get("/connect-url")
 def get_connect_url(
     current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
     origin: Optional[str] = Query(None, description="Frontend origin to redirect back to after OAuth"),
 ):
     """Return the Strava OAuth URL the frontend should redirect the user to.
@@ -230,8 +252,7 @@ def get_connect_url(
     redirect after the OAuth dance — useful for local dev where the frontend
     runs on multiple ports (5173 / 5174 / etc.).
     """
-    if settings.DISABLE_STRAVA:
-        raise HTTPException(status_code=503, detail="Strava integration is disabled")
+    _assert_strava_allowed(current_user, db)
     if not settings.STRAVA_CLIENT_ID:
         raise HTTPException(status_code=503, detail="Strava integration is not configured")
     state = _encode_state(current_user.id, origin)
@@ -265,6 +286,9 @@ def strava_callback(
     try:
         user = db.get(User, user_id)
         if not user:
+            return RedirectResponse(url=f"{frontend_profile}?strava=error")
+        # Defense: a blocked user must not be able to complete the OAuth dance.
+        if _strava_blocked_reason(user, db):
             return RedirectResponse(url=f"{frontend_profile}?strava=error")
         r = httpx.post(
             STRAVA_TOKEN_URL,
@@ -542,6 +566,7 @@ def admin_list_strava_users(
             "full_name": u.full_name,
             "role": u.role,
             "strava_connected": u.strava_connected,
+            "strava_enabled": u.strava_enabled,
             "strava_athlete_id": u.strava_athlete_id,
             "strava_last_synced_at": u.strava_last_synced_at.isoformat() if u.strava_last_synced_at else None,
         }
@@ -592,9 +617,74 @@ def admin_disconnect_all_strava(
 @router.get("/admin/status")
 def admin_strava_status(
     _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Admin-only: check if Strava is globally disabled."""
+    """Admin-only: global Strava state (env kill-switch + runtime block-all)."""
     return {
         "disabled": settings.DISABLE_STRAVA,
         "configured": bool(settings.STRAVA_CLIENT_ID),
+        "block_all": app_settings.get_bool(db, app_settings.STRAVA_BLOCK_ALL),
     }
+
+
+@router.post("/admin/block-all")
+def admin_strava_block_all(
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Admin-only: lock Strava for everyone. Disconnects every connected member
+    (freeing Strava slots), sets the global block-all flag, and disables every
+    athlete individually. New members are also blocked while the flag is on."""
+    users = db.query(User).filter(User.strava_access_token.isnot(None)).all()
+    processed = 0
+    deauthorized = 0
+    for user in users:
+        processed += 1
+        if _deauthorize_strava(user, db):
+            deauthorized += 1
+    app_settings.set_bool(db, app_settings.STRAVA_BLOCK_ALL, True)
+    db.query(User).update({User.strava_enabled: False})
+    db.commit()
+    log.info("strava_admin_block_all", processed=processed, deauthorized=deauthorized)
+    return {"ok": True, "block_all": True, "processed": processed, "deauthorized": deauthorized}
+
+
+@router.post("/admin/release")
+def admin_strava_release(
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Admin-only: lift the global block-all lock. Athletes stay individually
+    disabled — enable them one-by-one or via enable-all."""
+    app_settings.set_bool(db, app_settings.STRAVA_BLOCK_ALL, False)
+    db.commit()
+    return {"ok": True, "block_all": False}
+
+
+@router.post("/admin/enable-all")
+def admin_strava_enable_all(
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Admin-only: open Strava to everyone — clears block-all and enables every
+    athlete."""
+    app_settings.set_bool(db, app_settings.STRAVA_BLOCK_ALL, False)
+    db.query(User).update({User.strava_enabled: True})
+    db.commit()
+    return {"ok": True, "block_all": False}
+
+
+@router.post("/admin/set-enabled/{user_id}")
+def admin_strava_set_enabled(
+    user_id: int,
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+    enabled: bool = Body(..., embed=True),
+):
+    """Admin-only: enable/disable Strava for one athlete."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.strava_enabled = enabled
+    db.commit()
+    return {"ok": True, "enabled": enabled}

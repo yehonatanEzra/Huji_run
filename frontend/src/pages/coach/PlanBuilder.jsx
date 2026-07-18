@@ -173,6 +173,18 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
   }, [name, description, weeks, dayMap, weekTargets]);
   const handleBack = () => { if (dirty) setConfirmExit(true); else onClose(); };
 
+  // "Show dates": overlay real calendar dates on cells. Pure display — not saved,
+  // not part of Apply, and intentionally excluded from the `dirty` deps above.
+  const [showDates, setShowDates] = useState(false);
+  const [anchorWeek, setAnchorWeek] = useState(1);
+  const [anchorDate, setAnchorDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const anchorObj = anchorDate ? new Date(anchorDate + 'T00:00') : null;
+  const anchorDow = anchorObj ? (anchorObj.getDay() + 6) % 7 : 0;
+  const effAnchorWeek = Math.min(anchorWeek, weeks);
+  const anchorMonday = anchorObj ? addDays(anchorObj, -((effAnchorWeek - 1) * 7 + anchorDow)) : null;
+  const cellDate = (week, dow) => (anchorMonday ? addDays(anchorMonday, (week - 1) * 7 + dow) : null);
+  const datesOn = showDates && !!anchorMonday;
+
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
     setSaving(true);
@@ -262,20 +274,29 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
         </p>
       </div>
 
-      {/* Weeks selector */}
-      <div className={`flex items-center gap-4 ${PANEL} rounded-2xl p-4 w-fit`}>
-        <span className="text-white/60 font-medium">Weeks:</span>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setWeeks((w) => Math.max(1, w - 1))}
-            className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-600 border border-slate-600/50 text-white flex items-center justify-center transition active:scale-95"
-          >−</button>
-          <span className="text-xl font-bold w-6 text-center text-white">{weeks}</span>
-          <button
-            onClick={() => setWeeks((w) => Math.min(26, w + 1))}
-            className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-600 border border-slate-600/50 text-white flex items-center justify-center transition active:scale-95"
-          >+</button>
+      {/* Weeks selector + show-dates toggle (side by side) */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className={`flex items-center gap-4 ${PANEL} rounded-2xl p-4 w-fit`}>
+          <span className="text-white/60 font-medium">Weeks:</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setWeeks((w) => Math.max(1, w - 1))}
+              className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-600 border border-slate-600/50 text-white flex items-center justify-center transition active:scale-95"
+            >−</button>
+            <span className="text-xl font-bold w-6 text-center text-white">{weeks}</span>
+            <button
+              onClick={() => setWeeks((w) => Math.min(26, w + 1))}
+              className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-600 border border-slate-600/50 text-white flex items-center justify-center transition active:scale-95"
+            >+</button>
+          </div>
         </div>
+
+        <DateAnchorControls
+          weeks={weeks}
+          showDates={showDates} setShowDates={setShowDates}
+          anchorWeek={anchorWeek} setAnchorWeek={setAnchorWeek}
+          anchorDate={anchorDate} setAnchorDate={setAnchorDate}
+        />
       </div>
 
       {/* Expand button — opens the clear, large per-week view */}
@@ -326,6 +347,9 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
                           : 'bg-slate-700/40 border border-dashed border-slate-400/30 text-slate-400 hover:bg-slate-700/60 hover:border-slate-400/60'
                       }`}
                     >
+                      {datesOn && (
+                        <span className="absolute top-0.5 left-0.5 text-[6px] font-semibold text-white/55 leading-none">{format(cellDate(week, dow), 'd/M')}</span>
+                      )}
                       {active ? (
                         <>
                           {multi && (
@@ -364,8 +388,16 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
 
       {/* Expanded full-screen view — large day cells + per-week written/target */}
       <Modal open={expanded} onClose={() => setExpanded(false)} title={name || 'Plan'} fullScreen panelClassName="bg-[#131314]">
-        {/* Zoom controls */}
-        <div className="flex items-center justify-end gap-2 mb-2">
+        {/* Show-dates overlay controls (compact) + zoom, same row */}
+        <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+          <DateAnchorControls
+            compact
+            weeks={weeks}
+            showDates={showDates} setShowDates={setShowDates}
+            anchorWeek={anchorWeek} setAnchorWeek={setAnchorWeek}
+            anchorDate={anchorDate} setAnchorDate={setAnchorDate}
+          />
+          <div className="flex items-center gap-2">
           <span className="text-xs text-white/60">Zoom</span>
           <button
             onClick={() => setExpandedZoom((z) => Math.max(0.3, +(z - 0.05).toFixed(2)))}
@@ -378,6 +410,7 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
             disabled={expandedZoom >= 1.8}
             className="w-7 h-7 rounded border border-white/20 bg-white/5 text-white text-sm font-bold hover:bg-white/15 disabled:opacity-30 transition"
           >+</button>
+          </div>
         </div>
         <div ref={expandedScrollRef} className="overflow-x-auto -mx-2" style={{ touchAction: 'pan-x pan-y' }}>
           <div className="px-2" style={{ minWidth: '880px', zoom: expandedZoom }}>
@@ -431,6 +464,9 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
                           <div className="flex items-start justify-between px-2 pt-1.5 gap-1">
                             <span className="flex items-center gap-1">
                               <span className="text-[10px] text-white/40 font-semibold leading-none">W{week}</span>
+                              {datesOn && (
+                                <span className="text-[10px] text-[#c0c1ff]/80 font-semibold leading-none">{format(cellDate(week, dow), 'EEE d/M')}</span>
+                              )}
                               {multi && (
                                 <span
                                   role="button"
@@ -542,6 +578,40 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
           onChange={(list) => setCell(editCell.week, editCell.dow, list)}
           onClose={() => setEditCell(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// "Show dates" toggle + anchor picker. Anchoring a (week, date) pair pins that
+// day to that date; every cell's date is derived from it. Display-only.
+function DateAnchorControls({ weeks, showDates, setShowDates, anchorWeek, setAnchorWeek, anchorDate, setAnchorDate, compact }) {
+  const anchorObj = anchorDate ? new Date(anchorDate + 'T00:00') : null;
+  const wrapCls = compact
+    ? 'bg-black rounded-lg p-1.5 flex flex-wrap items-center gap-2'
+    : `${PANEL} rounded-2xl p-3 flex flex-wrap items-center gap-3`;
+  const inputCls = compact
+    ? 'bg-black border border-white/20 rounded-md px-1.5 py-0.5 text-xs text-white focus:outline-none focus:border-blue-500 [color-scheme:dark]'
+    : 'bg-slate-900/50 border border-slate-600/40 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-blue-500 [color-scheme:dark]';
+  const btnCls = compact
+    ? `px-2 py-1 rounded-md text-xs font-medium transition active:scale-95 ${showDates ? 'bg-[#c0c1ff] text-[#1000a9]' : 'bg-white/10 border border-white/15 text-white/90 hover:bg-white/20'}`
+    : `px-3 py-1.5 rounded-lg text-sm font-medium transition active:scale-95 ${showDates ? 'bg-[#c0c1ff] text-[#1000a9]' : 'bg-slate-700/50 border border-slate-600/50 text-white/90 hover:bg-slate-600'}`;
+  const labelCls = compact ? 'text-[11px] text-white/55' : 'text-xs text-white/55';
+  return (
+    <div className={wrapCls}>
+      <button onClick={() => setShowDates((v) => !v)} className={btnCls}>
+        {showDates ? 'Dates on' : 'Show dates'}
+      </button>
+      {showDates && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={labelCls}>Week</span>
+          <select value={Math.min(anchorWeek, weeks)} onChange={(e) => setAnchorWeek(Number(e.target.value))} className={inputCls}>
+            {Array.from({ length: weeks }, (_, i) => i + 1).map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+          <span className={labelCls}>on</span>
+          <input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} className={inputCls} />
+          {anchorObj && <span className={compact ? 'text-[11px] text-white/45' : 'text-xs text-white/45'}>({format(anchorObj, 'EEE')})</span>}
+        </div>
       )}
     </div>
   );

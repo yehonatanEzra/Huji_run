@@ -254,6 +254,7 @@ export default function StravaActivityDetail({ activityId, athleteId, onClose })
         ) : 'Activity'
       }
       panelClassName="bg-gradient-to-b from-blue-950 to-indigo-950 border-t border-white/10"
+      zClassName="z-[70]"
     >
       {loading ? (
         <div className="flex justify-center py-12"><Spinner /></div>

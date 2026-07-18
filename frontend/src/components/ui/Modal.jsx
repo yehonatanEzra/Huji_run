@@ -1,4 +1,4 @@
-export default function Modal({ open, onClose, title, children, panelClassName, fullScreen }) {
+export default function Modal({ open, onClose, title, children, panelClassName, fullScreen, zClassName = 'z-50' }) {
   if (!open) return null;
 
   const panel = panelClassName ?? 'bg-white';
@@ -11,7 +11,7 @@ export default function Modal({ open, onClose, title, children, panelClassName, 
   const wrapperCls = fullScreen ? 'items-stretch' : 'items-end sm:items-center';
 
   return (
-    <div className={`fixed inset-0 z-50 flex ${wrapperCls} justify-center`}>
+    <div className={`fixed inset-0 ${zClassName} flex ${wrapperCls} justify-center`}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className={`relative ${panel} ${sizeCls} overflow-auto p-5 pb-20 sm:pb-5`}>
         <div className="flex items-center justify-between mb-4 gap-3">

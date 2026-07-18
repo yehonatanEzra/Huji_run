@@ -1004,7 +1004,8 @@ export default function TrackingDashboardPage() {
 
       <Modal open={!!selected} onClose={closeSelected}
         title={selected ? (showTargetForm ? (editingTargetId ? 'Edit workout' : 'Add workout') : format(new Date(selected.day.date + 'T00:00'), 'EEEE, MMM d')) : ''}
-        panelClassName="bg-[#0a0a0a] border-t border-white/10">
+        panelClassName="bg-[#0a0a0a] border-t border-white/10"
+        zClassName="z-[60]">
         {selected && (
           <div className="space-y-4">
             {showTargetForm ? (
@@ -1462,7 +1463,7 @@ export default function TrackingDashboardPage() {
                       return (
                         <button
                           key={d.date}
-                          onClick={() => { setMonthExpanded(false); openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d, true); }}
+                          onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d, true)}
                           className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
                           style={{ minHeight: `${cellHeight}px` }}
                         >
@@ -1589,7 +1590,8 @@ export default function TrackingDashboardPage() {
 
       {/* Edit PB / manual result modal */}
       <Modal open={!!editingResult} onClose={() => setEditingResult(null)}
-        title={editingResult ? `Edit ${editingResult.distance_display || editingResult.distance_m + 'm'}` : 'Edit result'}>
+        title={editingResult ? `Edit ${editingResult.distance_display || editingResult.distance_m + 'm'}` : 'Edit result'}
+        zClassName="z-[70]">
         {editingResult && (
           <div className="space-y-3">
             <div>

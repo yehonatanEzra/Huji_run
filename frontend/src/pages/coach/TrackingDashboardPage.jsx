@@ -256,10 +256,22 @@ export default function TrackingDashboardPage() {
   }, [location.state]);
 
   const refreshSelectedDay = async () => {
-    if (!selected) return;
-    const { data } = await getAthleteWeek(selected.athlete.id, selected.day.date);
-    const fresh = data.days.find((x) => x.date === selected.day.date);
-    if (fresh) setSelected((s) => ({ ...s, day: fresh }));
+    if (selected) {
+      const { data } = await getAthleteWeek(selected.athlete.id, selected.day.date);
+      const fresh = data.days.find((x) => x.date === selected.day.date);
+      if (fresh) setSelected((s) => ({ ...s, day: fresh }));
+    }
+    // Also refresh the profile week/month grids if open, so deletes and edits
+    // show immediately there (and in the expanded month view) — not only after
+    // closing and reopening.
+    if (profile) {
+      const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
+      setProfileWeek(data);
+      if (profileViewMode === 'month') {
+        const m = await fetchProfileMonth(profile.id, profileMonthDate);
+        setProfileMonth(m);
+      }
+    }
   };
 
   // Day-level "don't show group workout today" — committed via the Apply button
@@ -333,16 +345,8 @@ export default function TrackingDashboardPage() {
       }
       seedForm(null);            // reset to "add" so the coach can add another
       setShowTargetForm(false);  // collapse the form back down after saving
-      await refreshSelectedDay();  // refresh the day's list in place
+      await refreshSelectedDay();  // refreshes the day list + profile week/month
       fetchData();
-      if (profile && profile.id === selected.athlete.id) {
-        const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
-        setProfileWeek(data);
-        if (profileViewMode === 'month') {
-          const m = await fetchProfileMonth(profile.id, profileMonthDate);
-          setProfileMonth(m);
-        }
-      }
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
   };

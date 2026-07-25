@@ -4,7 +4,7 @@ body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: #eff6ff; /* blue-50 */
+  background: #131314; /* app dark base — avoids a light strip peeking through at the bottom (mobile safe-area / dynamic toolbar) */
   color: #1e293b;
 }
 

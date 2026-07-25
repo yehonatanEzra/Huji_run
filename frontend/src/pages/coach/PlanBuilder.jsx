@@ -450,7 +450,9 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
                       const active = list[idx];
                       const meta = active ? typeMeta(active.workout_type) : null;
                       const isRace = active?.workout_type === 'race';
-                      const body = active ? (active.content || active.main_session || active.warmup || '') : '';
+                      // Respect the workout type so stale fields from a previous type
+                      // (e.g. an old intervals main_session) don't leak into an easy run.
+                      const body = active ? (meta.structured ? (active.main_session || active.warmup || active.cooldown || '') : (active.content || '')) : '';
                       const activeKm = active ? (parseFloat(active.distance_km) || 0) : 0;
                       return (
                         <button
@@ -634,7 +636,12 @@ function CellEditor({ week, dow, value, onChange, onClose }) {
     setEditingIdx(idx);
   };
   const saveForm = () => {
-    const next = editingIdx === 'new' ? [...list, form] : list.map((w, i) => (i === editingIdx ? form : w));
+    // Drop fields that don't apply to the chosen type, so switching e.g.
+    // intervals → easy run doesn't keep the old structured main_session around.
+    const cleaned = typeMeta(form.workout_type).structured
+      ? { ...form, content: '' }
+      : { ...form, warmup: '', main_session: '', cooldown: '' };
+    const next = editingIdx === 'new' ? [...list, cleaned] : list.map((w, i) => (i === editingIdx ? cleaned : w));
     applyList(next);
     setEditingIdx(next.length === 0 ? 'new' : null);
   };

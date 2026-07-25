@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func as sa_func
+from sqlalchemy import func as sa_func, or_
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_coach, get_active_team_id
@@ -393,6 +393,28 @@ def list_athletes(
     coach: Annotated[User, Depends(require_coach)],
 ):
     return _athletes_query(coach, db).order_by(User.full_name).all()
+
+
+@router.get("/assignable-athletes", response_model=list[UserOut])
+def list_assignable_athletes(
+    db: Annotated[Session, Depends(get_db)],
+    coach: Annotated[User, Depends(require_coach)],
+    active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
+):
+    """Athletes this coach may assign an individual plan to — mirrors
+    can_coach_target_athlete: personal roster PLUS athletes in any group the
+    coach coaches (admins: every group in the active team). Broader than
+    /athletes (personal roster only) so group coaches aren't shown an empty list."""
+    gids = set(coach_groups_with_role(coach, db, active_team_id).keys())
+    conds = [User.coach_id == coach.id]
+    if gids:
+        conds.append(User.training_group_id.in_(gids))
+    return (
+        db.query(User)
+        .filter(User.role == "athlete", or_(*conds))
+        .order_by(User.full_name)
+        .all()
+    )
 
 
 @router.get("/athletes/search")

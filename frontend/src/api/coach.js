@@ -3,6 +3,9 @@ import client from './client';
 export const listAthletes = () =>
   client.get('/coach/athletes');
 
+export const listAssignableAthletes = () =>
+  client.get('/coach/assignable-athletes');
+
 export const searchAthletes = (q) =>
   client.get('/coach/athletes/search', { params: { q } });
 

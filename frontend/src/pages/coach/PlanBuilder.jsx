@@ -3,7 +3,7 @@ import {
   getTemplate, createTemplate, updateTemplate,
   applyTemplate, applyTemplateToAthlete,
 } from '../../api/workoutTemplates';
-import { listGroups, listAthletes } from '../../api/coach';
+import { listGroups, listAssignableAthletes } from '../../api/coach';
 import { getCoachGroupWeek } from '../../api/calendar';
 import { addDays, format } from 'date-fns';
 import Modal from '../../components/ui/Modal';
@@ -949,7 +949,7 @@ export function AthleteApplyModal({ template, onClose }) {
   const athleteName = athletes.find((a) => String(a.id) === String(athleteId))?.full_name || '';
 
   useEffect(() => {
-    listAthletes().then(({ data }) => setAthletes(data)).catch(() => {});
+    listAssignableAthletes().then(({ data }) => setAthletes(data)).catch(() => {});
   }, []);
 
   const doApply = async (replace) => {

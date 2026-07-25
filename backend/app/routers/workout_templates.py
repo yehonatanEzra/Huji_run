@@ -263,8 +263,10 @@ def apply_template(
     if not _is_main_coach(coach, db, body.group_id):
         raise HTTPException(status_code=403, detail="Only the main coach can apply a plan to the group")
 
-    # Snap to the Monday of the chosen week so day_of_week=0 lands on a Monday.
-    start_monday = body.start_date - timedelta(days=body.start_date.weekday())
+    # Snap to the SUNDAY of the chosen week (weeks run Sun–Sat, matching the
+    # athlete calendar and the builder's Sunday-first columns). day_of_week is
+    # 0=Mon..6=Sun, so the in-week offset is (dow+1)%7 → Sun=0, Mon=1, … Sat=6.
+    week_start = body.start_date - timedelta(days=(body.start_date.weekday() + 1) % 7)
 
     # Which plan weeks to apply (None/empty = all). Selected weeks keep the exact
     # dates apply-all would give them; unselected weeks are neither written nor wiped.
@@ -275,14 +277,14 @@ def apply_template(
     # Map each template day to its calendar date up front so we can both detect
     # collisions and report the plan's end date.
     targets = {
-        d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
+        d: week_start + timedelta(weeks=d.week_number - 1, days=(d.day_of_week + 1) % 7)
         for d in days
     }
     # Override scope: applying wipes every group workout across ONLY the selected
     # weeks' ranges, then writes the plan fresh.
     existing = db.query(GroupWorkout).filter(
         GroupWorkout.training_group_id == body.group_id,
-        _weeks_date_filter(GroupWorkout.date, start_monday, selected),
+        _weeks_date_filter(GroupWorkout.date, week_start, selected),
     )
     conflicts = existing.count()
     replaced = 0
@@ -297,7 +299,7 @@ def apply_template(
         replaced = conflicts
 
     created = 0
-    last_date = start_monday
+    last_date = week_start
     for d in days:
         target = targets[d]
         last_date = max(last_date, target)
@@ -325,13 +327,13 @@ def apply_template(
         ]
         notify_many(
             db, athlete_ids, "new_workout",
-            f"Coach published the '{t.name}' plan starting {start_monday.strftime('%b %d')}",
-            f"/calendar?date={start_monday.isoformat()}",
+            f"Coach published the '{t.name}' plan starting {week_start.strftime('%b %d')}",
+            f"/calendar?date={week_start.isoformat()}",
         )
 
     db.commit()
     return TemplateApplyResult(created=created, replaced=replaced,
-                              start_monday=start_monday, end_date=last_date)
+                              week_start=week_start, end_date=last_date)
 
 
 @router.post("/{template_id}/apply-athlete", response_model=TemplateApplyResult)
@@ -351,12 +353,13 @@ def apply_template_to_athlete(
     if not can_coach_target_athlete(coach, athlete, db):
         raise HTTPException(status_code=404, detail="Athlete not found")
 
-    start_monday = body.start_date - timedelta(days=body.start_date.weekday())
+    # Sunday-based week (Sun–Sat) — see apply_template. Offset (dow+1)%7.
+    week_start = body.start_date - timedelta(days=(body.start_date.weekday() + 1) % 7)
     selected = _selected_weeks(body.weeks, t.weeks_count)
     days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position))
     days = [d for d in days if d.week_number in selected]
     targets = {
-        d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
+        d: week_start + timedelta(weeks=d.week_number - 1, days=(d.day_of_week + 1) % 7)
         for d in days
     }
 
@@ -364,7 +367,7 @@ def apply_template_to_athlete(
     # ranges, then write the plan fresh.
     existing = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == body.athlete_id,
-        _weeks_date_filter(IndividualTarget.date, start_monday, selected),
+        _weeks_date_filter(IndividualTarget.date, week_start, selected),
     )
     conflicts = existing.count()
     replaced = 0
@@ -380,11 +383,11 @@ def apply_template_to_athlete(
     # Clear any stale "hide group" rows in the selected ranges so a re-apply starts clean.
     db.query(GroupWorkoutHide).filter(
         GroupWorkoutHide.athlete_id == body.athlete_id,
-        _weeks_date_filter(GroupWorkoutHide.date, start_monday, selected),
+        _weeks_date_filter(GroupWorkoutHide.date, week_start, selected),
     ).delete(synchronize_session=False)
 
     created = 0
-    last_date = start_monday
+    last_date = week_start
     target_dates = set()
     # Preserve per-day ordering so the first plan workout on a day is the "main".
     pos_by_date: dict = {}
@@ -429,10 +432,10 @@ def apply_template_to_athlete(
     if created:
         notify_many(
             db, [body.athlete_id], "new_workout",
-            f"Coach assigned you the '{t.name}' plan starting {start_monday.strftime('%b %d')}",
-            f"/calendar?date={start_monday.isoformat()}",
+            f"Coach assigned you the '{t.name}' plan starting {week_start.strftime('%b %d')}",
+            f"/calendar?date={week_start.isoformat()}",
         )
 
     db.commit()
     return TemplateApplyResult(created=created, replaced=replaced,
-                              start_monday=start_monday, end_date=last_date)
+                              week_start=week_start, end_date=last_date)

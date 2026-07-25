@@ -99,5 +99,5 @@ class TemplateApplyAthlete(BaseModel):
 class TemplateApplyResult(BaseModel):
     created: int
     replaced: int             # existing workouts on the plan's dates that were overwritten
-    start_monday: date
+    week_start: date          # Sunday the plan's week 1 starts on
     end_date: date

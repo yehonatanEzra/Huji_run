@@ -42,10 +42,10 @@ const CELL_COLOR = {
   strength: 'bg-amber-500/85', cycling: 'bg-cyan-500/85',
 };
 
-// Monday (week start) of a yyyy-MM-dd date string.
-export function mondayOf(dateStr) {
+// Sunday (week start) of a yyyy-MM-dd date string. Weeks run Sun–Sat.
+export function weekStartOf(dateStr) {
   const d = new Date(dateStr + 'T00:00');
-  return addDays(d, -((d.getDay() + 6) % 7));
+  return addDays(d, -d.getDay()); // getDay: Sun=0..Sat=6 → back up to Sunday
 }
 
 // ── Builder ───────────────────────────────────────────────────────────────────
@@ -179,11 +179,13 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
   const [anchorWeek, setAnchorWeek] = useState(1);
   const [anchorDate, setAnchorDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const anchorObj = anchorDate ? new Date(anchorDate + 'T00:00') : null;
-  const anchorDow = anchorObj ? (anchorObj.getDay() + 6) % 7 : 0;
+  // Sunday-based: getDay() (Sun=0..Sat=6) is the in-week column offset directly.
+  const anchorOffset = anchorObj ? anchorObj.getDay() : 0;
   const effAnchorWeek = Math.min(anchorWeek, weeks);
-  const anchorMonday = anchorObj ? addDays(anchorObj, -((effAnchorWeek - 1) * 7 + anchorDow)) : null;
-  const cellDate = (week, dow) => (anchorMonday ? addDays(anchorMonday, (week - 1) * 7 + dow) : null);
-  const datesOn = showDates && !!anchorMonday;
+  const weekStartSunday = anchorObj ? addDays(anchorObj, -((effAnchorWeek - 1) * 7 + anchorOffset)) : null;
+  // day_of_week 0=Mon..6=Sun → Sunday-first offset (dow+1)%7.
+  const cellDate = (week, dow) => (weekStartSunday ? addDays(weekStartSunday, (week - 1) * 7 + ((dow + 1) % 7)) : null);
+  const datesOn = showDates && !!weekStartSunday;
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
@@ -826,7 +828,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
   useEffect(() => {
     if (step !== 'confirm' || !groupId || !startDate) return;
     setReplaceCount(null);
-    const sm = mondayOf(startDate);
+    const sm = weekStartOf(startDate);
     Promise.all(
       Array.from({ length: template.weeks_count + 1 }, (_, w) =>
         getCoachGroupWeek(Number(groupId), format(addDays(sm, w * 7), 'yyyy-MM-dd'))
@@ -869,7 +871,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
       {step === 'result' ? (
         <div className="space-y-3">
           <div className="bg-emerald-500/15 border border-emerald-400/30 rounded-lg p-3 text-sm text-emerald-200">
-            Created {result.created} workouts from {result.start_monday} to {result.end_date}
+            Created {result.created} workouts from {result.week_start} to {result.end_date}
             {result.replaced > 0 && `, replacing ${result.replaced} existing`}.
           </div>
           <button onClick={onClose} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff]">Done</button>
@@ -880,7 +882,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
           weeksCount={template.weeks_count}
           selectedWeeks={selectedWeeks}
           groupId={Number(groupId)}
-          startMonday={mondayOf(startDate)}
+          startMonday={weekStartOf(startDate)}
           onBack={() => setStep('confirm')}
           onApply={doApply}
           applying={applying}
@@ -908,14 +910,14 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
           {!fixedGroupId && (
             <div>
               <label className="block text-xs font-medium text-white/60 mb-1">Group</label>
-              <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select value={groupId} onChange={(e) => setGroupId(e.target.value)} className="w-full bg-[#1c1b1c] border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#c0c1ff]/40 [color-scheme:dark]">
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
               </select>
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Monday)</label>
-            <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Sunday)</label>
+            <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-[#1c1b1c] border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#c0c1ff]/40 [color-scheme:dark]" />
           </div>
           <WeekRangePicker weeksCount={template.weeks_count} from={fromWeek} to={toWeek} setFrom={setFromWeek} setTo={setToWeek} />
           <button onClick={() => { if (groupId && startDate && selectedWeeks.size) setStep('confirm'); }} disabled={!groupId || !startDate || !selectedWeeks.size} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
@@ -981,7 +983,7 @@ export function AthleteApplyModal({ template, onClose }) {
       {result ? (
         <div className="space-y-3">
           <div className="bg-emerald-500/15 border border-emerald-400/30 rounded-lg p-3 text-sm text-emerald-200">
-            Assigned {result.created} workouts to {athleteName || 'the athlete'} from {result.start_monday} to {result.end_date}
+            Assigned {result.created} workouts to {athleteName || 'the athlete'} from {result.week_start} to {result.end_date}
             {result.replaced > 0 && `, replacing ${result.replaced} existing`}.
           </div>
           <button onClick={onClose} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff]">Done</button>
@@ -1001,14 +1003,14 @@ export function AthleteApplyModal({ template, onClose }) {
         <div className="space-y-3">
           <div>
             <label className="block text-xs font-medium text-white/60 mb-1">Athlete</label>
-            <select value={athleteId} onChange={(e) => setAthleteId(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select value={athleteId} onChange={(e) => setAthleteId(e.target.value)} className="w-full bg-[#1c1b1c] border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#c0c1ff]/40 [color-scheme:dark]">
               <option value="">Select an athlete…</option>
               {athletes.map((a) => <option key={a.id} value={a.id}>{a.full_name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Monday)</label>
-            <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Sunday)</label>
+            <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-[#1c1b1c] border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#c0c1ff]/40 [color-scheme:dark]" />
           </div>
           <WeekRangePicker weeksCount={template.weeks_count} from={fromWeek} to={toWeek} setFrom={setFromWeek} setTo={setToWeek} />
           <label className="flex items-start gap-2 text-sm text-white/80 cursor-pointer">
@@ -1041,7 +1043,7 @@ function DiffCalendar({ templateId, weeksCount, selectedWeeks, groupId, startMon
       const m = {};
       data.days.forEach((d) => {
         if (!isSelected(d.week_number)) return;
-        const dt = addDays(startMonday, (d.week_number - 1) * 7 + d.day_of_week);
+        const dt = addDays(startMonday, (d.week_number - 1) * 7 + ((d.day_of_week + 1) % 7));
         m[format(dt, 'yyyy-MM-dd')] = { workout_type: d.workout_type, title: d.title || typeMeta(d.workout_type).label };
       });
       setNewMap(m);
@@ -1083,7 +1085,7 @@ function DiffCalendar({ templateId, weeksCount, selectedWeeks, groupId, startMon
       </div>
 
       <div className="grid grid-cols-7 gap-1 text-[10px] text-white/40 text-center font-medium">
-        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <div key={i}>{d}</div>)}
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
       </div>
       <div className="space-y-1 max-h-[50vh] overflow-y-auto">
         {Array.from({ length: weeksCount }, (_, w) => (

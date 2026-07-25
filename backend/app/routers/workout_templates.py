@@ -23,6 +23,22 @@ router = APIRouter(prefix="/workout-templates", tags=["workout-templates"])
 
 ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling"}
 
+# Human labels per workout type (mirrors WORKOUT_TYPES in PlanBuilder.jsx). Used
+# to default an applied workout's title when the coach left the title blank.
+TYPE_LABELS = {
+    "simple": "Other", "easy": "Easy run", "rest": "Rest day", "tempo": "Tempo",
+    "long": "Long run", "intervals": "Intervals", "fartlek": "Fartlek",
+    "race": "Race", "strength": "Strength", "cycling": "Cycling",
+}
+
+
+def _apply_title(d) -> str:
+    """Title to write when materializing a plan day — the coach's title, or the
+    workout type's label (e.g. 'Easy run') when they left it blank."""
+    if d.title and d.title.strip():
+        return d.title
+    return TYPE_LABELS.get(d.workout_type, d.workout_type)
+
 
 def _clean(s: Optional[str]) -> Optional[str]:
     if s is None:
@@ -308,7 +324,7 @@ def apply_template(
             training_group_id=body.group_id,
             date=target,
             workout_type=d.workout_type,
-            title=d.title,
+            title=_apply_title(d),
             content=d.content,
             warmup=d.warmup,
             main_session=d.main_session,
@@ -407,7 +423,7 @@ def apply_template_to_athlete(
             # (additional) and we hide the group workout on those days (below).
             additional=body.override_group,
             workout_type=d.workout_type,
-            title=d.title,
+            title=_apply_title(d),
             content=d.content,
             warmup=d.warmup,
             main_session=d.main_session,

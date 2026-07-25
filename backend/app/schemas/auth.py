@@ -1,6 +1,7 @@
 from __future__ import annotations
+from datetime import datetime
 from pydantic import BaseModel, EmailStr
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 
 class RequestCodeRequest(BaseModel):
@@ -69,6 +70,8 @@ class UserOut(BaseModel):
     active_team_name: Optional[str] = None
     email: Optional[str] = None
     email_verified: bool = False
-    strava_last_synced_at: Optional[str] = None
+    # Accept both a datetime (from the ORM via from_attributes) and a pre-formatted
+    # ISO string (e.g. /auth/me passes .isoformat()). Serializes to a string in JSON.
+    strava_last_synced_at: Optional[Union[datetime, str]] = None
 
     model_config = {"from_attributes": True}

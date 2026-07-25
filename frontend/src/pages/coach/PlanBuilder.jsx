@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   getTemplate, createTemplate, updateTemplate,
   applyTemplate, applyTemplateToAthlete,
@@ -760,39 +760,31 @@ function CellEditor({ week, dow, value, onChange, onClose }) {
   );
 }
 
-// Week subset picker for the apply flow. `selected` is a Set of week numbers.
-function WeekPicker({ weeksCount, selected, onChange }) {
-  const all = Array.from({ length: weeksCount }, (_, i) => i + 1);
-  const toggle = (w) => {
-    const next = new Set(selected);
-    next.has(w) ? next.delete(w) : next.add(w);
-    onChange(next);
-  };
+// Contiguous week-range picker for the apply flow — From/To steppers with
+// −/+ buttons (like the builder's Weeks selector). `from`/`to` are 1-based,
+// clamped so 1 ≤ from ≤ to ≤ weeksCount.
+const STEP_BTN = 'w-7 h-7 rounded-lg bg-white/10 border border-white/15 text-white flex items-center justify-center hover:bg-white/20 disabled:opacity-30 transition active:scale-95';
+
+function WeekRangePicker({ weeksCount, from, to, setFrom, setTo }) {
   if (weeksCount <= 1) return null;
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <label className="block text-xs font-medium text-white/60">Weeks to apply</label>
-        <div className="flex gap-2 text-[11px]">
-          <button type="button" onClick={() => onChange(new Set(all))} className="text-[#c0c1ff] hover:underline">All</button>
-          <button type="button" onClick={() => onChange(new Set())} className="text-white/40 hover:text-white/70">None</button>
+      <label className="block text-xs font-medium text-white/60 mb-1.5">Weeks to apply</label>
+      <div className="flex items-center justify-between gap-2 bg-white/5 border border-white/10 rounded-lg p-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white/55 w-9">From</span>
+          <button type="button" onClick={() => setFrom(Math.max(1, from - 1))} disabled={from <= 1} className={STEP_BTN}>−</button>
+          <span className="text-sm font-bold text-white w-7 text-center">W{from}</span>
+          <button type="button" onClick={() => setFrom(Math.min(to, from + 1))} disabled={from >= to} className={STEP_BTN}>+</button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white/55 w-5">To</span>
+          <button type="button" onClick={() => setTo(Math.max(from, to - 1))} disabled={to <= from} className={STEP_BTN}>−</button>
+          <span className="text-sm font-bold text-white w-7 text-center">W{to}</span>
+          <button type="button" onClick={() => setTo(Math.min(weeksCount, to + 1))} disabled={to >= weeksCount} className={STEP_BTN}>+</button>
         </div>
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {all.map((w) => {
-          const on = selected.has(w);
-          return (
-            <button
-              key={w}
-              type="button"
-              onClick={() => toggle(w)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition ${on ? 'bg-[#c0c1ff] text-[#1000a9] border-transparent font-semibold' : 'bg-white/5 border-white/15 text-white/50 hover:bg-white/10'}`}
-            >
-              W{w}
-            </button>
-          );
-        })}
-      </div>
+      <p className="text-[11px] text-white/40 mt-1">Applying weeks {from}–{to} ({to - from + 1} of {weeksCount}).</p>
     </div>
   );
 }
@@ -808,8 +800,13 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [replaceCount, setReplaceCount] = useState(null); // existing workouts in the range
-  const allWeeks = Array.from({ length: template.weeks_count }, (_, i) => i + 1);
-  const [selectedWeeks, setSelectedWeeks] = useState(() => new Set(allWeeks));
+  const [fromWeek, setFromWeek] = useState(1);
+  const [toWeek, setToWeek] = useState(template.weeks_count);
+  const selectedWeeks = useMemo(() => {
+    const s = new Set();
+    for (let w = fromWeek; w <= toWeek; w++) s.add(w);
+    return s;
+  }, [fromWeek, toWeek]);
 
   const today = new Date().toISOString().slice(0, 10);
   const groupName = groups.find((g) => String(g.id) === String(groupId))?.name || '';
@@ -920,7 +917,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
             <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Monday)</label>
             <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <WeekPicker weeksCount={template.weeks_count} selected={selectedWeeks} onChange={setSelectedWeeks} />
+          <WeekRangePicker weeksCount={template.weeks_count} from={fromWeek} to={toWeek} setFrom={setFromWeek} setTo={setToWeek} />
           <button onClick={() => { if (groupId && startDate && selectedWeeks.size) setStep('confirm'); }} disabled={!groupId || !startDate || !selectedWeeks.size} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
             Apply to calendar
           </button>
@@ -940,8 +937,13 @@ export function AthleteApplyModal({ template, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(null); // detail string when replace needed
-  const allWeeks = Array.from({ length: template.weeks_count }, (_, i) => i + 1);
-  const [selectedWeeks, setSelectedWeeks] = useState(() => new Set(allWeeks));
+  const [fromWeek, setFromWeek] = useState(1);
+  const [toWeek, setToWeek] = useState(template.weeks_count);
+  const selectedWeeks = useMemo(() => {
+    const s = new Set();
+    for (let w = fromWeek; w <= toWeek; w++) s.add(w);
+    return s;
+  }, [fromWeek, toWeek]);
 
   const today = new Date().toISOString().slice(0, 10);
   const athleteName = athletes.find((a) => String(a.id) === String(athleteId))?.full_name || '';
@@ -1008,7 +1010,7 @@ export function AthleteApplyModal({ template, onClose }) {
             <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Monday)</label>
             <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <WeekPicker weeksCount={template.weeks_count} selected={selectedWeeks} onChange={setSelectedWeeks} />
+          <WeekRangePicker weeksCount={template.weeks_count} from={fromWeek} to={toWeek} setFrom={setFromWeek} setTo={setToWeek} />
           <label className="flex items-start gap-2 text-sm text-white/80 cursor-pointer">
             <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} className="mt-0.5" />
             <span>Override the group workout

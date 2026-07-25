@@ -760,6 +760,43 @@ function CellEditor({ week, dow, value, onChange, onClose }) {
   );
 }
 
+// Week subset picker for the apply flow. `selected` is a Set of week numbers.
+function WeekPicker({ weeksCount, selected, onChange }) {
+  const all = Array.from({ length: weeksCount }, (_, i) => i + 1);
+  const toggle = (w) => {
+    const next = new Set(selected);
+    next.has(w) ? next.delete(w) : next.add(w);
+    onChange(next);
+  };
+  if (weeksCount <= 1) return null;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-xs font-medium text-white/60">Weeks to apply</label>
+        <div className="flex gap-2 text-[11px]">
+          <button type="button" onClick={() => onChange(new Set(all))} className="text-[#c0c1ff] hover:underline">All</button>
+          <button type="button" onClick={() => onChange(new Set())} className="text-white/40 hover:text-white/70">None</button>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {all.map((w) => {
+          const on = selected.has(w);
+          return (
+            <button
+              key={w}
+              type="button"
+              onClick={() => toggle(w)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition ${on ? 'bg-[#c0c1ff] text-[#1000a9] border-transparent font-semibold' : 'bg-white/5 border-white/15 text-white/50 hover:bg-white/10'}`}
+            >
+              W{w}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Group apply (main coach only) ─────────────────────────────────────────────
 // `fixedGroupId` (number) locks the group (used from the Group hub).
 export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
@@ -771,6 +808,8 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [replaceCount, setReplaceCount] = useState(null); // existing workouts in the range
+  const allWeeks = Array.from({ length: template.weeks_count }, (_, i) => i + 1);
+  const [selectedWeeks, setSelectedWeeks] = useState(() => new Set(allWeeks));
 
   const today = new Date().toISOString().slice(0, 10);
   const groupName = groups.find((g) => String(g.id) === String(groupId))?.name || '';
@@ -786,12 +825,11 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
     }).catch(() => {});
   }, []);
 
-  // Count existing workouts across the plan's range when the confirm step opens.
+  // Count existing workouts across ONLY the selected weeks' ranges when confirm opens.
   useEffect(() => {
     if (step !== 'confirm' || !groupId || !startDate) return;
     setReplaceCount(null);
     const sm = mondayOf(startDate);
-    const rangeEnd = addDays(sm, template.weeks_count * 7);
     Promise.all(
       Array.from({ length: template.weeks_count + 1 }, (_, w) =>
         getCoachGroupWeek(Number(groupId), format(addDays(sm, w * 7), 'yyyy-MM-dd'))
@@ -800,11 +838,12 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
       let n = 0;
       res.forEach(({ data }) => data.days.forEach((day) => {
         const dt = new Date(day.date + 'T00:00');
-        if (dt >= sm && dt < rangeEnd) n += (day.group_workouts || []).length;
+        const wk = Math.floor((dt - sm) / (7 * 86400000)) + 1;
+        if (selectedWeeks.has(wk)) n += (day.group_workouts || []).length;
       }));
       setReplaceCount(n);
     }).catch(() => setReplaceCount(0));
-  }, [step, groupId, startDate]);
+  }, [step, groupId, startDate, selectedWeeks]);
 
   const doApply = async () => {
     setApplying(true);
@@ -812,6 +851,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
     try {
       const { data } = await applyTemplate(template.id, {
         group_id: Number(groupId), start_date: startDate, replace: true,
+        weeks: [...selectedWeeks],
       });
       setResult(data);
       setStep('result');
@@ -841,6 +881,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
         <DiffCalendar
           templateId={template.id}
           weeksCount={template.weeks_count}
+          selectedWeeks={selectedWeeks}
           groupId={Number(groupId)}
           startMonday={mondayOf(startDate)}
           onBack={() => setStep('confirm')}
@@ -853,8 +894,8 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
             {replaceCount === null
               ? 'Checking existing workouts…'
               : replaceCount > 0
-                ? <>This <strong>replaces {replaceCount} existing workout{replaceCount !== 1 ? 's' : ''}</strong> in {groupName ? `“${groupName}”` : 'the group'} across the plan's {template.weeks_count} week{template.weeks_count !== 1 ? 's' : ''} (from the Monday of {startDate}), then writes the plan. This can't be undone.</>
-                : <>No existing workouts in {groupName ? `“${groupName}”` : 'the group'} over the plan's {template.weeks_count} week{template.weeks_count !== 1 ? 's' : ''} — the plan will be added cleanly.</>}
+                ? <>This <strong>replaces {replaceCount} existing workout{replaceCount !== 1 ? 's' : ''}</strong> in {groupName ? `“${groupName}”` : 'the group'} across the plan's {selectedWeeks.size} selected week{selectedWeeks.size !== 1 ? 's' : ''} (from the Monday of {startDate}), then writes the plan. This can't be undone.</>
+                : <>No existing workouts in {groupName ? `“${groupName}”` : 'the group'} over the plan's {selectedWeeks.size} selected week{selectedWeeks.size !== 1 ? 's' : ''} — the plan will be added cleanly.</>}
           </div>
           {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded p-2">{error}</p>}
           <div className="flex gap-2">
@@ -879,7 +920,8 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
             <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Monday)</label>
             <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <button onClick={() => { if (groupId && startDate) setStep('confirm'); }} disabled={!groupId || !startDate} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
+          <WeekPicker weeksCount={template.weeks_count} selected={selectedWeeks} onChange={setSelectedWeeks} />
+          <button onClick={() => { if (groupId && startDate && selectedWeeks.size) setStep('confirm'); }} disabled={!groupId || !startDate || !selectedWeeks.size} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
             Apply to calendar
           </button>
         </div>
@@ -898,6 +940,8 @@ export function AthleteApplyModal({ template, onClose }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [conflict, setConflict] = useState(null); // detail string when replace needed
+  const allWeeks = Array.from({ length: template.weeks_count }, (_, i) => i + 1);
+  const [selectedWeeks, setSelectedWeeks] = useState(() => new Set(allWeeks));
 
   const today = new Date().toISOString().slice(0, 10);
   const athleteName = athletes.find((a) => String(a.id) === String(athleteId))?.full_name || '';
@@ -913,6 +957,7 @@ export function AthleteApplyModal({ template, onClose }) {
       const { data } = await applyTemplateToAthlete(template.id, {
         athlete_id: Number(athleteId), start_date: startDate,
         override_group: override, replace,
+        weeks: [...selectedWeeks],
       });
       setResult(data);
       setConflict(null);
@@ -963,6 +1008,7 @@ export function AthleteApplyModal({ template, onClose }) {
             <label className="block text-xs font-medium text-white/60 mb-1">Start date (week 1, Monday)</label>
             <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
+          <WeekPicker weeksCount={template.weeks_count} selected={selectedWeeks} onChange={setSelectedWeeks} />
           <label className="flex items-start gap-2 text-sm text-white/80 cursor-pointer">
             <input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} className="mt-0.5" />
             <span>Override the group workout
@@ -970,7 +1016,7 @@ export function AthleteApplyModal({ template, onClose }) {
             </span>
           </label>
           {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded p-2">{error}</p>}
-          <button onClick={() => doApply(false)} disabled={!athleteId || !startDate || applying} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
+          <button onClick={() => doApply(false)} disabled={!athleteId || !startDate || !selectedWeeks.size || applying} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
             {applying ? 'Applying…' : 'Apply to athlete'}
           </button>
         </div>
@@ -980,10 +1026,11 @@ export function AthleteApplyModal({ template, onClose }) {
 }
 
 // Now / After comparison for a group plan apply.
-function DiffCalendar({ templateId, weeksCount, groupId, startMonday, onBack, onApply, applying }) {
+function DiffCalendar({ templateId, weeksCount, selectedWeeks, groupId, startMonday, onBack, onApply, applying }) {
   const [oldMap, setOldMap] = useState(null);
   const [newMap, setNewMap] = useState(null);
   const [view, setView] = useState('after'); // now | after
+  const isSelected = (w) => !selectedWeeks || selectedWeeks.has(w);
 
   useEffect(() => {
     let alive = true;
@@ -991,6 +1038,7 @@ function DiffCalendar({ templateId, weeksCount, groupId, startMonday, onBack, on
       if (!alive) return;
       const m = {};
       data.days.forEach((d) => {
+        if (!isSelected(d.week_number)) return;
         const dt = addDays(startMonday, (d.week_number - 1) * 7 + d.day_of_week);
         m[format(dt, 'yyyy-MM-dd')] = { workout_type: d.workout_type, title: d.title || typeMeta(d.workout_type).label };
       });
@@ -1005,6 +1053,9 @@ function DiffCalendar({ templateId, weeksCount, groupId, startMonday, onBack, on
       if (!alive) return;
       const m = {};
       res.forEach(({ data }) => data.days.forEach((day) => {
+        const dt = new Date(day.date + 'T00:00');
+        const wk = Math.floor((dt - startMonday) / (7 * 86400000)) + 1;
+        if (!isSelected(wk)) return; // only show existing rows we'd actually replace
         const list = day.group_workouts || [];
         if (list.length) {
           const gw = list[list.length - 1];
@@ -1015,7 +1066,7 @@ function DiffCalendar({ templateId, weeksCount, groupId, startMonday, onBack, on
     }).catch(() => setOldMap({}));
 
     return () => { alive = false; };
-  }, [templateId, weeksCount, groupId, startMonday]);
+  }, [templateId, weeksCount, groupId, startMonday, selectedWeeks]);
 
   if (!oldMap || !newMap) return <div className="py-8"><Spinner /></div>;
 

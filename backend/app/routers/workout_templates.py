@@ -31,6 +31,24 @@ def _clean(s: Optional[str]) -> Optional[str]:
     return s or None
 
 
+def _selected_weeks(weeks: Optional[list[int]], weeks_count: int) -> set[int]:
+    """Normalize the requested week subset. None/empty → all weeks."""
+    chosen = {w for w in (weeks or []) if 1 <= w <= weeks_count}
+    return chosen or set(range(1, weeks_count + 1))
+
+
+def _weeks_date_filter(date_col, start_monday, selected: set[int]):
+    """SQLAlchemy predicate: `date_col` falls inside any selected week's 7-day
+    range, where week w spans [start_monday + (w-1)*7, start_monday + w*7)."""
+    from sqlalchemy import and_, or_
+    ranges = []
+    for w in selected:
+        lo = start_monday + timedelta(weeks=w - 1)
+        hi = start_monday + timedelta(weeks=w)
+        ranges.append(and_(date_col >= lo, date_col < hi))
+    return or_(*ranges)
+
+
 def _owned_template(db: Session, template_id: int, coach: User, active_team_id: Optional[int]) -> WorkoutTemplate:
     t = db.get(WorkoutTemplate, template_id)
     if t is None:
@@ -248,28 +266,30 @@ def apply_template(
     # Snap to the Monday of the chosen week so day_of_week=0 lands on a Monday.
     start_monday = body.start_date - timedelta(days=body.start_date.weekday())
 
+    # Which plan weeks to apply (None/empty = all). Selected weeks keep the exact
+    # dates apply-all would give them; unselected weeks are neither written nor wiped.
+    selected = _selected_weeks(body.weeks, t.weeks_count)
+
     days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position))
+    days = [d for d in days if d.week_number in selected]
     # Map each template day to its calendar date up front so we can both detect
     # collisions and report the plan's end date.
     targets = {
         d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
         for d in days
     }
-    # Override scope: applying wipes EVERY group workout across the plan's whole
-    # weeks_count-week range (start Monday → end of the last week), then writes
-    # the plan fresh — a clean "override all", not just the days the plan fills.
-    range_end_excl = start_monday + timedelta(weeks=t.weeks_count)
+    # Override scope: applying wipes every group workout across ONLY the selected
+    # weeks' ranges, then writes the plan fresh.
     existing = db.query(GroupWorkout).filter(
         GroupWorkout.training_group_id == body.group_id,
-        GroupWorkout.date >= start_monday,
-        GroupWorkout.date < range_end_excl,
+        _weeks_date_filter(GroupWorkout.date, start_monday, selected),
     )
     conflicts = existing.count()
     replaced = 0
     if conflicts and not body.replace:
         raise HTTPException(
             status_code=409,
-            detail=f"{conflicts} workout(s) in the plan's {t.weeks_count} week(s) "
+            detail=f"{conflicts} workout(s) in the plan's {len(selected)} selected week(s) "
                    f"will be replaced; re-apply with replace=true to overwrite",
         )
     if conflicts:
@@ -332,36 +352,35 @@ def apply_template_to_athlete(
         raise HTTPException(status_code=404, detail="Athlete not found")
 
     start_monday = body.start_date - timedelta(days=body.start_date.weekday())
+    selected = _selected_weeks(body.weeks, t.weeks_count)
     days = sorted(t.days, key=lambda d: (d.week_number, d.day_of_week, d.position))
+    days = [d for d in days if d.week_number in selected]
     targets = {
         d: start_monday + timedelta(weeks=d.week_number - 1, days=d.day_of_week)
         for d in days
     }
 
-    # Clean override: wipe every individual target across the plan's whole range,
-    # then write the plan fresh.
-    range_end_excl = start_monday + timedelta(weeks=t.weeks_count)
+    # Clean override: wipe individual targets across ONLY the selected weeks'
+    # ranges, then write the plan fresh.
     existing = db.query(IndividualTarget).filter(
         IndividualTarget.athlete_id == body.athlete_id,
-        IndividualTarget.date >= start_monday,
-        IndividualTarget.date < range_end_excl,
+        _weeks_date_filter(IndividualTarget.date, start_monday, selected),
     )
     conflicts = existing.count()
     replaced = 0
     if conflicts and not body.replace:
         raise HTTPException(
             status_code=409,
-            detail=f"{conflicts} personal workout(s) in the plan's {t.weeks_count} week(s) "
+            detail=f"{conflicts} personal workout(s) in the plan's {len(selected)} selected week(s) "
                    f"will be replaced; re-apply with replace=true to overwrite",
         )
     if conflicts:
         existing.delete(synchronize_session=False)
         replaced = conflicts
-    # Clear any stale "hide group" rows in the range so a re-apply starts clean.
+    # Clear any stale "hide group" rows in the selected ranges so a re-apply starts clean.
     db.query(GroupWorkoutHide).filter(
         GroupWorkoutHide.athlete_id == body.athlete_id,
-        GroupWorkoutHide.date >= start_monday,
-        GroupWorkoutHide.date < range_end_excl,
+        _weeks_date_filter(GroupWorkoutHide.date, start_monday, selected),
     ).delete(synchronize_session=False)
 
     created = 0

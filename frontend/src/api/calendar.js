@@ -50,3 +50,9 @@ export const promoteTarget = (targetId) =>
 // Day-level "don't show group workout today" for one athlete.
 export const setGroupVisibility = (athleteId, date, hideGroup) =>
   client.put(`/calendar/group-visibility/${athleteId}/${date}`, { hide_group: hideGroup });
+
+// Week-level hide/show for one athlete: hides/reveals both the week's group
+// workouts (all 7 days) and the athlete's individual targets. weekStart is any
+// date in the Sunday-based week (server snaps to the Sunday).
+export const setWeekVisibility = (athleteId, weekStart, hide) =>
+  client.put(`/calendar/week-visibility/${athleteId}/${weekStart}`, { hide });

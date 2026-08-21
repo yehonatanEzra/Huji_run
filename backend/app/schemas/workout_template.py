@@ -86,6 +86,7 @@ class TemplateApply(BaseModel):
     start_date: date          # snapped to the Monday of its week on the server
     replace: bool = True      # overwrite existing group workouts on the plan's dates
     weeks: Optional[list[int]] = None  # which plan weeks to apply; None/empty = all
+    athlete_ids: Optional[list[int]] = None  # target subset; None/empty or == all members → broadcast
 
 
 class TemplateApplyAthlete(BaseModel):

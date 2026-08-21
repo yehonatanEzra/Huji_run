@@ -15,6 +15,11 @@ export const removeGroupCoach = (groupId, userId) =>
 export const transferGroupOwnership = (groupId, newMainUserId) =>
   client.patch(`/groups/${groupId}/transfer`, { new_main_user_id: newMainUserId });
 
+// Current coach leaves the group (assistant, or former main after transfer).
+// Their personal athletes in the group are removed from it.
+export const leaveGroup = (groupId) =>
+  client.post(`/groups/${groupId}/leave`);
+
 // Co-coach invitations — adding a coach now sends an invite the coach must accept.
 export const listIncomingCoachInvites = () =>
   client.get('/groups/coach-invites/incoming');

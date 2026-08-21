@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import require_coach, get_active_team_id
 from ..models.user import User
-from ..models.workout import GroupWorkout, IndividualTarget, GroupWorkoutHide
+from ..models.workout import GroupWorkout, IndividualTarget, GroupWorkoutHide, GroupWorkoutRecipient
 from ..models.workout_template import WorkoutTemplate, WorkoutTemplateDay
 from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
@@ -63,6 +63,14 @@ def _weeks_date_filter(date_col, start_monday, selected: set[int]):
         hi = start_monday + timedelta(weeks=w)
         ranges.append(and_(date_col >= lo, date_col < hi))
     return or_(*ranges)
+
+
+def _set_recipients(db: Session, gw_id: int, athlete_ids) -> None:
+    """Replace a group workout's recipient rows (mirrors calendar._replace_recipients).
+    An empty set clears them (broadcast)."""
+    db.query(GroupWorkoutRecipient).filter(GroupWorkoutRecipient.group_workout_id == gw_id).delete()
+    for aid in set(athlete_ids):
+        db.add(GroupWorkoutRecipient(group_workout_id=gw_id, athlete_id=aid))
 
 
 def _owned_template(db: Session, template_id: int, coach: User, active_team_id: Optional[int]) -> WorkoutTemplate:
@@ -296,30 +304,72 @@ def apply_template(
         d: week_start + timedelta(weeks=d.week_number - 1, days=(d.day_of_week + 1) % 7)
         for d in days
     }
-    # Override scope: applying wipes every group workout across ONLY the selected
-    # weeks' ranges, then writes the plan fresh.
+    # Who to publish to. None/empty or "all members" → broadcast (no recipient
+    # rows = visible to the whole group, current and future). A strict subset →
+    # targeted group workouts via GroupWorkoutRecipient.
+    member_ids = {
+        r[0] for r in db.query(User.id)
+        .filter(User.training_group_id == body.group_id, User.role == "athlete").all()
+    }
+    S = (set(body.athlete_ids) & member_ids) if body.athlete_ids else set(member_ids)
+    if body.athlete_ids and not S:
+        raise HTTPException(status_code=400, detail="No valid athletes selected")
+    broadcast = (S == member_ids)
+
+    # Existing group workouts across ONLY the selected weeks' ranges.
     existing = db.query(GroupWorkout).filter(
         GroupWorkout.training_group_id == body.group_id,
         _weeks_date_filter(GroupWorkout.date, week_start, selected),
-    )
-    conflicts = existing.count()
+    ).all()
     replaced = 0
-    if conflicts and not body.replace:
-        raise HTTPException(
-            status_code=409,
-            detail=f"{conflicts} workout(s) in the plan's {len(selected)} selected week(s) "
-                   f"will be replaced; re-apply with replace=true to overwrite",
-        )
-    if conflicts:
-        existing.delete(synchronize_session=False)
-        replaced = conflicts
+
+    if broadcast:
+        # Whole-group publish: wipe everything in range, then write fresh.
+        conflicts = len(existing)
+        if conflicts and not body.replace:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{conflicts} workout(s) in the plan's {len(selected)} selected week(s) "
+                       f"will be replaced; re-apply with replace=true to overwrite",
+            )
+        if conflicts:
+            for w in existing:
+                db.delete(w)
+            replaced = conflicts
+    else:
+        # Targeted publish: only touch workouts the selected athletes see, and
+        # remove just those athletes from each — never disturb what the rest see.
+        recips: dict[int, set[int]] = {w.id: set() for w in existing}
+        if existing:
+            for wid, aid in db.query(
+                GroupWorkoutRecipient.group_workout_id, GroupWorkoutRecipient.athlete_id
+            ).filter(GroupWorkoutRecipient.group_workout_id.in_([w.id for w in existing])).all():
+                recips[wid].add(aid)
+        # A workout is a conflict for S iff it's broadcast (no recips) or targets
+        # anyone in S.
+        conflict_ws = [w for w in existing if not recips[w.id] or (recips[w.id] & S)]
+        if conflict_ws and not body.replace:
+            raise HTTPException(
+                status_code=409,
+                detail=f"{len(conflict_ws)} workout(s) for the selected athletes in the plan's "
+                       f"{len(selected)} selected week(s) will be replaced; "
+                       f"re-apply with replace=true to overwrite",
+            )
+        for w in conflict_ws:
+            new_r = (member_ids if not recips[w.id] else recips[w.id]) - S
+            if new_r:
+                _set_recipients(db, w.id, new_r)
+            else:
+                db.delete(w)
+        replaced = len(conflict_ws)
 
     created = 0
     last_date = week_start
+    new_workouts = []
     for d in days:
         target = targets[d]
         last_date = max(last_date, target)
-        db.add(GroupWorkout(
+        gw = GroupWorkout(
             team_id=active_team_id,
             training_group_id=body.group_id,
             date=target,
@@ -331,18 +381,21 @@ def apply_template(
             cooldown=d.cooldown,
             distance_km=d.distance_km,
             created_by=coach.id,
-        ))
+        )
+        db.add(gw)
+        new_workouts.append(gw)
         created += 1
 
-    # One summary notification to the whole group instead of N per-workout pings.
+    # Attach recipients for a targeted publish (broadcast leaves the table empty).
+    if created and not broadcast:
+        db.flush()
+        for gw in new_workouts:
+            _set_recipients(db, gw.id, S)
+
+    # One summary notification to the target audience instead of N per-workout pings.
     if created:
-        athlete_ids = [
-            r[0] for r in db.query(User.id)
-            .filter(User.training_group_id == body.group_id, User.role == "athlete")
-            .all()
-        ]
         notify_many(
-            db, athlete_ids, "new_workout",
+            db, list(S), "new_workout",
             f"Coach published the '{t.name}' plan starting {week_start.strftime('%b %d')}",
             f"/calendar?date={week_start.isoformat()}",
         )

@@ -64,6 +64,24 @@ def _serialize_invite(db: Session, inv: GroupCoachInvite) -> CoachInviteOut:
     )
 
 
+def _detach_coach_athletes(db: Session, coach_id: int, group: TrainingGroup) -> int:
+    """Remove a coach's personal athletes from a group (they stay coached) and
+    drop that coach's pending add-requests there. Returns how many were removed."""
+    athletes = db.query(User).filter(
+        User.role == "athlete",
+        User.coach_id == coach_id,
+        User.training_group_id == group.id,
+    ).all()
+    for a in athletes:
+        a.training_group_id = None
+        notify(db, a.id, "group_removed", f"You were removed from the group “{group.name}”.", None)
+    db.query(GroupAddRequest).filter(
+        GroupAddRequest.group_id == group.id,
+        GroupAddRequest.requested_by_id == coach_id,
+    ).delete(synchronize_session=False)
+    return len(athletes)
+
+
 def _require_main_coach(group: TrainingGroup, actor: User, db: Session) -> GroupCoach:
     """Raise 403 unless actor is the main coach of the group."""
     gc = db.query(GroupCoach).filter(
@@ -298,13 +316,47 @@ def remove_coach(
     if gc.role == "main":
         raise HTTPException(status_code=400, detail="Cannot remove the main coach; transfer ownership first")
 
-    # An assistant losing the group can no longer have pending adds awaiting approval there.
-    db.query(GroupAddRequest).filter(
-        GroupAddRequest.group_id == group_id,
-        GroupAddRequest.requested_by_id == user_id,
-    ).delete(synchronize_session=False)
+    # Removing an assistant also pulls their personal athletes out of the group
+    # (and clears their pending adds there).
+    _detach_coach_athletes(db, user_id, group)
     db.delete(gc)
+    notify(db, user_id, "coach_removed", f"You were removed as a coach of “{group.name}”.", None)
     db.commit()
+
+
+@router.post("/{group_id}/leave", status_code=status.HTTP_200_OK)
+def leave_group(
+    group_id: int,
+    actor: Annotated[User, Depends(require_coach)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """A coach leaves a group they coach. Their personal athletes in the group
+    are removed from it (they stay coached). The main coach can't leave this way —
+    they must transfer ownership first (then leave as assistant) or delete the group."""
+    group = db.get(TrainingGroup, group_id)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    gc = db.query(GroupCoach).filter(
+        GroupCoach.group_id == group_id, GroupCoach.user_id == actor.id
+    ).first()
+    if gc is None:
+        raise HTTPException(status_code=404, detail="You are not a coach of this group")
+    if gc.role == "main":
+        raise HTTPException(
+            status_code=400,
+            detail="As main coach, transfer ownership or delete the group before leaving",
+        )
+
+    removed = _detach_coach_athletes(db, actor.id, group)
+    db.delete(gc)
+    main = db.query(GroupCoach).filter(
+        GroupCoach.group_id == group_id, GroupCoach.role == "main"
+    ).first()
+    if main:
+        notify(db, main.user_id, "coach_left",
+               f"{actor.full_name} left “{group.name}”.", "/coach/group")
+    db.commit()
+    return {"ok": True, "athletes_removed": removed}
 
 
 @router.patch("/{group_id}/transfer", status_code=status.HTTP_200_OK)

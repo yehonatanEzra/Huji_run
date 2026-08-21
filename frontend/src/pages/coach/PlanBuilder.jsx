@@ -3,7 +3,7 @@ import {
   getTemplate, createTemplate, updateTemplate,
   applyTemplate, applyTemplateToAthlete,
 } from '../../api/workoutTemplates';
-import { listGroups, listAssignableAthletes } from '../../api/coach';
+import { listGroups, listAssignableAthletes, getGroup } from '../../api/coach';
 import { getCoachGroupWeek } from '../../api/calendar';
 import { addDays, format } from 'date-fns';
 import Modal from '../../components/ui/Modal';
@@ -802,6 +802,9 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [replaceCount, setReplaceCount] = useState(null); // existing workouts in the range
+  const [overrideAthletes, setOverrideAthletes] = useState([]); // [{id,name,days}] selected athletes with existing workouts
+  const [members, setMembers] = useState([]); // athletes in the chosen group
+  const [selectedAthleteIds, setSelectedAthleteIds] = useState(() => new Set()); // whom to apply to
   const [fromWeek, setFromWeek] = useState(1);
   const [toWeek, setToWeek] = useState(template.weeks_count);
   const selectedWeeks = useMemo(() => {
@@ -824,25 +827,69 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
     }).catch(() => {});
   }, []);
 
-  // Count existing workouts across ONLY the selected weeks' ranges when confirm opens.
+  // Load the chosen group's members; default the selection to everyone (whole-group
+  // publish == today's behavior). Reset whenever the group changes.
+  useEffect(() => {
+    if (!groupId) { setMembers([]); setSelectedAthleteIds(new Set()); return; }
+    getGroup(Number(groupId)).then(({ data }) => {
+      const ms = data.members || [];
+      setMembers(ms);
+      setSelectedAthleteIds(new Set(ms.map((m) => m.id)));
+    }).catch(() => { setMembers([]); setSelectedAthleteIds(new Set()); });
+  }, [groupId]);
+
+  const allSelected = members.length > 0 && selectedAthleteIds.size === members.length;
+
+  // Count existing workouts across ONLY the selected weeks' ranges when confirm
+  // opens — scoped to what the SELECTED athletes actually see — plus a per-athlete
+  // override summary. A workout is "seen" by an athlete when it has no recipients
+  // (broadcast) or lists them.
   useEffect(() => {
     if (step !== 'confirm' || !groupId || !startDate) return;
     setReplaceCount(null);
+    setOverrideAthletes([]);
     const sm = weekStartOf(startDate);
+    const sel = [...selectedAthleteIds];
     Promise.all(
       Array.from({ length: template.weeks_count + 1 }, (_, w) =>
         getCoachGroupWeek(Number(groupId), format(addDays(sm, w * 7), 'yyyy-MM-dd'))
       )
     ).then((res) => {
       let n = 0;
+      const daysByAthlete = new Map(); // athleteId -> Set(dates) with an existing seen workout
       res.forEach(({ data }) => data.days.forEach((day) => {
         const dt = new Date(day.date + 'T00:00');
         const wk = Math.floor((dt - sm) / (7 * 86400000)) + 1;
-        if (selectedWeeks.has(wk)) n += (day.group_workouts || []).length;
+        if (!selectedWeeks.has(wk)) return;
+        const list = day.group_workouts || [];
+        // Workouts visible to at least one selected athlete = what we'd replace.
+        const seenBySel = list.filter((gw) => {
+          const r = gw.recipient_ids || [];
+          return r.length === 0 || r.some((id) => selectedAthleteIds.has(id));
+        });
+        n += seenBySel.length;
+        if (seenBySel.length) {
+          sel.forEach((aid) => {
+            const seesAny = seenBySel.some((gw) => {
+              const r = gw.recipient_ids || [];
+              return r.length === 0 || r.includes(aid);
+            });
+            if (seesAny) {
+              if (!daysByAthlete.has(aid)) daysByAthlete.set(aid, new Set());
+              daysByAthlete.get(aid).add(day.date);
+            }
+          });
+        }
       }));
       setReplaceCount(n);
-    }).catch(() => setReplaceCount(0));
-  }, [step, groupId, startDate, selectedWeeks]);
+      const nameById = new Map(members.map((m) => [m.id, m.full_name]));
+      setOverrideAthletes(
+        [...daysByAthlete.entries()]
+          .map(([id, dates]) => ({ id, name: nameById.get(id) || 'Athlete', days: dates.size }))
+          .sort((a, b) => b.days - a.days)
+      );
+    }).catch(() => { setReplaceCount(0); setOverrideAthletes([]); });
+  }, [step, groupId, startDate, selectedWeeks, selectedAthleteIds, members]);
 
   const doApply = async () => {
     setApplying(true);
@@ -850,7 +897,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
     try {
       const { data } = await applyTemplate(template.id, {
         group_id: Number(groupId), start_date: startDate, replace: true,
-        weeks: [...selectedWeeks],
+        weeks: [...selectedWeeks], athlete_ids: [...selectedAthleteIds],
       });
       setResult(data);
       setStep('result');
@@ -882,6 +929,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
           weeksCount={template.weeks_count}
           selectedWeeks={selectedWeeks}
           groupId={Number(groupId)}
+          athleteIds={selectedAthleteIds}
           startMonday={weekStartOf(startDate)}
           onBack={() => setStep('confirm')}
           onApply={doApply}
@@ -889,13 +937,26 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
         />
       ) : step === 'confirm' ? (
         <div className="space-y-3">
+          <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white/70">
+            Applying to <strong className="text-white">{allSelected ? `all ${members.length} athletes` : `${selectedAthleteIds.size} of ${members.length} athletes`}</strong> in {groupName ? `“${groupName}”` : 'the group'}.
+          </div>
           <div className="bg-amber-500/15 border border-amber-400/30 rounded-lg p-3 text-sm text-amber-100">
             {replaceCount === null
               ? 'Checking existing workouts…'
               : replaceCount > 0
-                ? <>This <strong>replaces {replaceCount} existing workout{replaceCount !== 1 ? 's' : ''}</strong> in {groupName ? `“${groupName}”` : 'the group'} across the plan's {selectedWeeks.size} selected week{selectedWeeks.size !== 1 ? 's' : ''} (from the Monday of {startDate}), then writes the plan. This can't be undone.</>
-                : <>No existing workouts in {groupName ? `“${groupName}”` : 'the group'} over the plan's {selectedWeeks.size} selected week{selectedWeeks.size !== 1 ? 's' : ''} — the plan will be added cleanly.</>}
+                ? <>This <strong>replaces {replaceCount} existing workout{replaceCount !== 1 ? 's' : ''}</strong> the selected athletes have across the plan's {selectedWeeks.size} selected week{selectedWeeks.size !== 1 ? 's' : ''} (from the Sunday of {startDate}), then writes the plan. This can't be undone.</>
+                : <>No existing workouts for the selected athletes over the plan's {selectedWeeks.size} selected week{selectedWeeks.size !== 1 ? 's' : ''} — the plan will be added cleanly.</>}
           </div>
+          {overrideAthletes.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-400/20 rounded-lg p-3 text-xs text-amber-100/90">
+              <p className="font-semibold mb-1">Overrides existing workouts for:</p>
+              <p className="leading-relaxed">
+                {overrideAthletes.map((a, i) => (
+                  <span key={a.id}>{i > 0 && ', '}{a.name} <span className="text-amber-100/60">({a.days} day{a.days !== 1 ? 's' : ''})</span></span>
+                ))}
+              </p>
+            </div>
+          )}
           {error && <p className="text-red-300 text-sm bg-red-500/15 border border-red-400/30 rounded p-2">{error}</p>}
           <div className="flex gap-2">
             <button onClick={() => setStep('diff')} className="px-4 border border-[#c0c1ff]/50 text-[#c0c1ff] rounded-lg py-2 text-sm font-medium hover:bg-[#c0c1ff]/10">See diff</button>
@@ -920,7 +981,43 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
             <input type="date" value={startDate} min={today} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-[#1c1b1c] border border-white/15 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#c0c1ff]/40 [color-scheme:dark]" />
           </div>
           <WeekRangePicker weeksCount={template.weeks_count} from={fromWeek} to={toWeek} setFrom={setFromWeek} setTo={setToWeek} />
-          <button onClick={() => { if (groupId && startDate && selectedWeeks.size) setStep('confirm'); }} disabled={!groupId || !startDate || !selectedWeeks.size} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
+          <div className="border border-white/10 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-white/60">
+                Athletes <span className="text-white/40">({selectedAthleteIds.size} of {members.length} selected)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setSelectedAthleteIds(allSelected ? new Set() : new Set(members.map((m) => m.id)))}
+                className="text-[11px] px-2 py-1 rounded border border-[#c0c1ff]/40 text-[#c0c1ff] hover:bg-[#c0c1ff]/10">
+                {allSelected ? 'Select none' : 'Select all'}
+              </button>
+            </div>
+            {members.length === 0 ? (
+              <p className="text-[11px] italic text-white/40">No athletes in this group.</p>
+            ) : (
+              <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                {members.map((m) => {
+                  const checked = selectedAthleteIds.has(m.id);
+                  return (
+                    <label key={m.id} className="flex items-center gap-2 cursor-pointer text-sm text-white/75">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setSelectedAthleteIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(m.id); else next.delete(m.id);
+                          return next;
+                        })}
+                        className="w-4 h-4 rounded accent-[#c0c1ff]" />
+                      {m.full_name}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <button onClick={() => { if (groupId && startDate && selectedWeeks.size && selectedAthleteIds.size) setStep('confirm'); }} disabled={!groupId || !startDate || !selectedWeeks.size || !selectedAthleteIds.size} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-lg py-2 text-sm font-medium hover:bg-[#a9aaff] disabled:opacity-50">
             Apply to calendar
           </button>
         </div>
@@ -1030,7 +1127,7 @@ export function AthleteApplyModal({ template, onClose }) {
 }
 
 // Now / After comparison for a group plan apply.
-function DiffCalendar({ templateId, weeksCount, selectedWeeks, groupId, startMonday, onBack, onApply, applying }) {
+function DiffCalendar({ templateId, weeksCount, selectedWeeks, groupId, athleteIds, startMonday, onBack, onApply, applying }) {
   const [oldMap, setOldMap] = useState(null);
   const [newMap, setNewMap] = useState(null);
   const [view, setView] = useState('after'); // now | after
@@ -1060,7 +1157,13 @@ function DiffCalendar({ templateId, weeksCount, selectedWeeks, groupId, startMon
         const dt = new Date(day.date + 'T00:00');
         const wk = Math.floor((dt - startMonday) / (7 * 86400000)) + 1;
         if (!isSelected(wk)) return; // only show existing rows we'd actually replace
-        const list = day.group_workouts || [];
+        // Only what the SELECTED athletes see: broadcast (no recipients) or
+        // targeting someone in the selection.
+        const list = (day.group_workouts || []).filter((gw) => {
+          if (!athleteIds || athleteIds.size === 0) return true;
+          const r = gw.recipient_ids || [];
+          return r.length === 0 || r.some((id) => athleteIds.has(id));
+        });
         if (list.length) {
           const gw = list[list.length - 1];
           m[day.date] = { workout_type: gw.workout_type, title: gw.title || typeMeta(gw.workout_type).label };
@@ -1070,7 +1173,7 @@ function DiffCalendar({ templateId, weeksCount, selectedWeeks, groupId, startMon
     }).catch(() => setOldMap({}));
 
     return () => { alive = false; };
-  }, [templateId, weeksCount, groupId, startMonday, selectedWeeks]);
+  }, [templateId, weeksCount, groupId, startMonday, selectedWeeks, athleteIds]);
 
   if (!oldMap || !newMap) return <div className="py-8"><Spinner /></div>;
 

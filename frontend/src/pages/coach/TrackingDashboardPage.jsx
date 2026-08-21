@@ -22,7 +22,7 @@ const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
 // workout unless hidden for the day, plus 'additional' personal workouts).
 const plannedKm = (d) => visibleDayPlannedKm(d);
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
-import { createTarget, updateTargetById, deleteTargetById, promoteTarget, setGroupVisibility } from '../../api/calendar';
+import { createTarget, updateTargetById, deleteTargetById, promoteTarget, setGroupVisibility, setWeekVisibility } from '../../api/calendar';
 import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm, tracksDistance } from '../../constants/workouts';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
@@ -63,6 +63,8 @@ export default function TrackingDashboardPage() {
   const [profileViewMode, setProfileViewMode] = useState('week');
   const [profileMonthDate, setProfileMonthDate] = useState(new Date());
   const [profileMonth, setProfileMonth] = useState(null);
+  // Week-start ('YYYY-MM-DD') of a Hide/Show-week action currently in flight.
+  const [savingWeek, setSavingWeek] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
   // Carousel index per day in the expanded monthly grid: { 'YYYY-MM-DD': index }.
   // Lets a cell with multiple workouts switch which single one it displays.
@@ -298,6 +300,50 @@ export default function TrackingDashboardPage() {
       fetchData();
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
+  };
+
+  // Week-level hide/show for the open athlete: hides/reveals both the group
+  // workouts and the individual targets for the whole Sunday-based week.
+  const applyWeekVisibility = async (weekStartStr, hide) => {
+    if (!profile) return;
+    setSavingWeek(weekStartStr);
+    try {
+      await setWeekVisibility(profile.id, weekStartStr, hide);
+      const { data } = await getAthleteWeek(profile.id, format(profileWeekDate, 'yyyy-MM-dd'));
+      setProfileWeek(data);
+      if (profileViewMode === 'month' || monthExpanded) {
+        const m = await fetchProfileMonth(profile.id, profileMonthDate);
+        setProfileMonth(m);
+      }
+      fetchData();
+    } catch (err) { console.error(err); }
+    finally { setSavingWeek(null); }
+  };
+
+  // Compact "Hide week / Show week" button pair for a given Sunday date string.
+  const weekHideButtons = (weekStartStr, compact = false) => {
+    const busy = savingWeek === weekStartStr;
+    const size = compact ? 'text-[9px] px-1.5 py-0.5' : 'text-[11px] px-2.5 py-1';
+    return (
+      <div className="flex items-center gap-1">
+        <button
+          onClick={(e) => { e.stopPropagation(); applyWeekVisibility(weekStartStr, true); }}
+          disabled={busy}
+          className={`${size} rounded border border-white/25 text-white/60 hover:bg-white/10 disabled:opacity-50 transition`}
+          title="Hide all group workouts and personal targets this week from the athlete"
+        >
+          Hide week
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); applyWeekVisibility(weekStartStr, false); }}
+          disabled={busy}
+          className={`${size} rounded border border-green-400/40 text-green-300 hover:bg-green-500/15 disabled:opacity-50 transition`}
+          title="Show all group workouts and personal targets this week to the athlete"
+        >
+          Show week
+        </button>
+      </div>
+    );
   };
 
   const deleteTargetRow = async (t) => {
@@ -714,6 +760,9 @@ export default function TrackingDashboardPage() {
                         </span>
                         <button onClick={() => setProfileWeekDate(addWeeks(profileWeekDate, 1))} className="text-blue-300 hover:text-blue-200 text-xs">&rarr;</button>
                       </div>
+                      <div className="flex justify-center mb-3">
+                        {weekHideButtons(format(startOfWeek(profileWeekDate, { weekStartsOn: 0 }), 'yyyy-MM-dd'))}
+                      </div>
                       {profileWeek ? (
                         <div className="space-y-1.5">{profileWeek.days.map(renderDay)}</div>
                       ) : <Spinner />}
@@ -762,9 +811,12 @@ export default function TrackingDashboardPage() {
                                       <p className="text-xs text-white/45 font-medium">
                                         {format(new Date(week[0].date + 'T00:00'), 'MMM d')} - {format(new Date(week[6].date + 'T00:00'), 'MMM d')}
                                       </p>
-                                      <div className="text-right">
-                                        <span className="text-sm font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
-                                        {expectedKm > 0 && <p className="text-[10px] text-white/75 font-normal">exp {fmtKm(expectedKm)} km</p>}
+                                      <div className="flex items-center gap-2">
+                                        {weekHideButtons(week[0].date, true)}
+                                        <div className="text-right">
+                                          <span className="text-sm font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                                          {expectedKm > 0 && <p className="text-[10px] text-white/75 font-normal">exp {fmtKm(expectedKm)} km</p>}
+                                        </div>
                                       </div>
                                     </div>
                                     <div className="grid grid-cols-7 gap-2">
@@ -1552,6 +1604,7 @@ export default function TrackingDashboardPage() {
                         <span className="text-red-300">X{wkMiss}</span>
                       </div>
                       {wkExp > 0 && <div className="text-[10px] text-white font-semibold mt-1">exp {fmtKm(wkExp)}k</div>}
+                      <div className="mt-1.5">{weekHideButtons(week[0].date, true)}</div>
                     </div>
                   </div>
                   );

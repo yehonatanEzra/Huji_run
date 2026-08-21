@@ -96,7 +96,7 @@ export default function ProfilePage() {
   };
 
   const handleLeaveCoach = async () => {
-    if (!confirm('Leave your coach? Your past data stays. You can join another coach afterwards.')) return;
+    if (!confirm('Leave your coach? You will also be removed from your training group. Your past data stays, and you can join another coach afterwards.')) return;
     setLeaving(true);
     try {
       await leaveCoach();

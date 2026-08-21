@@ -609,6 +609,54 @@ def set_group_visibility(
     return {"hide_group": hide}
 
 
+@router.put("/week-visibility/{athlete_id}/{week_start}", status_code=200)
+def set_week_visibility(
+    athlete_id: int,
+    week_start: date,
+    body: dict,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    """Week-level hide/show for one athlete: hides (or reveals) BOTH the group
+    workouts (all 7 days, via GroupWorkoutHide) AND the athlete's individual
+    targets (their `hidden` flag) for the Sunday-based week containing
+    `week_start`. body = {"hide": bool}."""
+    athlete = db.get(User, athlete_id)
+    if not can_coach_target_athlete(coach, athlete, db):
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    hide = bool(body.get("hide"))
+    ws = week_start - timedelta(days=(week_start.weekday() + 1) % 7)
+    we = ws + timedelta(days=7)
+    days = [ws + timedelta(days=i) for i in range(7)]
+
+    if hide:
+        have = {
+            h.date for h in db.query(GroupWorkoutHide.date).filter(
+                GroupWorkoutHide.athlete_id == athlete_id,
+                GroupWorkoutHide.date >= ws,
+                GroupWorkoutHide.date < we,
+            ).all()
+        }
+        for d in days:
+            if d not in have:
+                db.add(GroupWorkoutHide(athlete_id=athlete_id, date=d, created_by=coach.id))
+    else:
+        db.query(GroupWorkoutHide).filter(
+            GroupWorkoutHide.athlete_id == athlete_id,
+            GroupWorkoutHide.date >= ws,
+            GroupWorkoutHide.date < we,
+        ).delete(synchronize_session=False)
+
+    db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == athlete_id,
+        IndividualTarget.date >= ws,
+        IndividualTarget.date < we,
+    ).update({IndividualTarget.hidden: hide}, synchronize_session=False)
+
+    db.commit()
+    return {"hide": hide, "week_start": ws}
+
+
 @router.delete("/individual-targets/{target_id}", status_code=204)
 def delete_individual_target_by_id(
     target_id: int,

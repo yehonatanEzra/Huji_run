@@ -3,12 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..dependencies import get_current_user, create_access_token, get_active_team_id
-from .auth import _primary_team_id
+from ..dependencies import get_current_user, create_access_token
 from ..models.user import User
 from ..models.team import Team, TeamMembership
 from ..schemas.auth import TokenResponse
-from .public import build_team_profile, PublicTeamProfile
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -66,32 +64,6 @@ def my_teams(
         .all()
     )
     return [MyTeamOut(id=team.id, name=team.name, role=membership.role, is_public=team.is_public) for membership, team in rows]
-
-
-@router.get("/{team_id}/profile", response_model=PublicTeamProfile)
-def team_profile(
-    team_id: int,
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[Session, Depends(get_db)],
-    active_team_id: Annotated[Optional[int], Depends(get_active_team_id)] = None,
-):
-    """In-app team profile (Hall of Fame + recent results) for members and staff.
-    Athletes have no TeamMembership row — their team comes from the JWT
-    (active_team_id) — so accept either a membership or a matching active team."""
-    team = db.get(Team, team_id)
-    if team is None:
-        raise HTTPException(status_code=404, detail="Team not found")
-    # Authorize via the same resolver used for the JWT/`/auth/me`: admin, the
-    # token's active team, or the user's resolved team (membership → training
-    # group → coach). Reusing it keeps athlete access consistent everywhere and
-    # covers older tokens that still carry no active_team_id.
-    if (
-        current_user.role != "admin"
-        and active_team_id != team_id
-        and _primary_team_id(db, current_user.id) != team_id
-    ):
-        raise HTTPException(status_code=403, detail="You are not a member of this team")
-    return build_team_profile(db, team)
 
 
 @router.patch("/{team_id}", response_model=TeamOut)

@@ -376,7 +376,7 @@ function AthletesTab({ group, onChanged, groups }) {
       {/* Remove-from-group confirmation */}
       <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} panelClassName="bg-[#131314] border-t border-white/10">
         <h3 className="text-base font-bold text-white mb-1">Remove from group?</h3>
-        <p className="text-sm text-white/60 mb-4">{removeTarget?.full_name} stays your athlete — just without a group.</p>
+        <p className="text-sm text-white/60 mb-4">{removeTarget?.full_name} stays your athlete, just without a group.</p>
         <div className="flex gap-2">
           <button
             onClick={() => setRemoveTarget(null)}
@@ -789,7 +789,7 @@ function CoCoachesTab({ group, onChanged }) {
         <h3 className="text-base font-bold text-white mb-1">Leave "{group.name}"</h3>
         {assistants.length > 0 ? (
           <>
-            <p className="text-xs text-white/50 mb-3">You're the main coach. Hand the group to an assistant, then leave — your athletes in it will be removed.</p>
+            <p className="text-xs text-white/50 mb-3">You're the main coach. Hand the group to an assistant, then leave. Your athletes in it will be removed.</p>
             <div className="space-y-1.5 mb-3">
               {assistants.map((c) => (
                 <button key={c.user_id} onClick={() => setLeaveTarget(c)} className={`w-full text-left px-3 py-2 rounded-xl border text-sm transition ${leaveTarget?.user_id === c.user_id ? 'border-[#c0c1ff] bg-[#c0c1ff]/10 text-white' : 'border-white/10 text-white/70 hover:border-white/25'}`}>{c.full_name}</button>
@@ -1005,7 +1005,7 @@ function GroupProfileTab({ group }) {
   return (
     <div>
       <p className="text-xs text-white/50 mb-4">
-        This group's own profile — what its athletes see on their <span className="text-white/70 font-semibold">My Group</span> page.
+        This group's own profile: what its athletes see on their <span className="text-white/70 font-semibold">My Group</span> page.
       </p>
       <GroupProfileView groupId={group.id} />
     </div>

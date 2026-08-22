@@ -178,6 +178,7 @@ def _token_response(db: Session, user: User, active_team_id: Optional[int] = Non
         training_group_id=user.training_group_id,
         coach_id=user.coach_id,
         active_team_id=active_team_id,
+        ai_access=user.ai_access,
     )
 
 
@@ -281,6 +282,7 @@ def me(
         strava_connected=current_user.strava_connected,
         strava_can_connect=strava_can_connect,
         has_photo=current_user.has_photo,
+        ai_access=current_user.ai_access,
         active_team_id=active_team_id,
         active_team_name=active_team_name,
         email=current_user.email,

@@ -18,6 +18,7 @@ const mergeUser = (data) => ({
   strava_connected: data.strava_connected ?? false,
   strava_can_connect: data.strava_can_connect ?? true,
   has_photo: data.has_photo ?? false,
+  ai_access: data.ai_access ?? false,
   active_team_id: data.active_team_id ?? null,
   active_team_name: data.active_team_name ?? null,
   email: data.email ?? null,
@@ -67,6 +68,7 @@ export function AuthProvider({ children }) {
       training_group_id: tokenData.training_group_id ?? null,
       coach_id: tokenData.coach_id ?? null,
       active_team_id: tokenData.active_team_id ?? null,
+      ai_access: tokenData.ai_access ?? false,
     };
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);

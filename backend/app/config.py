@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     SMTP_PASS: str = ""
     SMTP_FROM: str = ""
 
+    # Athlete AI assistant (read-only advisor). When OPENAI_API_KEY is empty the
+    # assistant endpoints return 503. gpt-4o-mini is cheap + fast for this use.
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
     class Config:
         env_file = ".env"
 

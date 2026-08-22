@@ -39,6 +39,8 @@ export default function GroupHubPage() {
   const [tab, setTab] = useState('workouts');
   const [showSettings, setShowSettings] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  // Confirmation modal state
+  const [confirm, setConfirm] = useState(null); // { title, message, onConfirm, onCancel, isDangerous }
 
   const reload = useCallback(() => {
     return listGroups().then(({ data }) => {
@@ -847,11 +849,11 @@ function TypeBars({ breakdown }) {
 function SettingsPanel({ group, onClose, onChanged }) {
   const [name, setName] = useState(group.name);
   const [busy, setBusy] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const isMain = group.role === 'main';
 
   const save = async () => { if (!name.trim()) return; setBusy(true); try { await renameGroup(group.id, name.trim()); onChanged(); onClose(); } finally { setBusy(false); } };
-  const del = async () => {
-    if (!confirm(`Delete “${group.name}”?\n\nThis will remove all ${group.members?.length || 0} athletes from the group (they stay your athletes).\n\nYou might want to transfer ownership and leave instead. Continue with deletion?`)) return;
+  const confirmDelete = async () => {
     setBusy(true);
     try { await deleteGroup(group.id); onChanged(); onClose(); } finally { setBusy(false); }
   };
@@ -866,7 +868,7 @@ function SettingsPanel({ group, onClose, onChanged }) {
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={20} className={GLASS_INPUT} />
             <button disabled={busy} onClick={save} className="bg-[#c0c1ff] text-[#1000a9] text-sm px-4 rounded-xl font-bold disabled:opacity-40">Save</button>
           </div>
-          <button disabled={busy} onClick={del} className="w-full border border-red-400/30 text-red-300 rounded-xl py-2 text-sm font-medium hover:bg-red-400/10">Delete group</button>
+          <button disabled={busy} onClick={() => setDeleteOpen(true)} className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40">Delete group</button>
         </>
       ) : (
         <p className="text-sm text-white/50">Only the main coach can rename or delete this group.</p>
@@ -874,6 +876,25 @@ function SettingsPanel({ group, onClose, onChanged }) {
       <div className="mt-6 pt-4 border-t border-white/10">
         <TeamPublicSection />
       </div>
+
+      {/* Delete confirmation modal */}
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} panelClassName="bg-[#131314] border-t border-white/10">
+        <h3 className="text-base font-bold text-white mb-1">Delete group?</h3>
+        <p className="text-sm text-white/60 mb-1">This will remove all {group.members?.length || 0} athletes from the group (they stay your athletes).</p>
+        <p className="text-sm text-white/50 mb-4">You might want to transfer ownership and leave instead. This cannot be undone.</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setDeleteOpen(false)}
+            disabled={busy}
+            className="flex-1 border border-white/20 rounded-xl py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50 transition"
+          >Cancel</button>
+          <button
+            onClick={async () => { await confirmDelete(); setDeleteOpen(false); }}
+            disabled={busy}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 transition"
+          >{busy ? 'Deleting…' : 'Delete'}</button>
+        </div>
+      </Modal>
     </div>
   );
 }

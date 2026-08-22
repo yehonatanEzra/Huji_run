@@ -3,7 +3,8 @@ import {
   getTemplate, createTemplate, updateTemplate,
   applyTemplate, applyTemplateToAthlete,
 } from '../../api/workoutTemplates';
-import { listGroups, listAssignableAthletes, getGroup } from '../../api/coach';
+import { listGroups, listAssignableAthletes, getGroup, listSubgroups } from '../../api/coach';
+import SubgroupChips from '../../components/coach/SubgroupChips';
 import { getCoachGroupWeek } from '../../api/calendar';
 import { addDays, format } from 'date-fns';
 import Modal from '../../components/ui/Modal';
@@ -804,6 +805,7 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
   const [replaceCount, setReplaceCount] = useState(null); // existing workouts in the range
   const [overrideAthletes, setOverrideAthletes] = useState([]); // [{id,name,days}] selected athletes with existing workouts
   const [members, setMembers] = useState([]); // athletes in the chosen group
+  const [subgroups, setSubgroups] = useState([]);
   const [selectedAthleteIds, setSelectedAthleteIds] = useState(() => new Set()); // whom to apply to
   const [fromWeek, setFromWeek] = useState(1);
   const [toWeek, setToWeek] = useState(template.weeks_count);
@@ -830,12 +832,13 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
   // Load the chosen group's members; default the selection to everyone (whole-group
   // publish == today's behavior). Reset whenever the group changes.
   useEffect(() => {
-    if (!groupId) { setMembers([]); setSelectedAthleteIds(new Set()); return; }
+    if (!groupId) { setMembers([]); setSelectedAthleteIds(new Set()); setSubgroups([]); return; }
     getGroup(Number(groupId)).then(({ data }) => {
       const ms = data.members || [];
       setMembers(ms);
       setSelectedAthleteIds(new Set(ms.map((m) => m.id)));
     }).catch(() => { setMembers([]); setSelectedAthleteIds(new Set()); });
+    listSubgroups(Number(groupId)).then(({ data }) => setSubgroups(data)).catch(() => setSubgroups([]));
   }, [groupId]);
 
   const allSelected = members.length > 0 && selectedAthleteIds.size === members.length;
@@ -993,6 +996,17 @@ export function GroupApplyModal({ template, onClose, fixedGroupId = null }) {
                 {allSelected ? 'Select none' : 'Select all'}
               </button>
             </div>
+            {members.length > 0 && (
+              <SubgroupChips
+                subgroups={subgroups}
+                isSelected={(id) => selectedAthleteIds.has(id)}
+                onToggleMany={(ids, select) => setSelectedAthleteIds((prev) => {
+                  const next = new Set(prev);
+                  ids.forEach((id) => (select ? next.add(id) : next.delete(id)));
+                  return next;
+                })}
+              />
+            )}
             {members.length === 0 ? (
               <p className="text-[11px] italic text-white/40">No athletes in this group.</p>
             ) : (

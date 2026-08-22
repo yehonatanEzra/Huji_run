@@ -27,6 +27,7 @@ from .models.notification import Notification  # noqa: F401
 from .models.team import Team, TeamMembership  # noqa: F401
 from .models.group_coach import GroupCoach  # noqa: F401
 from .models.group_add_request import GroupAddRequest  # noqa: F401
+from .models.subgroup import Subgroup, SubgroupMember  # noqa: F401
 from .models.group_coach_invite import GroupCoachInvite  # noqa: F401
 from .models.athlete_transfer import AthleteTransfer  # noqa: F401
 from .models.info_section import InfoSection  # noqa: F401

@@ -12,7 +12,10 @@ from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
 from ..models.group_add_request import GroupAddRequest
 from ..models.group_coach_invite import GroupCoachInvite
+from ..models.subgroup import Subgroup, SubgroupMember
 from ..services.notifications import notify
+from ..services.coach_scope import coach_groups_with_role
+from .public import build_group_profile, PublicTeamProfile
 
 router = APIRouter(prefix="/groups", tags=["group-coaches"])
 
@@ -79,6 +82,15 @@ def _detach_coach_athletes(db: Session, coach_id: int, group: TrainingGroup) -> 
         GroupAddRequest.group_id == group.id,
         GroupAddRequest.requested_by_id == coach_id,
     ).delete(synchronize_session=False)
+    # Drop the detached athletes from this group's subgroups so none list a
+    # non-member.
+    if athletes:
+        sub_ids = [r[0] for r in db.query(Subgroup.id).filter(Subgroup.training_group_id == group.id).all()]
+        if sub_ids:
+            db.query(SubgroupMember).filter(
+                SubgroupMember.subgroup_id.in_(sub_ids),
+                SubgroupMember.athlete_id.in_([a.id for a in athletes]),
+            ).delete(synchronize_session=False)
     return len(athletes)
 
 
@@ -92,6 +104,26 @@ def _require_main_coach(group: TrainingGroup, actor: User, db: Session) -> Group
     if gc is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Main coach access required")
     return gc
+
+
+@router.get("/{group_id}/profile", response_model=PublicTeamProfile)
+def group_profile(
+    group_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    active_team_id: Annotated[Optional[int], Depends(get_active_team_id)] = None,
+):
+    """A single training group's profile (its own Hall of Fame + recent results).
+    Visible to the group's coaches (or admins) and to its member athletes."""
+    g = db.get(TrainingGroup, group_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Group not found")
+    if current_user.role in ("coach", "admin"):
+        if group_id not in coach_groups_with_role(current_user, db, active_team_id):
+            raise HTTPException(status_code=403, detail="You do not coach this group")
+    elif current_user.training_group_id != group_id:
+        raise HTTPException(status_code=403, detail="Not a member of this group")
+    return build_group_profile(db, g)
 
 
 @router.get("/coaches/search")

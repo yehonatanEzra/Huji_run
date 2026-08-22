@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { getCoachGroupWeek, createGroupWorkout, updateGroupWorkoutById, deleteGroupWorkoutById } from '../../api/calendar';
-import { getGroup, listAthletes } from '../../api/coach';
+import { getGroup, listAthletes, listSubgroups } from '../../api/coach';
 import Modal from '../../components/ui/Modal';
+import SubgroupChips from '../../components/coach/SubgroupChips';
 import { NoiseBackground } from '../../components/ui/NoiseBackground';
 import Spinner from '../../components/ui/Spinner';
 import { tracksDistance } from '../../constants/workouts';
@@ -36,6 +37,7 @@ const workoutSnippet = (gw) => {
 
 export default function GroupWorkoutsTab({ group }) {
   const [groupDetail, setGroupDetail] = useState(null);
+  const [subgroups, setSubgroups] = useState([]);
   const [allAthletes, setAllAthletes] = useState([]);
 
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -130,9 +132,12 @@ export default function GroupWorkoutsTab({ group }) {
   const fetchGroupDetail = async () => {
     if (!group) return;
     try {
-      const [detail, athletes] = await Promise.all([getGroup(group.id), listAthletes()]);
+      const [detail, athletes, subs] = await Promise.all([
+        getGroup(group.id), listAthletes(), listSubgroups(group.id).catch(() => ({ data: [] })),
+      ]);
       setGroupDetail(detail.data);
       setAllAthletes(athletes.data);
+      setSubgroups(subs.data);
     } catch (err) { console.error(err); }
   };
 
@@ -844,6 +849,19 @@ export default function GroupWorkoutsTab({ group }) {
                   </>
                 )}
 
+                {/* Subgroup quick-select — toggles a saved athlete set in/out */}
+                {groupDetail && groupDetail.members.length > 0 && (
+                  <SubgroupChips
+                    subgroups={subgroups}
+                    isSelected={(id) => selectedRecipientIds.includes(id)}
+                    onToggleMany={(ids, select) => setSelectedRecipientIds(prev =>
+                      select
+                        ? Array.from(new Set([...prev, ...ids]))
+                        : prev.filter(id => !ids.includes(id))
+                    )}
+                  />
+                )}
+
                 {/* Members checkbox list */}
                 {groupDetail && groupDetail.members.length > 0 ? (
                   <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
@@ -881,7 +899,7 @@ export default function GroupWorkoutsTab({ group }) {
                           />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className={`text-sm ${overridden ? 'text-gray-400 line-through' : ''}`}>{m.full_name}</span>
+                              <span className={`text-sm ${overridden ? 'text-gray-400 line-through' : 'text-white'}`}>{m.full_name}</span>
                               {onOther && (
                                 <span className="text-[10px] text-white/50 italic">
                                   • on "{otherAssignments.map(a => a.label).join('", "')}"

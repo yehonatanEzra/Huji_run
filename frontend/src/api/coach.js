@@ -33,6 +33,19 @@ export const addMemberToGroup = (groupId, athleteId) =>
 export const removeMemberFromGroup = (groupId, athleteId) =>
   client.delete(`/coach/groups/${groupId}/members/${athleteId}`);
 
+// Subgroups — named athlete subsets used to target workouts/plans.
+export const listSubgroups = (groupId) =>
+  client.get(`/coach/groups/${groupId}/subgroups`);
+
+export const createSubgroup = (groupId, body) =>
+  client.post(`/coach/groups/${groupId}/subgroups`, body);
+
+export const updateSubgroup = (groupId, subgroupId, body) =>
+  client.patch(`/coach/groups/${groupId}/subgroups/${subgroupId}`, body);
+
+export const deleteSubgroup = (groupId, subgroupId) =>
+  client.delete(`/coach/groups/${groupId}/subgroups/${subgroupId}`);
+
 // Group-add approvals (assistant-initiated, main-coach-resolved)
 export const listPendingAdds = (groupId) =>
   client.get(`/coach/groups/${groupId}/pending`);

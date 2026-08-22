@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { getTeamProfile } from '../api/teams';
+import { getGroupProfile } from '../api/teams';
 import Spinner from './ui/Spinner';
 
 const DISTANCE_LABELS = {
@@ -10,48 +10,47 @@ const DISTANCE_LABELS = {
 const distLabel = (m) => DISTANCE_LABELS[m] || `${m}m`;
 const GLASS = 'bg-[#161616]/70 backdrop-blur-2xl border border-white/10';
 
-// The team's public-facing profile (name, Hall of Fame, recent results),
-// rendered in-app. Shared by the athlete "My Group" page and the coach's
-// group Profile tab. No page chrome and no join CTA — just the content.
-export default function TeamProfileView({ teamId }) {
-  const [team, setTeam] = useState(undefined); // undefined=loading, null=error/none
+// A single training group's profile (its own Hall of Fame + recent results),
+// rendered in-app. Shared by the athlete "My Group" page and the coach's group
+// Profile tab. Each group shows its own records — keyed by groupId.
+export default function GroupProfileView({ groupId }) {
+  const [group, setGroup] = useState(undefined); // undefined=loading, null=error/none
 
   useEffect(() => {
-    if (!teamId) { setTeam(null); return; }
-    setTeam(undefined);
-    getTeamProfile(teamId)
-      .then(({ data }) => setTeam(data))
-      .catch(() => setTeam(null));
-  }, [teamId]);
+    if (!groupId) { setGroup(null); return; }
+    setGroup(undefined);
+    getGroupProfile(groupId)
+      .then(({ data }) => setGroup(data))
+      .catch(() => setGroup(null));
+  }, [groupId]);
 
-  if (team === undefined) return <div className="flex justify-center py-16"><Spinner /></div>;
-  if (team === null) {
+  if (group === undefined) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (group === null) {
     return (
       <div className="text-center py-16">
         <p className="text-4xl mb-3">👥</p>
-        <p className="text-white/60">No team profile to show yet.</p>
+        <p className="text-white/60">No group profile to show yet.</p>
       </div>
     );
   }
 
   return (
     <>
-      {/* Team header */}
+      {/* Group header */}
       <div className={`${GLASS} rounded-2xl p-5 mb-6`}>
-        <h2 className="text-2xl font-black text-[#c0c1ff] [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]">{team.name}</h2>
+        <h2 className="text-2xl font-black text-[#c0c1ff] [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]">{group.name}</h2>
         <p className="text-xs text-white/55 mt-1">
-          {[team.sport, team.location].filter(Boolean).join(' · ')}
+          {[group.sport, group.location].filter(Boolean).join(' · ')}
         </p>
-        {team.description && <p className="text-sm text-white/75 mt-3 whitespace-pre-wrap">{team.description}</p>}
       </div>
 
       {/* Hall of Fame */}
       <h3 className="text-[11px] font-bold uppercase tracking-widest text-white/45 mb-2">Hall of Fame</h3>
-      {team.hall_of_fame.length === 0 ? (
+      {group.hall_of_fame.length === 0 ? (
         <p className={`${GLASS} rounded-2xl px-4 py-5 text-sm text-white/45 text-center mb-6`}>No records yet.</p>
       ) : (
         <div className="space-y-2 mb-6">
-          {team.hall_of_fame.map((d) => (
+          {group.hall_of_fame.map((d) => (
             <div key={d.distance_m} className={`${GLASS} rounded-2xl p-4`}>
               <p className="text-sm font-bold text-white mb-2">{distLabel(d.distance_m)}</p>
               <div className="grid grid-cols-2 gap-4">
@@ -65,11 +64,11 @@ export default function TeamProfileView({ teamId }) {
 
       {/* Recent results */}
       <h3 className="text-[11px] font-bold uppercase tracking-widest text-white/45 mb-2">Recent results</h3>
-      {team.recent_results.length === 0 ? (
+      {group.recent_results.length === 0 ? (
         <p className={`${GLASS} rounded-2xl px-4 py-5 text-sm text-white/45 text-center`}>No verified results yet.</p>
       ) : (
         <div className={`${GLASS} rounded-2xl overflow-hidden`}>
-          {team.recent_results.map((r, i) => (
+          {group.recent_results.map((r, i) => (
             <div key={i} className={`flex items-center justify-between gap-3 px-4 py-3 ${i > 0 ? 'border-t border-white/5' : ''}`}>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white truncate">{r.athlete_name}</p>

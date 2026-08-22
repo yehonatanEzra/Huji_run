@@ -13,6 +13,7 @@ from ..models.workout import IndividualTarget, GroupWorkoutHide
 from ..models.group_add_request import GroupAddRequest
 from ..models.group_coach import GroupCoach
 from ..models.athlete_transfer import AthleteTransfer
+from ..models.subgroup import SubgroupMember
 from ..services.notifications import notify
 
 router = APIRouter(tags=["coaching"])
@@ -208,6 +209,11 @@ def leave_coach(
     db.query(GroupAddRequest).filter(
         GroupAddRequest.athlete_id == current_user.id
     ).delete(synchronize_session=False)
+    # Leaving the group entirely → drop all subgroup memberships (an athlete is
+    # only ever in subgroups of their current group).
+    db.query(SubgroupMember).filter(
+        SubgroupMember.athlete_id == current_user.id
+    ).delete(synchronize_session=False)
     _cancel_pending_transfers(db, current_user.id)
     current_user.coach_id = None
     current_user.training_group_id = None
@@ -314,6 +320,9 @@ def remove_athlete_from_roster(
     # Relationship ending → drop any pending group-add for this athlete.
     db.query(GroupAddRequest).filter(
         GroupAddRequest.athlete_id == athlete.id
+    ).delete(synchronize_session=False)
+    db.query(SubgroupMember).filter(
+        SubgroupMember.athlete_id == athlete.id
     ).delete(synchronize_session=False)
     _cancel_pending_transfers(db, athlete.id)
     athlete.coach_id = None

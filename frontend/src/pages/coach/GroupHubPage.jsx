@@ -8,6 +8,7 @@ import {
   listGroups, getGroup, createGroup, renameGroup, deleteGroup,
   addMemberToGroup, removeMemberFromGroup, listAthletes,
   listPendingAdds, approveAdd, rejectAdd, getAthleteWeek,
+  listSubgroups, createSubgroup, updateSubgroup, deleteSubgroup,
 } from '../../api/coach';
 import {
   listGroupCoaches, searchCoaches, addGroupCoach, removeGroupCoach, transferGroupOwnership,
@@ -16,7 +17,7 @@ import {
 import { createTransfer } from '../../api/coaching';
 import { getTeamVolume, getTeamCompletion, getTypeBreakdown } from '../../api/analytics';
 import { getReportingOverview, getLoadOverview } from '../../api/reporting';
-import TeamProfileView from '../../components/TeamProfileView';
+import GroupProfileView from '../../components/GroupProfileView';
 import GroupWorkoutsTab from './GroupWorkoutsTab';
 import AthleteLogModal from '../../components/coach/AthleteLogModal';
 import { listTemplates, getTemplate, deleteTemplate } from '../../api/workoutTemplates';
@@ -132,7 +133,7 @@ export default function GroupHubPage() {
       {selected && tab === 'plans' && <GroupPlansTab group={selected} />}
       {selected && tab === 'cocoaches' && <CoCoachesTab group={selected} onChanged={reload} />}
       {selected && tab === 'insights' && <InsightsTab group={selected} />}
-      {selected && tab === 'profile' && <GroupProfileTab />}
+      {selected && tab === 'profile' && <GroupProfileTab group={selected} />}
 
       <Modal open={showSettings} onClose={() => setShowSettings(false)} panelClassName="bg-[#131314] border-t border-white/10">
         {selected && <SettingsPanel group={selected} onClose={() => setShowSettings(false)} onChanged={reload} />}
@@ -175,12 +176,15 @@ function AthletesTab({ group, onChanged, groups }) {
   const [weekDate, setWeekDate] = useState(new Date());
   const [weeks, setWeeks] = useState({}); // athleteId -> days[]
   const [weeksLoading, setWeeksLoading] = useState(false);
+  const [subgroups, setSubgroups] = useState([]);
+  const [sgEditing, setSgEditing] = useState(null); // 'new' | subgroup object | null
   const isMain = group.role === 'main';
 
   const load = useCallback(() => {
     getGroup(group.id).then(({ data }) => setDetail(data)).catch(() => setDetail(null));
     listPendingAdds(group.id).then(({ data }) => setPending(data)).catch(() => setPending([]));
     listAthletes().then(({ data }) => setMyAthletes(data)).catch(() => setMyAthletes([]));
+    listSubgroups(group.id).then(({ data }) => setSubgroups(data)).catch(() => setSubgroups([]));
   }, [group.id]);
   useEffect(() => { load(); }, [load]);
 
@@ -240,6 +244,31 @@ function AthletesTab({ group, onChanged, groups }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Subgroups — reusable athlete subsets for targeting workouts/plans */}
+      {detail.members.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-[#c0c1ff]">Subgroups</p>
+            <button onClick={() => setSgEditing('new')} className="text-xs font-bold bg-[#c0c1ff] text-[#1000a9] px-3 py-1 rounded-full hover:scale-[1.02] active:scale-95 transition">+ New subgroup</button>
+          </div>
+          {subgroups.length === 0 ? (
+            <p className="text-xs text-white/40 italic mb-1">None yet. Create one to target workouts and plans to a subset.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 mb-1">
+              {subgroups.map((sg) => (
+                <button
+                  key={sg.id}
+                  onClick={() => setSgEditing(sg)}
+                  className="px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-400/15 border border-teal-400/40 text-teal-100 hover:bg-teal-400/25 hover:border-teal-400/60 transition"
+                >
+                  {sg.name} <span className="opacity-70">· {sg.member_ids.length}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -331,6 +360,19 @@ function AthletesTab({ group, onChanged, groups }) {
         )}
       </Modal>
 
+      {/* Subgroup create / edit */}
+      <Modal open={!!sgEditing} onClose={() => setSgEditing(null)} panelClassName="bg-[#131314] border-t border-white/10">
+        {sgEditing && (
+          <SubgroupEditor
+            groupId={group.id}
+            members={detail.members}
+            subgroup={sgEditing === 'new' ? null : sgEditing}
+            onClose={() => setSgEditing(null)}
+            onSaved={() => { setSgEditing(null); load(); }}
+          />
+        )}
+      </Modal>
+
       {/* Remove-from-group confirmation */}
       <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} panelClassName="bg-[#131314] border-t border-white/10">
         <h3 className="text-base font-bold text-white mb-1">Remove from group?</h3>
@@ -381,6 +423,57 @@ function DayDot({ day }) {
     <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-[10px] ${bg} ${txt} hover:ring-2 hover:ring-[#c0c1ff]/50 transition ${isRace ? 'ring-2 ring-[#c0c1ff]' : ''}`}>
       {text}
     </span>
+  );
+}
+
+function SubgroupEditor({ groupId, members, subgroup, onClose, onSaved }) {
+  const [name, setName] = useState(subgroup?.name || '');
+  const [selected, setSelected] = useState(() => new Set(subgroup?.member_ids || []));
+  const [busy, setBusy] = useState(false);
+
+  const toggle = (id) => setSelected((prev) => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+
+  const save = async () => {
+    if (!name.trim()) return;
+    setBusy(true);
+    try {
+      const body = { name: name.trim(), athlete_ids: [...selected] };
+      if (subgroup) await updateSubgroup(groupId, subgroup.id, body);
+      else await createSubgroup(groupId, body);
+      onSaved();
+    } finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try { await deleteSubgroup(groupId, subgroup.id); onSaved(); } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      <h3 className="text-base font-bold text-white mb-3">{subgroup ? 'Edit subgroup' : 'New subgroup'}</h3>
+      <input autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="Subgroup name" className={`${GLASS_INPUT} mb-3`} />
+      <p className="text-[11px] uppercase tracking-widest text-white/50 font-semibold mb-1.5">Athletes · {selected.size}</p>
+      <div className="space-y-1 max-h-64 overflow-y-auto mb-4">
+        {members.map((m) => (
+          <label key={m.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer">
+            <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggle(m.id)} className="accent-[#c0c1ff] w-4 h-4" />
+            <span className="text-sm text-white truncate">{m.full_name}</span>
+          </label>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        {subgroup && (
+          <button onClick={remove} disabled={busy} className="border border-red-400/30 text-red-300 rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-red-400/10 disabled:opacity-40 transition">Delete</button>
+        )}
+        <button onClick={onClose} disabled={busy} className="flex-1 border border-white/20 rounded-xl py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50 transition">Cancel</button>
+        <button onClick={save} disabled={busy || !name.trim()} className="flex-1 bg-[#c0c1ff] text-[#1000a9] rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 transition">{busy ? 'Saving…' : 'Save'}</button>
+      </div>
+    </div>
   );
 }
 
@@ -908,19 +1001,13 @@ function TypeBars({ breakdown }) {
 
 // ── Profile tab — preview of the team's in-app profile (Hall of Fame + results)
 // that every athlete sees on their "My Group" page. Team-scoped, not per-group.
-function GroupProfileTab() {
-  const { user } = useAuth();
-  const teamId = user?.active_team_id;
+function GroupProfileTab({ group }) {
   return (
     <div>
       <p className="text-xs text-white/50 mb-4">
-        This is the profile your athletes see on their <span className="text-white/70 font-semibold">My Group</span> page.
+        This group's own profile — what its athletes see on their <span className="text-white/70 font-semibold">My Group</span> page.
       </p>
-      {teamId ? (
-        <TeamProfileView teamId={teamId} />
-      ) : (
-        <p className="text-sm text-white/45 italic py-6 text-center">No active team.</p>
-      )}
+      <GroupProfileView groupId={group.id} />
     </div>
   );
 }

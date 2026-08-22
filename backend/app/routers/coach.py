@@ -13,6 +13,7 @@ from ..models.group_add_request import GroupAddRequest
 from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog, GroupWorkoutHide
 from ..models.feed import Announcement
 from ..models.challenge import Challenge
+from ..models.subgroup import Subgroup, SubgroupMember
 from ..models.race import Race, Heat, Result
 from ..schemas.auth import UserOut
 from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut, IndividualTargetOut, GroupWorkoutOut
@@ -72,6 +73,66 @@ class PendingAddOut(BaseModel):
     requested_by_id: int
     requested_by_name: str
     created_at: datetime
+
+
+class SubgroupMemberOut(BaseModel):
+    id: int
+    full_name: str
+    model_config = {"from_attributes": True}
+
+
+class SubgroupOut(BaseModel):
+    id: int
+    name: str
+    member_ids: list[int]
+    members: list[SubgroupMemberOut]
+
+
+class SubgroupUpsert(BaseModel):
+    name: Optional[str] = None
+    athlete_ids: Optional[list[int]] = None
+
+
+def _serialize_subgroup(db: Session, sg: Subgroup) -> SubgroupOut:
+    rows = (
+        db.query(User.id, User.full_name)
+        .join(SubgroupMember, SubgroupMember.athlete_id == User.id)
+        .filter(SubgroupMember.subgroup_id == sg.id)
+        .order_by(User.full_name)
+        .all()
+    )
+    members = [SubgroupMemberOut(id=r[0], full_name=r[1]) for r in rows]
+    return SubgroupOut(id=sg.id, name=sg.name, member_ids=[m.id for m in members], members=members)
+
+
+def _set_subgroup_members(db: Session, subgroup_id: int, group_id: int, athlete_ids) -> None:
+    """Replace a subgroup's members, keeping only ids that are current athletes of
+    the group (silently drops non-members). Mirrors calendar._replace_recipients."""
+    valid: set[int] = set()
+    if athlete_ids:
+        valid = {
+            r[0] for r in db.query(User.id).filter(
+                User.id.in_(set(athlete_ids)),
+                User.training_group_id == group_id,
+                User.role == "athlete",
+            ).all()
+        }
+    db.query(SubgroupMember).filter(SubgroupMember.subgroup_id == subgroup_id).delete(
+        synchronize_session=False
+    )
+    for aid in valid:
+        db.add(SubgroupMember(subgroup_id=subgroup_id, athlete_id=aid))
+
+
+def _purge_athlete_from_group_subgroups(db: Session, group_id: int, athlete_id: int) -> None:
+    """Drop an athlete from every subgroup of a group — called when they leave the
+    group so a subgroup never lists a non-member."""
+    sub_ids = [r[0] for r in db.query(Subgroup.id).filter(Subgroup.training_group_id == group_id).all()]
+    if not sub_ids:
+        return
+    db.query(SubgroupMember).filter(
+        SubgroupMember.subgroup_id.in_(sub_ids), SubgroupMember.athlete_id == athlete_id
+    ).delete(synchronize_session=False)
 
 
 def _discard_pending_for_athlete(db: Session, athlete_id: int) -> None:
@@ -281,11 +342,95 @@ def remove_member_from_group(
     db.query(GroupAddRequest).filter(
         GroupAddRequest.athlete_id == athlete_id, GroupAddRequest.group_id == group_id
     ).delete(synchronize_session=False)
+    _purge_athlete_from_group_subgroups(db, group_id, athlete_id)
     notify(db, athlete.id, "group_removed", f"You were removed from the group “{g.name}”.", None)
     # If someone other than the personal coach pulled them, tell the personal coach.
     if athlete.coach_id and athlete.coach_id != coach.id:
         notify(db, athlete.coach_id, "group_removed",
                f"{athlete.full_name} was removed from “{g.name}”.", "/coach/group")
+    db.commit()
+
+
+# ── Subgroups (named athlete subsets for targeting; shared among group coaches) ─
+
+@router.get("/groups/{group_id}/subgroups", response_model=list[SubgroupOut])
+def list_subgroups(
+    group_id: int,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    if group_id not in coach_groups_with_role(coach, db, active_team_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    subs = (
+        db.query(Subgroup)
+        .filter(Subgroup.training_group_id == group_id)
+        .order_by(Subgroup.name)
+        .all()
+    )
+    return [_serialize_subgroup(db, s) for s in subs]
+
+
+@router.post("/groups/{group_id}/subgroups", response_model=SubgroupOut, status_code=201)
+def create_subgroup(
+    group_id: int,
+    body: SubgroupUpsert,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    if group_id not in coach_groups_with_role(coach, db, active_team_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    if not body.name or not body.name.strip():
+        raise HTTPException(status_code=400, detail="Subgroup name is required")
+    sg = Subgroup(training_group_id=group_id, name=body.name.strip()[:100], created_by=coach.id)
+    db.add(sg)
+    db.flush()
+    _set_subgroup_members(db, sg.id, group_id, body.athlete_ids or [])
+    db.commit()
+    db.refresh(sg)
+    return _serialize_subgroup(db, sg)
+
+
+@router.patch("/groups/{group_id}/subgroups/{subgroup_id}", response_model=SubgroupOut)
+def update_subgroup(
+    group_id: int,
+    subgroup_id: int,
+    body: SubgroupUpsert,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    if group_id not in coach_groups_with_role(coach, db, active_team_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    sg = db.get(Subgroup, subgroup_id)
+    if not sg or sg.training_group_id != group_id:
+        raise HTTPException(status_code=404, detail="Subgroup not found")
+    if body.name is not None:
+        if not body.name.strip():
+            raise HTTPException(status_code=400, detail="Subgroup name is required")
+        sg.name = body.name.strip()[:100]
+    if body.athlete_ids is not None:
+        _set_subgroup_members(db, sg.id, group_id, body.athlete_ids)
+    db.commit()
+    db.refresh(sg)
+    return _serialize_subgroup(db, sg)
+
+
+@router.delete("/groups/{group_id}/subgroups/{subgroup_id}", status_code=204)
+def delete_subgroup(
+    group_id: int,
+    subgroup_id: int,
+    db: Session = Depends(get_db),
+    coach: User = Depends(require_coach),
+    active_team_id: Optional[int] = Depends(get_active_team_id),
+):
+    if group_id not in coach_groups_with_role(coach, db, active_team_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    sg = db.get(Subgroup, subgroup_id)
+    if not sg or sg.training_group_id != group_id:
+        raise HTTPException(status_code=404, detail="Subgroup not found")
+    db.delete(sg)  # subgroup_members cascade at the DB level
     db.commit()
 
 

@@ -53,6 +53,7 @@ class TokenResponse(BaseModel):
     training_group_id: Optional[int] = None
     coach_id: Optional[int] = None
     active_team_id: Optional[int] = None
+    ai_access: bool = False
 
 
 class UserOut(BaseModel):
@@ -66,6 +67,7 @@ class UserOut(BaseModel):
     strava_connected: bool = False
     strava_can_connect: bool = True
     has_photo: bool = False
+    ai_access: bool = False
     active_team_id: Optional[int] = None
     active_team_name: Optional[str] = None
     email: Optional[str] = None

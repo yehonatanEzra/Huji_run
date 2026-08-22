@@ -19,3 +19,5 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: https://hujirun.vercel.app
+      - key: OPENAI_API_KEY
+        sync: false   # set in the Render dashboard to enable the athlete AI assistant

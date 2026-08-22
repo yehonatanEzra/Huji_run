@@ -293,6 +293,7 @@ function UserRow({ user, isSelf, onEdit }) {
         <div className="flex items-center gap-1.5 flex-wrap">
           <p className="font-medium text-white truncate">{user.full_name}</p>
           <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border ${ROLE_BADGE[user.role]}`}>{user.role}</span>
+          {user.ai_access && <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-[#c0c1ff]/20 text-[#c0c1ff] border-[#c0c1ff]/30">AI</span>}
           {isSelf && <span className="text-[10px] text-white/40 italic">(you)</span>}
         </div>
         <p className="text-[11px] text-white/50 truncate">@{user.username}{subLine ? ` · ${subLine}` : ''}</p>
@@ -387,6 +388,25 @@ function UserEditModal({ target, isSelf, adminCount, onClose, onSaved }) {
               </p>
             )}
           </div>
+
+          {target.role === 'athlete' && (
+            <div>
+              <label className="text-[11px] uppercase tracking-wider font-semibold text-white/55">AI assistant (premium)</label>
+              <div className="flex items-center justify-between gap-2 mt-1">
+                <p className="text-xs text-white/50">
+                  {target.ai_access ? 'Enabled: can use Coach AI.' : 'Disabled: no Coach AI access.'}
+                </p>
+                <button onClick={() => save({ ai_access: !target.ai_access })} disabled={busy}
+                  className={`shrink-0 text-sm font-bold rounded-xl px-4 py-2 disabled:opacity-40 transition ${
+                    target.ai_access
+                      ? 'bg-white/10 border border-white/15 text-white hover:bg-white/20'
+                      : 'bg-[#c0c1ff] text-[#1000a9]'
+                  }`}>
+                  {target.ai_access ? 'Disable' : 'Enable'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="pt-2 border-t border-white/10">
             {!confirmDelete ? (

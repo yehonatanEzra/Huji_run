@@ -36,6 +36,7 @@ class AdminUserOut(BaseModel):
     coach_name: Optional[str] = None
     photo_url: Optional[str] = None
     has_strava: bool = False
+    ai_access: bool = False
     athletes_count: int = 0
 
 
@@ -46,6 +47,7 @@ class AdminUserListResponse(BaseModel):
 class AdminUserPatch(BaseModel):
     full_name: Optional[str] = Field(default=None)
     role: Optional[str] = Field(default=None)
+    ai_access: Optional[bool] = Field(default=None)
 
 
 def _serialize(
@@ -66,6 +68,7 @@ def _serialize(
         coach_name=coach_name,
         photo_url=f"/api/v1/profile/photo/{user.id}" if user.photo_filename else None,
         has_strava=bool(user.strava_access_token),
+        ai_access=bool(user.ai_access),
         athletes_count=athletes_count,
     )
 
@@ -133,6 +136,9 @@ def patch_user(
         rename_user(db, target, body.full_name)
     if body.role is not None:
         change_user_role(db, target, body.role)
+    if body.ai_access is not None:
+        target.ai_access = body.ai_access
+        db.commit()
 
     return _fetch_user_view(db, target)
 

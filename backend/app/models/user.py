@@ -36,6 +36,8 @@ class User(Base):
     # Admin-controlled per-athlete Strava access. Default on; flipped off by
     # block-all, re-granted individually or via enable-all.
     strava_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    # Admin-granted access to the AI training assistant ("premium"). Default off.
+    ai_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     @property

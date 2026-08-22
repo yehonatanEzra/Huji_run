@@ -11,6 +11,8 @@ from ..models.training_group import TrainingGroup
 from ..models.group_coach import GroupCoach
 from ..models.group_add_request import GroupAddRequest
 from ..models.workout import GroupWorkout, IndividualTarget, WorkoutLog, GroupWorkoutHide
+from ..models.feed import Announcement
+from ..models.challenge import Challenge
 from ..models.race import Race, Heat, Result
 from ..schemas.auth import UserOut
 from ..schemas.workout import CoachDashboardResponse, AthleteWeekRow, WorkoutLogOut, IndividualTargetOut, GroupWorkoutOut
@@ -181,10 +183,15 @@ def delete_group(
     g = db.get(TrainingGroup, group_id)
     for member in g.members:
         member.training_group_id = None
-    # GroupAddRequest rows cascade (FK); group_coaches + group_workouts have no
-    # cascade, so clear them first or the FK pragma blocks the delete.
+    # GroupAddRequest / coach-invites cascade (FK); group_coaches, group_workouts,
+    # group-scoped announcements and challenges have no cascade, so clear them
+    # first or the FK pragma blocks the delete. Announcements are deleted (not
+    # nulled) because a null training_group_id makes a post team-wide (feed.py),
+    # which would leak a group-only post; their reactions/comments cascade.
     db.query(GroupCoach).filter(GroupCoach.group_id == group_id).delete(synchronize_session=False)
     db.query(GroupWorkout).filter(GroupWorkout.training_group_id == group_id).delete(synchronize_session=False)
+    db.query(Announcement).filter(Announcement.training_group_id == group_id).delete(synchronize_session=False)
+    db.query(Challenge).filter(Challenge.training_group_id == group_id).delete(synchronize_session=False)
     db.delete(g)
     db.commit()
 

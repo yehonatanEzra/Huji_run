@@ -16,7 +16,7 @@ import {
 import { createTransfer } from '../../api/coaching';
 import { getTeamVolume, getTeamCompletion, getTypeBreakdown } from '../../api/analytics';
 import { getReportingOverview, getLoadOverview } from '../../api/reporting';
-import { getMyTeams, updateTeam } from '../../api/teams';
+import TeamProfileView from '../../components/TeamProfileView';
 import GroupWorkoutsTab from './GroupWorkoutsTab';
 import AthleteLogModal from '../../components/coach/AthleteLogModal';
 import { listTemplates, getTemplate, deleteTemplate } from '../../api/workoutTemplates';
@@ -36,7 +36,7 @@ export default function GroupHubPage() {
   const { user } = useAuth();
   const [groups, setGroups] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [tab, setTab] = useState('workouts');
+  const [tab, setTab] = useState('profile');
   const [showSettings, setShowSettings] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   // Confirmation modal state
@@ -122,7 +122,7 @@ export default function GroupHubPage() {
 
       {/* Tabs */}
       <div className={`flex gap-1 p-1 rounded-full mb-4 ${GLASS}`}>
-        {[['workouts', 'Workouts'], ['athletes', 'Athletes'], ['plans', 'Plan'], ['cocoaches', 'Staff'], ['insights', 'Insights']].map(([k, label]) => (
+        {[['profile', 'Profile'], ['workouts', 'Workouts'], ['athletes', 'Athletes'], ['plans', 'Plan'], ['cocoaches', 'Staff'], ['insights', 'Insights']].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className={`${TAB} ${tab === k ? TAB_ACTIVE : TAB_INACTIVE}`}>{label}</button>
         ))}
       </div>
@@ -132,6 +132,7 @@ export default function GroupHubPage() {
       {selected && tab === 'plans' && <GroupPlansTab group={selected} />}
       {selected && tab === 'cocoaches' && <CoCoachesTab group={selected} onChanged={reload} />}
       {selected && tab === 'insights' && <InsightsTab group={selected} />}
+      {selected && tab === 'profile' && <GroupProfileTab />}
 
       <Modal open={showSettings} onClose={() => setShowSettings(false)} panelClassName="bg-[#131314] border-t border-white/10">
         {selected && <SettingsPanel group={selected} onClose={() => setShowSettings(false)} onChanged={reload} />}
@@ -168,6 +169,7 @@ function AthletesTab({ group, onChanged, groups }) {
   const [myAthletes, setMyAthletes] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [transferTarget, setTransferTarget] = useState(null);
+  const [removeTarget, setRemoveTarget] = useState(null);
   const [logAthlete, setLogAthlete] = useState(null);
   const [busy, setBusy] = useState(false);
   const [weekDate, setWeekDate] = useState(new Date());
@@ -197,10 +199,10 @@ function AthletesTab({ group, onChanged, groups }) {
 
   const handleApprove = async (rid) => { setBusy(true); try { await approveAdd(group.id, rid); load(); onChanged(); } finally { setBusy(false); } };
   const handleReject  = async (rid) => { setBusy(true); try { await rejectAdd(group.id, rid); load(); } finally { setBusy(false); } };
-  const handleRemove = async (athleteId) => {
-    if (!confirm('Remove from this group? They stay your athlete — just without a group.')) return;
+  const handleRemove = async () => {
+    if (!removeTarget) return;
     setBusy(true);
-    try { await removeMemberFromGroup(group.id, athleteId); load(); onChanged(); } finally { setBusy(false); }
+    try { await removeMemberFromGroup(group.id, removeTarget.id); setRemoveTarget(null); load(); onChanged(); } finally { setBusy(false); }
   };
 
   if (!detail) return <Spinner />;
@@ -300,7 +302,7 @@ function AthletesTab({ group, onChanged, groups }) {
                           <MemberMenu
                             isMine={myAthletes.some((a) => a.id === m.id)}
                             isMain={isMain}
-                            onRemove={() => handleRemove(m.id)}
+                            onRemove={() => setRemoveTarget(m)}
                             onTransfer={() => setTransferTarget(m)}
                           />
                         </td>
@@ -327,6 +329,24 @@ function AthletesTab({ group, onChanged, groups }) {
             ))}
           </div>
         )}
+      </Modal>
+
+      {/* Remove-from-group confirmation */}
+      <Modal open={!!removeTarget} onClose={() => setRemoveTarget(null)} panelClassName="bg-[#131314] border-t border-white/10">
+        <h3 className="text-base font-bold text-white mb-1">Remove from group?</h3>
+        <p className="text-sm text-white/60 mb-4">{removeTarget?.full_name} stays your athlete — just without a group.</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setRemoveTarget(null)}
+            disabled={busy}
+            className="flex-1 border border-white/20 rounded-xl py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50 transition"
+          >Cancel</button>
+          <button
+            onClick={handleRemove}
+            disabled={busy}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 transition"
+          >{busy ? 'Removing…' : 'Remove'}</button>
+        </div>
       </Modal>
 
       {/* Transfer modal */}
@@ -540,6 +560,8 @@ function CoCoachesTab({ group, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState(null); // assistant picked to hand ownership to
+  const [leaveAsAssistantOpen, setLeaveAsAssistantOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -569,9 +591,8 @@ function CoCoachesTab({ group, onChanged }) {
   // Leave group. Assistant → just leave (their athletes are removed). Main coach
   // must either hand ownership to an assistant first, or delete the group.
   const leaveAsAssistant = async () => {
-    if (!confirm('Leave this group? Your athletes in it will be removed from the group.')) return;
     setBusy(true);
-    try { await leaveGroup(group.id); setLeaveOpen(false); onChanged?.(); } finally { setBusy(false); }
+    try { await leaveGroup(group.id); setLeaveAsAssistantOpen(false); onChanged?.(); } finally { setBusy(false); }
   };
   const handOverAndLeave = async () => {
     if (!leaveTarget) return;
@@ -584,9 +605,13 @@ function CoCoachesTab({ group, onChanged }) {
     finally { setBusy(false); }
   };
   const deleteAndLeave = async () => {
-    if (!confirm(`Delete “${group.name}”? Members become group-less (they stay their coaches' athletes). This can't be undone.`)) return;
     setBusy(true);
-    try { await deleteGroup(group.id); setLeaveOpen(false); onChanged?.(); } finally { setBusy(false); }
+    try {
+      await deleteGroup(group.id);
+      setDeleteConfirmOpen(false); setLeaveOpen(false); onChanged?.();
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'Could not delete the group');
+    } finally { setBusy(false); }
   };
 
   if (loading) return <Spinner />;
@@ -641,16 +666,34 @@ function CoCoachesTab({ group, onChanged }) {
 
       <div className="pt-3 mt-2 border-t border-white/10">
         <button
-          onClick={() => (isMain ? setLeaveOpen(true) : leaveAsAssistant())}
+          onClick={() => (isMain ? setLeaveOpen(true) : setLeaveAsAssistantOpen(true))}
           disabled={busy}
           className="w-full bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-40 transition">
           Leave group
         </button>
       </div>
 
+      {/* Assistant leaving: confirmation modal */}
+      <Modal open={leaveAsAssistantOpen} onClose={() => setLeaveAsAssistantOpen(false)} panelClassName="bg-[#131314] border-t border-white/10">
+        <h3 className="text-base font-bold text-white mb-1">Leave "{group.name}"?</h3>
+        <p className="text-sm text-white/60 mb-4">Your athletes in this group will be removed from the group (they stay your athletes).</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setLeaveAsAssistantOpen(false)}
+            disabled={busy}
+            className="flex-1 border border-white/20 rounded-xl py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50 transition"
+          >Cancel</button>
+          <button
+            onClick={leaveAsAssistant}
+            disabled={busy}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 transition"
+          >{busy ? 'Leaving…' : 'Leave'}</button>
+        </div>
+      </Modal>
+
       {/* Main coach leaving: hand over to an assistant, or delete the group. */}
       <Modal open={leaveOpen} onClose={() => { setLeaveOpen(false); setLeaveTarget(null); }} panelClassName="bg-[#131314] border-t border-white/10">
-        <h3 className="text-base font-bold text-white mb-1">Leave “{group.name}”</h3>
+        <h3 className="text-base font-bold text-white mb-1">Leave "{group.name}"</h3>
         {assistants.length > 0 ? (
           <>
             <p className="text-xs text-white/50 mb-3">You're the main coach. Hand the group to an assistant, then leave — your athletes in it will be removed.</p>
@@ -662,15 +705,33 @@ function CoCoachesTab({ group, onChanged }) {
             <button disabled={!leaveTarget || busy} onClick={handOverAndLeave} className="w-full bg-[#c0c1ff] text-[#1000a9] rounded-xl py-2 text-sm font-bold disabled:opacity-40 mb-4">Make main coach & leave</button>
             <div className="pt-3 border-t border-white/10">
               <p className="text-xs text-white/45 mb-2">Or, if you'd rather not hand it over:</p>
-              <button disabled={busy} onClick={deleteAndLeave} className="w-full border border-red-400/30 text-red-300 rounded-xl py-2 text-sm font-medium hover:bg-red-400/10 disabled:opacity-40">Delete the group instead</button>
+              <button disabled={busy} onClick={() => setDeleteConfirmOpen(true)} className="w-full border border-red-400/30 text-red-300 rounded-xl py-2 text-sm font-medium hover:bg-red-400/10 disabled:opacity-40">Delete the group instead</button>
             </div>
           </>
         ) : (
           <>
             <p className="text-xs text-white/50 mb-4">You have no assistant coaches to hand the group to, so leaving deletes the group. Members become group-less (they stay their coaches' athletes).</p>
-            <button disabled={busy} onClick={deleteAndLeave} className="w-full border border-red-400/30 text-red-300 rounded-xl py-2 text-sm font-medium hover:bg-red-400/10 disabled:opacity-40">Delete the group</button>
+            <button disabled={busy} onClick={() => setDeleteConfirmOpen(true)} className="w-full border border-red-400/30 text-red-300 rounded-xl py-2 text-sm font-medium hover:bg-red-400/10 disabled:opacity-40">Delete the group</button>
           </>
         )}
+      </Modal>
+
+      {/* Delete-group confirmation */}
+      <Modal open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} panelClassName="bg-[#131314] border-t border-white/10">
+        <h3 className="text-base font-bold text-white mb-1">Delete "{group.name}"?</h3>
+        <p className="text-sm text-white/60 mb-4">Members become group-less (they stay their coaches' athletes). This can't be undone.</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setDeleteConfirmOpen(false)}
+            disabled={busy}
+            className="flex-1 border border-white/20 rounded-xl py-2.5 text-sm font-semibold text-white/80 hover:bg-white/10 disabled:opacity-50 transition"
+          >Cancel</button>
+          <button
+            onClick={deleteAndLeave}
+            disabled={busy}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 transition"
+          >{busy ? 'Deleting…' : 'Delete'}</button>
+        </div>
       </Modal>
 
       <Modal open={addOpen} onClose={() => { setAddOpen(false); setSearchQ(''); setResults([]); }} panelClassName="bg-[#131314] border-t border-white/10">
@@ -845,6 +906,25 @@ function TypeBars({ breakdown }) {
   );
 }
 
+// ── Profile tab — preview of the team's in-app profile (Hall of Fame + results)
+// that every athlete sees on their "My Group" page. Team-scoped, not per-group.
+function GroupProfileTab() {
+  const { user } = useAuth();
+  const teamId = user?.active_team_id;
+  return (
+    <div>
+      <p className="text-xs text-white/50 mb-4">
+        This is the profile your athletes see on their <span className="text-white/70 font-semibold">My Group</span> page.
+      </p>
+      {teamId ? (
+        <TeamProfileView teamId={teamId} />
+      ) : (
+        <p className="text-sm text-white/45 italic py-6 text-center">No active team.</p>
+      )}
+    </div>
+  );
+}
+
 // ── Settings panel (gear) ─────────────────────────────────────────────────────
 function SettingsPanel({ group, onClose, onChanged }) {
   const [name, setName] = useState(group.name);
@@ -873,9 +953,6 @@ function SettingsPanel({ group, onClose, onChanged }) {
       ) : (
         <p className="text-sm text-white/50">Only the main coach can rename or delete this group.</p>
       )}
-      <div className="mt-6 pt-4 border-t border-white/10">
-        <TeamPublicSection />
-      </div>
 
       {/* Delete confirmation modal */}
       <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} panelClassName="bg-[#131314] border-t border-white/10">
@@ -895,72 +972,6 @@ function SettingsPanel({ group, onClose, onChanged }) {
           >{busy ? 'Deleting…' : 'Delete'}</button>
         </div>
       </Modal>
-    </div>
-  );
-}
-
-function TeamPublicSection() {
-  const { user } = useAuth();
-  const teamId = user?.active_team_id;
-  const [isPublic, setIsPublic] = useState(null); // null = loading/unknown
-  const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!teamId) return;
-    getMyTeams()
-      .then(({ data }) => {
-        const t = (data || []).find((x) => x.id === teamId);
-        setIsPublic(t ? !!t.is_public : false);
-      })
-      .catch(() => setIsPublic(false));
-  }, [teamId]);
-
-  const toggle = async () => {
-    if (busy || isPublic === null) return;
-    setBusy(true);
-    try {
-      const { data } = await updateTeam(teamId, { is_public: !isPublic });
-      setIsPublic(!!data.is_public);
-    } catch (err) {
-      alert(err?.response?.data?.detail || 'Could not update');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const link = `${window.location.origin}/t/${teamId}`;
-  const copy = () => {
-    navigator.clipboard?.writeText(link).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
-  };
-
-  if (!teamId) return null;
-
-  return (
-    <div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-white">Public team profile</p>
-          <p className="text-[11px] text-white/45">A shareable page anyone can view (no login).</p>
-        </div>
-        <button
-          onClick={toggle}
-          disabled={busy || isPublic === null}
-          className={`shrink-0 w-12 h-7 rounded-full transition relative disabled:opacity-50 ${isPublic ? 'bg-[#c0c1ff]' : 'bg-white/15'}`}
-          aria-pressed={!!isPublic}
-        >
-          <span className={`absolute top-0.5 ${isPublic ? 'left-6' : 'left-0.5'} w-6 h-6 rounded-full bg-white transition-all`} />
-        </button>
-      </div>
-
-      {isPublic && (
-        <div className="mt-3 flex items-center gap-2">
-          <input readOnly value={link} className={`${GLASS_INPUT} text-[11px]`} onFocus={(e) => e.target.select()} />
-          <button onClick={copy} className="shrink-0 bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold px-3 py-2 rounded-xl transition">
-            {copied ? 'Copied' : 'Copy'}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

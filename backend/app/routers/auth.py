@@ -15,6 +15,7 @@ from ..database import get_db
 from ..dependencies import create_access_token, get_current_user, get_active_team_id
 from ..models.user import User
 from ..models.team import Team, TeamMembership
+from ..models.training_group import TrainingGroup
 from ..models.email_verification import EmailVerification
 from ..schemas.auth import (
     RegisterRequest, LoginRequest, TokenResponse, UserOut,
@@ -138,7 +139,7 @@ def _validate_and_consume(db: Session, email: str, purpose: str, code: str) -> N
 
 # --- Team helpers ---
 
-def _primary_team_id(db: Session, user_id: int) -> Optional[int]:
+def _primary_team_id(db: Session, user_id: int, _seen: Optional[set[int]] = None) -> Optional[int]:
     m = (
         db.query(TeamMembership)
         .filter(TeamMembership.user_id == user_id, TeamMembership.role == "main")
@@ -146,7 +147,23 @@ def _primary_team_id(db: Session, user_id: int) -> Optional[int]:
     )
     if m is None:
         m = db.query(TeamMembership).filter(TeamMembership.user_id == user_id).first()
-    return m.team_id if m else None
+    if m is not None:
+        return m.team_id
+    # Athletes have no TeamMembership row — they inherit their team from their
+    # training group, else from their coach's primary team.
+    user = db.get(User, user_id)
+    if user is None:
+        return None
+    if user.training_group_id:
+        g = db.get(TrainingGroup, user.training_group_id)
+        if g and g.team_id:
+            return g.team_id
+    # Follow the coach chain, guarding against cyclic coach_id data.
+    _seen = _seen or set()
+    _seen.add(user_id)
+    if user.coach_id and user.coach_id not in _seen:
+        return _primary_team_id(db, user.coach_id, _seen)
+    return None
 
 
 def _token_response(db: Session, user: User, active_team_id: Optional[int] = None) -> TokenResponse:
@@ -239,6 +256,11 @@ def me(
     active_team_id: Annotated[Optional[int], Depends(get_active_team_id)],
     db: Annotated[Session, Depends(get_db)],
 ):
+    # Older/athlete tokens may lack active_team_id (athletes have no membership
+    # row). Resolve it from the training group so "My Group" works without a
+    # forced re-login.
+    if active_team_id is None:
+        active_team_id = _primary_team_id(db, current_user.id)
     active_team_name: Optional[str] = None
     if active_team_id is not None:
         team = db.get(Team, active_team_id)

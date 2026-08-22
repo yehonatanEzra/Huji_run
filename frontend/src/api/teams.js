@@ -8,4 +8,5 @@ export const getMyTeams = () => client.get('/teams/my');
 
 export const updateTeam = (teamId, data) => client.patch(`/teams/${teamId}`, data);
 
-export const getPublicTeam = (teamId) => client.get(`/public/teams/${teamId}`);
+// In-app team profile (Hall of Fame + recent results) for members and coaches.
+export const getTeamProfile = (teamId) => client.get(`/teams/${teamId}/profile`);

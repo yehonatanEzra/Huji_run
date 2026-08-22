@@ -1,18 +1,13 @@
 from __future__ import annotations
 from datetime import date
-from typing import Annotated, List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ..database import get_db
 from ..models.team import Team
 from ..models.hall_of_fame import HallOfFame
 from ..models.race import Result, Heat, Race, CANONICAL_DISTANCES
 from ..services.time_utils import seconds_to_display, format_pace
-
-# Public, no-auth router for shareable team profiles (FR-K).
-router = APIRouter(prefix="/public", tags=["public"])
 
 
 class PublicHoFEntry(BaseModel):
@@ -47,30 +42,39 @@ class PublicTeamProfile(BaseModel):
     recent_results: List[PublicResult]
 
 
-@router.get("/teams/{team_id}", response_model=PublicTeamProfile)
-def public_team_profile(team_id: int, db: Annotated[Session, Depends(get_db)]):
-    team = db.get(Team, team_id)
-    if team is None or not team.is_public:
-        raise HTTPException(status_code=404, detail="Team profile not found")
+def build_team_profile(db: Session, team: Team) -> PublicTeamProfile:
+    """Aggregate a team's public-facing profile (Hall of Fame + recent results).
+    Shared by the in-app "My Group" view (athlete) and the coach's Profile tab.
+    No visibility gate here — callers decide who may view it."""
+    team_id = team.id
 
-    # Hall of Fame — top entries per distance × gender for this team.
-    hof: List[PublicHoFDistance] = []
-    for dist in CANONICAL_DISTANCES:
-        entries = (
-            db.query(HallOfFame)
-            .filter(HallOfFame.team_id == team_id, HallOfFame.distance_m == dist)
-            .all()
+    # Hall of Fame — top entries per distance × gender for this team. One query
+    # for all distances, grouped in memory (this runs on every My Group open and
+    # the coach's default Profile tab, so avoid a query per distance).
+    all_entries = (
+        db.query(HallOfFame)
+        .filter(
+            HallOfFame.team_id == team_id,
+            HallOfFame.distance_m.in_(CANONICAL_DISTANCES),
+        )
+        .all()
+    )
+    by_distance: dict[int, list[HallOfFame]] = {}
+    for e in all_entries:
+        by_distance.setdefault(e.distance_m, []).append(e)
+
+    def to_entry(e: HallOfFame) -> PublicHoFEntry:
+        return PublicHoFEntry(
+            rank=e.rank,
+            athlete_name=e.athlete_name,
+            time_display=seconds_to_display(e.time_seconds),
+            pace_display=format_pace(e.time_seconds, e.distance_m),
+            achieved_date=e.achieved_date,
         )
 
-        def to_entry(e: HallOfFame) -> PublicHoFEntry:
-            return PublicHoFEntry(
-                rank=e.rank,
-                athlete_name=e.athlete_name,
-                time_display=seconds_to_display(e.time_seconds),
-                pace_display=format_pace(e.time_seconds, dist),
-                achieved_date=e.achieved_date,
-            )
-
+    hof: List[PublicHoFDistance] = []
+    for dist in CANONICAL_DISTANCES:
+        entries = by_distance.get(dist, [])
         men = sorted([to_entry(e) for e in entries if e.gender == "M"], key=lambda x: x.rank)
         women = sorted([to_entry(e) for e in entries if e.gender == "F"], key=lambda x: x.rank)
         if men or women:

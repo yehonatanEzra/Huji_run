@@ -24,7 +24,7 @@ import SettingsPage from './pages/coach/SettingsPage';
 import TeamSetupPage from './pages/coach/TeamSetupPage';
 import GroupHubPage from './pages/coach/GroupHubPage';
 import CoachHomePage from './pages/coach/CoachHomePage';
-import PublicTeamPage from './pages/PublicTeamPage';
+import MyGroupPage from './pages/athlete/MyGroupPage';
 import WorkoutTemplatesPage from './pages/coach/WorkoutTemplatesPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
@@ -45,7 +45,6 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to={landingFor(user)} replace /> : <LoginPage />} />
       <Route path="/register" element={user ? <Navigate to={landingFor(user)} replace /> : <RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/t/:teamId" element={<PublicTeamPage />} />
 
       <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
         <Route path="/home" element={<HomePage />} />
@@ -58,6 +57,7 @@ export default function App() {
         <Route path="/races" element={<RaceArchivePage />} />
         <Route path="/races/:raceId" element={<RaceDetailPage />} />
         <Route path="/hall-of-fame" element={<HallOfFamePage />} />
+        <Route path="/my-group" element={<MyGroupPage />} />
         <Route path="/health-wellness" element={<HealthWellnessPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/info" element={<InfoPage />} />

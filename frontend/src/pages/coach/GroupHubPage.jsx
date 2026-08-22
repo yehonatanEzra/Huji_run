@@ -851,7 +851,7 @@ function SettingsPanel({ group, onClose, onChanged }) {
 
   const save = async () => { if (!name.trim()) return; setBusy(true); try { await renameGroup(group.id, name.trim()); onChanged(); onClose(); } finally { setBusy(false); } };
   const del = async () => {
-    if (!confirm(`Delete “${group.name}”? Members become group-less (they stay your athletes).`)) return;
+    if (!confirm(`Delete “${group.name}”?\n\nThis will remove all ${group.members?.length || 0} athletes from the group (they stay your athletes).\n\nYou might want to transfer ownership and leave instead. Continue with deletion?`)) return;
     setBusy(true);
     try { await deleteGroup(group.id); onChanged(); onClose(); } finally { setBusy(false); }
   };

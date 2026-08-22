@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+
 export default function Modal({ open, onClose, title, children, panelClassName, fullScreen, zClassName = 'z-50' }) {
   if (!open) return null;
 
@@ -10,7 +12,11 @@ export default function Modal({ open, onClose, title, children, panelClassName, 
     : 'w-full sm:max-w-md max-h-[85dvh] rounded-t-2xl sm:rounded-2xl';
   const wrapperCls = fullScreen ? 'items-stretch' : 'items-end sm:items-center';
 
-  return (
+  // Portal to <body>: a `fixed` element is clipped to the nearest ancestor that
+  // has a transform/filter/backdrop-filter (e.g. our GLASS `backdrop-blur`
+  // cards). Rendering at the body root guarantees the overlay covers the true
+  // viewport no matter how deeply nested the trigger is.
+  return createPortal(
     <div className={`fixed inset-0 ${zClassName} flex ${wrapperCls} justify-center`}>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className={`relative ${panel} ${sizeCls} overflow-auto p-5 pb-20 sm:pb-5`}>
@@ -35,6 +41,7 @@ export default function Modal({ open, onClose, title, children, panelClassName, 
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

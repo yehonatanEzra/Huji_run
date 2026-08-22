@@ -11,6 +11,7 @@ import { NAV_ICONS } from './navIcons';
 const athletePairedItems = [
   { to: '/home',          label: 'Home',        icon: '🎟️', image: '/icons/home.jpg' },
   { to: '/calendar',      label: 'Training log', icon: '🏋️', image: '/icons/training.jpg' },
+  { to: '/my-group',      label: 'My Group',    icon: '👥', image: '/icons/group.jpg' },
   { to: '/feed',          label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',         label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },

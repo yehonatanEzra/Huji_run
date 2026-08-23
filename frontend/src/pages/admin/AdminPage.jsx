@@ -391,10 +391,12 @@ function UserEditModal({ target, isSelf, adminCount, onClose, onSaved }) {
 
           {target.role === 'athlete' && (
             <div>
-              <label className="text-[11px] uppercase tracking-wider font-semibold text-white/55">AI assistant (premium)</label>
+              <label className="text-[11px] uppercase tracking-wider font-semibold text-white/55">AI assistant premium</label>
               <div className="flex items-center justify-between gap-2 mt-1">
                 <p className="text-xs text-white/50">
-                  {target.ai_access ? 'Enabled: can use Coach AI.' : 'Disabled: no Coach AI access.'}
+                  {target.ai_access
+                    ? 'Premium: chosen model, unlimited.'
+                    : 'Free: cheapest model, 5 messages / 48h.'}
                 </p>
                 <button onClick={() => save({ ai_access: !target.ai_access })} disabled={busy}
                   className={`shrink-0 text-sm font-bold rounded-xl px-4 py-2 disabled:opacity-40 transition ${
@@ -402,9 +404,18 @@ function UserEditModal({ target, isSelf, adminCount, onClose, onSaved }) {
                       ? 'bg-white/10 border border-white/15 text-white hover:bg-white/20'
                       : 'bg-[#c0c1ff] text-[#1000a9]'
                   }`}>
-                  {target.ai_access ? 'Disable' : 'Enable'}
+                  {target.ai_access ? 'Make free' : 'Make premium'}
                 </button>
               </div>
+              {target.ai_access && (
+                <div className="flex gap-2 mt-2">
+                  <select value={target.ai_model || 'gpt-4o-mini'} onChange={(e) => save({ ai_model: e.target.value })}
+                    disabled={busy} className={`${GLASS_INPUT} disabled:opacity-50`}>
+                    <option value="gpt-4o-mini" className="bg-[#1c1b1c]">gpt-4o-mini (cheap, fast)</option>
+                    <option value="gpt-4o" className="bg-[#1c1b1c]">gpt-4o (higher quality)</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
 

@@ -36,8 +36,14 @@ class User(Base):
     # Admin-controlled per-athlete Strava access. Default on; flipped off by
     # block-all, re-granted individually or via enable-all.
     strava_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
-    # Admin-granted access to the AI training assistant ("premium"). Default off.
+    # AI training assistant. ai_access = "premium" (admin-granted): unlimited +
+    # an admin-chosen model (ai_model). Non-premium athletes get the cheapest
+    # model, capped at a few messages per rolling window (ai_msg_count /
+    # ai_window_start track the free-tier usage window).
     ai_access: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    ai_model: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    ai_msg_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    ai_window_start: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     @property

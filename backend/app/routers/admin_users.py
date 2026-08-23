@@ -20,6 +20,7 @@ from ..services.user_management import (
     change_user_role,
     rename_user,
 )
+from .assistant import ALLOWED_AI_MODELS
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -37,6 +38,7 @@ class AdminUserOut(BaseModel):
     photo_url: Optional[str] = None
     has_strava: bool = False
     ai_access: bool = False
+    ai_model: Optional[str] = None
     athletes_count: int = 0
 
 
@@ -48,6 +50,7 @@ class AdminUserPatch(BaseModel):
     full_name: Optional[str] = Field(default=None)
     role: Optional[str] = Field(default=None)
     ai_access: Optional[bool] = Field(default=None)
+    ai_model: Optional[str] = Field(default=None)  # premium's model; must be in ALLOWED_AI_MODELS
 
 
 def _serialize(
@@ -69,6 +72,7 @@ def _serialize(
         photo_url=f"/api/v1/profile/photo/{user.id}" if user.photo_filename else None,
         has_strava=bool(user.strava_access_token),
         ai_access=bool(user.ai_access),
+        ai_model=user.ai_model,
         athletes_count=athletes_count,
     )
 
@@ -138,6 +142,11 @@ def patch_user(
         change_user_role(db, target, body.role)
     if body.ai_access is not None:
         target.ai_access = body.ai_access
+    if body.ai_model is not None:
+        if body.ai_model not in ALLOWED_AI_MODELS:
+            raise HTTPException(status_code=400, detail="Unknown AI model")
+        target.ai_model = body.ai_model
+    if body.ai_access is not None or body.ai_model is not None:
         db.commit()
 
     return _fetch_user_view(db, target)

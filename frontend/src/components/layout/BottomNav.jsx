@@ -12,7 +12,6 @@ const athletePairedItems = [
   { to: '/home',          label: 'Home',        icon: '🎟️', image: '/icons/home.jpg' },
   { to: '/calendar',      label: 'Training log', icon: '🏋️', image: '/icons/training.jpg' },
   { to: '/my-group',      label: 'My Group',    icon: '👥', image: '/icons/group.jpg' },
-  { to: '/assistant',     label: 'Coach AI',    icon: '🤖' },
   { to: '/feed',          label: 'Feed',        icon: '📢', image: '/icons/feed.jpg' },
   { to: '/races',         label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },
@@ -138,10 +137,7 @@ export default function BottomNav() {
       ? coachItems
       : (user?.coach_id ? athletePairedItems : athleteUnpairedItems);
 
-  // Coach AI is a premium tab — only show it to athletes an admin has granted.
-  const visibleItems = baseItems.filter((item) => item.to !== '/assistant' || user?.ai_access);
-
-  const items = visibleItems.map((item) => ({
+  const items = baseItems.map((item) => ({
     ...item,
     svg: NAV_ICONS[item.to],
     // Line icons everywhere; keep the athlete's real photo only on the Profile tab.

@@ -479,6 +479,16 @@ export default function CalendarPage() {
       <div className="fixed inset-0 -z-10 bg-cover bg-center" style={{ backgroundImage: 'url(/bg.jpg)' }} />
       <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
+      {/* Coach AI — lives here, next to the training data it reasons about */}
+      <Link
+        to="/assistant"
+        aria-label="Coach AI"
+        title="Coach AI"
+        className="fixed bottom-28 right-4 z-40 w-14 h-14 rounded-full bg-[#c0c1ff] text-[#1000a9] shadow-lg shadow-[#c0c1ff]/40 flex items-center justify-center text-2xl active:scale-95 hover:scale-[1.03] transition"
+      >
+        🤖
+      </Link>
+
       {/* Date selector */}
       <div className="flex items-center justify-between mb-6">
         <button onClick={goBack} className={glassBtn} aria-label="Previous">‹</button>

@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import PageBackground from '../../components/PageBackground';
 import { useAuth } from '../../contexts/AuthContext';
-import { chatWithAssistant, getWeeklySummary } from '../../api/assistant';
+import { chatWithAssistant, getWeeklySummary, compactConversation } from '../../api/assistant';
 
 const FREE_LIMIT = 5;
+const COMPACT_AT = 20; // messages before we summarize + start fresh to save tokens
 
 const GLASS = 'bg-[#161616]/70 backdrop-blur-2xl border border-white/10';
 const INPUT = 'flex-1 bg-[#1c1b1c]/70 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20 resize-none';
@@ -28,19 +29,35 @@ export default function AssistantPage() {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, busy]);
 
   const runError = (err) =>
-    setError(err?.response?.data?.detail || 'The assistant is unavailable right now.');
+    setError({
+      text: err?.response?.data?.detail || 'The assistant is unavailable right now.',
+      limit: err?.response?.status === 429,
+    });
 
   const applyQuota = (data) => { if (data && data.premium === false) setRemaining(data.remaining); };
+
+  // Keep the whole conversation as context until it gets long, then summarize it
+  // into one brief and start fresh (saves tokens; like /compact).
+  const compactedBase = async (history) => {
+    if (history.length < COMPACT_AT) return history;
+    try {
+      const { data } = await compactConversation(history);
+      return [{ role: 'assistant', content: `(Summary of our earlier chat) ${data.summary}` }];
+    } catch {
+      return history; // compaction failed — keep going with full history
+    }
+  };
 
   const send = async (text) => {
     const content = (text ?? input).trim();
     if (!content || busy) return;
     setError(null);
     setInput('');
-    const next = [...messages, { role: 'user', content }];
-    setMessages(next);
     setBusy(true);
     try {
+      const base = await compactedBase(messages);
+      const next = [...base, { role: 'user', content }];
+      setMessages(next);
       const { data } = await chatWithAssistant(next);
       setMessages((m) => [...m, { role: 'assistant', content: data.reply }]);
       applyQuota(data);
@@ -126,7 +143,11 @@ export default function AssistantPage() {
 
         {error && (
           <div className="text-center">
-            <p className="text-xs text-amber-300/90 bg-amber-400/10 border border-amber-400/25 rounded-xl px-3 py-2 inline-block">{error}</p>
+            <p className={`text-xs rounded-xl px-3 py-2 inline-block ${
+              error.limit
+                ? 'text-red-300 bg-red-500/15 border border-red-400/40'
+                : 'text-amber-300/90 bg-amber-400/10 border border-amber-400/25'
+            }`}>{error.text}</p>
           </div>
         )}
         <div ref={endRef} />

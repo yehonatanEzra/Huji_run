@@ -7,3 +7,7 @@ export const chatWithAssistant = (messages) =>
 
 export const getWeeklySummary = () =>
   client.post('/assistant/weekly-summary');
+
+// Summarize a long conversation into a brief so the chat can continue cheaply.
+export const compactConversation = (messages) =>
+  client.post('/assistant/compact', { messages });

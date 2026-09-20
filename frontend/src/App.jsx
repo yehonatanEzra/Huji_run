@@ -26,6 +26,7 @@ import GroupHubPage from './pages/coach/GroupHubPage';
 import CoachHomePage from './pages/coach/CoachHomePage';
 import MyGroupPage from './pages/athlete/MyGroupPage';
 import AssistantPage from './pages/athlete/AssistantPage';
+import AssistantInfoPage from './pages/athlete/AssistantInfoPage';
 import WorkoutTemplatesPage from './pages/coach/WorkoutTemplatesPage';
 import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
@@ -60,6 +61,7 @@ export default function App() {
         <Route path="/hall-of-fame" element={<HallOfFamePage />} />
         <Route path="/my-group" element={<MyGroupPage />} />
         <Route path="/assistant" element={<AssistantPage />} />
+        <Route path="/assistant/info" element={<AssistantInfoPage />} />
         <Route path="/health-wellness" element={<HealthWellnessPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/info" element={<InfoPage />} />

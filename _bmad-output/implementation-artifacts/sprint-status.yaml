@@ -1,0 +1,128 @@
+# Sprint Status Tracking — Huji_run
+# Generated: 2026-09-20
+# Last Updated: 2026-09-20
+# Project: Huji_run
+# Project Key: NOKEY
+# Tracking System: file-system
+# Story Location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review with fresh context
+
+generated: 2026-09-20
+last_updated: 2026-09-20
+project: Huji_run
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # ─────────────────────────────────────────────
+  # SPRINT 0 — Multi-Team Platform Foundation
+  # ─────────────────────────────────────────────
+
+  # Epic 1: Alembic Migration System
+  epic-1: backlog
+  1-1-install-and-configure-alembic: backlog
+  1-2-generate-baseline-migration-from-current-schema: backlog
+  1-3-remove-legacy-migration-functions-from-main-py: backlog
+  1-4-install-structlog-for-structured-logging: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: Multi-Team Data Foundation
+  epic-2: backlog
+  2-1-team-and-team-membership-models: backlog
+  2-2-group-coach-join-table: backlog
+  2-3-add-team-id-to-all-domain-tables: backlog
+  2-4-verify-team-access-dependency: backlog
+  2-5-existing-huji-team-data-migration: backlog
+  2-6-event-driven-hall-of-fame-refresh: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Coach Self-Service & Contextual Auth
+  epic-3: backlog
+  3-1-jwt-redesign-with-active-team-id: backlog
+  3-2-team-creation-api: backlog
+  3-3-auth-context-active-team-id-update: backlog
+  3-4-team-setup-page-coach-self-service-team-creation: backlog
+  3-5-app-shell-active-team-indicator: backlog
+  epic-3-retrospective: optional
+
+  # ─────────────────────────────────────────────
+  # AI COACH REDESIGN — 3 Sprints
+  # Goal: Virtual running coach with tool calling,
+  #       persistent memory, freemium model
+  # ─────────────────────────────────────────────
+
+  # Epic 4: AI Sprint 1 — Backend Foundation
+  # Goal: AI chat works end-to-end for premium users
+  # New tables: assistant_conversations, assistant_messages,
+  #             athlete_notebook, system_prompts
+  epic-4: done
+  4-1-db-schema-and-alembic-migration: done
+  4-2-context-services-get-load-get-log-get-race-history: done
+  4-3-assistant-chat-endpoint-tool-calling-loop: done
+  4-4-assistant-notebook-endpoint: done
+  4-5-admin-prompt-management-endpoints: done
+  epic-4-retrospective: optional
+
+  # Epic 5: AI Sprint 2 — Freemium + Summarizer + Notebook
+  # Goal: Product is monetizable. Free users hit the wall.
+  # Free tier: gpt-4o-mini, 10 msgs/48h, no tools, last 7 days
+  # Premium: gpt-4o, unlimited, all tools, notebook
+  epic-5: done
+  5-1-auto-summarizer-background-task: done
+  5-2-conversation-history-endpoints: done
+  5-3-freemium-tier-detection-and-enforcement: done
+  5-4-tool-definitions-openai-function-schemas: done
+  epic-5-retrospective: optional
+
+  # Epic 6: AI Sprint 3 — Frontend + Info Page
+  # Goal: Full UI, can be demoed in interviews
+  # Includes: Chat tab, AI Notebook tab, info/explanation page
+  epic-6: done
+  6-1-assistant-page-shell-tabs-routing: done
+  6-2-chat-tab-history-tools-freemium-ui: done
+  6-3-ai-notebook-tab-rewrite-with-ai: done
+  6-4-static-info-page-what-it-does-pricing: done
+  epic-6-retrospective: optional
+
+# SPRINT SUMMARY
+# ==============
+# Total Epics: 6
+# Total Stories: 28
+# Stories Completed: 0
+# Epics In Progress: 0
+# Epics Completed: 0
+#
+# AI COACH DESIGN DECISIONS (locked):
+# - Tools: get_load() 6mo, get_log() 120d, get_race_history() all approved
+# - Auto-summarizer: 30,000 token trigger, always gpt-4o-mini
+# - AthleteNotebook: 1,500 chars, manual rewrite only (button)
+# - Free tier: 10 msgs/48h, gpt-4o-mini, last 7 days, no tools, no notebook
+# - Premium: $10/month, gpt-4o, unlimited, all tools, notebook
+# - All prompts stored in SystemPrompt DB table (admin-editable)
+# - Chat history: AssistantConversation + AssistantMessage tables
+# - Info page: inside app at /assistant/info, Sprint 3

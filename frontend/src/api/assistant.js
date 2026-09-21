@@ -14,6 +14,9 @@ export const listConversations = () =>
 export const getMessages = (conversationId) =>
   client.get(`/assistant/conversations/${conversationId}/messages`);
 
+export const deleteConversation = (conversationId) =>
+  client.delete(`/assistant/conversations/${conversationId}`);
+
 // Tier + remaining free messages (for the banner).
 export const getStatus = () =>
   client.get('/assistant/status');

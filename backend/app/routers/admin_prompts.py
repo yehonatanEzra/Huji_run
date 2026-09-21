@@ -71,3 +71,20 @@ def update_prompt(
     db.commit()
     db.refresh(row)
     return PromptOut(key=row.key, content=row.content, updated_at=row.updated_at, is_default=False)
+
+
+@router.delete("/{key}", response_model=PromptOut)
+def reset_prompt(
+    key: str,
+    _admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Reset a prompt to its hardcoded default by deleting its DB row. The AI then
+    reads the default again. No-op if there's no row. Unknown keys are rejected."""
+    if key not in DEFAULT_PROMPTS:
+        raise HTTPException(status_code=404, detail=f"Unknown prompt key: {key}")
+    row = db.query(SystemPrompt).filter(SystemPrompt.key == key).first()
+    if row is not None:
+        db.delete(row)
+        db.commit()
+    return PromptOut(key=key, content=DEFAULT_PROMPTS.get(key, ""), updated_at=None, is_default=True)

@@ -146,14 +146,14 @@ def _log_line(log: WorkoutLog, planned: list[str]) -> str:
     return f"{d.strftime('%Y-%m-%d %a')} | Planned: {plan_str} | Logged: {done}"
 
 
-def get_log(db: Session, athlete: User, start_date: date, end_date: date) -> str:
+def get_log(db: Session, athlete: User, start_date: date, end_date: date, max_days: int = LOG_MAX_DAYS) -> str:
     """Day-by-day log for a date range. Only days the athlete actually logged
     something appear (rest days and unreported days are skipped). Range capped
-    at 120 days."""
+    at `max_days` (default 120; free tier passes a shorter window)."""
     if start_date > end_date:
         start_date, end_date = end_date, start_date
-    if (end_date - start_date).days > LOG_MAX_DAYS:
-        start_date = end_date - timedelta(days=LOG_MAX_DAYS)
+    if (end_date - start_date).days > max_days:
+        start_date = end_date - timedelta(days=max_days)
 
     logs = db.query(WorkoutLog).filter(
         WorkoutLog.athlete_id == athlete.id,

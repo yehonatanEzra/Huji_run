@@ -112,4 +112,135 @@ DEFAULT_SECTIONS = [
             "global races count toward it."
         ),
     },
+    {
+        "position": 5,
+        "title": "5 · Coach AI",
+        "summary": "Your AI running coach — what it sees, and how it works.",
+        "body": (
+            "**What it is**\n"
+            "Coach AI is a virtual running coach you can chat with. It is grounded in your own "
+            "training — your plan, the workouts you logged, your personal bests and your races — so "
+            "its answers are about you, not generic advice.\n\n"
+            "**What it won't do**\n"
+            "It gives advice only. It never changes your workouts, logs or plans, and it is not a "
+            "substitute for medical advice — talk to your coach for real changes.\n\n"
+            "Open a section below for how it works."
+        ),
+    },
+]
+
+# Subcards under the "5 · Coach AI" card. Seeded (idempotently, by title) once the
+# parent exists; numbered 5.1, 5.2, … automatically in the UI.
+AI_SUBCARDS = [
+    {
+        "title": "What it can see",
+        "summary": "The training context behind every answer.",
+        "body": (
+            "**Always included**\n"
+            "Every message carries a compact snapshot of your training, so the coach is grounded "
+            "without you re-explaining:\n"
+            "- Your profile — training group and coach.\n"
+            "- The last 7 days of your log — planned vs. what you actually did.\n"
+            "- Your personal bests.\n\n"
+            "**Why not everything**\n"
+            "Sending years of history in every message would be slow and expensive. Instead the "
+            "coach gets a lean snapshot and pulls deeper history — weekly load, more of your log, "
+            "your races — only when a question needs it. See Tools."
+        ),
+    },
+    {
+        "title": "Tools",
+        "summary": "How the coach pulls deeper history on demand.",
+        "body": (
+            "The coach can call read-only tools to look further back when a question needs it. It "
+            "decides when — you don't have to ask. Everyone gets the tools; premium reaches back "
+            "further and can chain more of them in one answer.\n\n"
+            "**get_load**\n"
+            "Kilometres and number of runs per week over recent months — for spotting trends and load.\n\n"
+            "**get_log**\n"
+            "Your training log for a date range — the planned workout and what you actually reported. "
+            "Free covers the last 3 weeks; premium reaches the full history (up to 120 days).\n\n"
+            "**get_race_history**\n"
+            "Your approved race results, most recent first.\n\n"
+            "All three are read-only — the coach can look, never change."
+        ),
+    },
+    {
+        "title": "How a conversation works",
+        "summary": "From your message to the coach's reply.",
+        "body": (
+            "**Each message**\n"
+            "The coach receives its instructions, your training snapshot, and the conversation so "
+            "far — then replies.\n\n"
+            "**The tool loop**\n"
+            "If it needs more history, it asks for a tool, reads the result, and continues — "
+            "sometimes a few times — before answering.\n\n"
+            "**Memory within a chat**\n"
+            "Conversations are saved, so within a chat it remembers what you already discussed."
+        ),
+    },
+    {
+        "title": "The AI Notebook",
+        "summary": "Memory that carries across conversations. Premium.",
+        "body": (
+            "The Notebook is a short, persistent memory the coach keeps about you — your goals, "
+            "injuries and training patterns — so it remembers across separate conversations, not "
+            "just within one chat.\n"
+            "- It is short by design (about 1500 characters) — a summary, not a transcript.\n"
+            "- You can read and edit it any time from the AI Notebook tab.\n"
+            "- Or tap “Update with AI” to have the coach rewrite it from your latest chat.\n\n"
+            "The Notebook is a premium feature."
+        ),
+    },
+    {
+        "title": "Free vs Premium",
+        "summary": "What each tier includes.",
+        "body": (
+            "**Free**\n"
+            "- 6 messages every 72 hours.\n"
+            "- The read tools — weekly load, races, and the last 3 weeks of your log.\n\n"
+            "**Premium**\n"
+            "- Unlimited messages.\n"
+            "- A smarter model, for deeper analysis.\n"
+            "- Full training-log history, not just recent weeks.\n"
+            "- The AI Notebook — memory across conversations.\n\n"
+            "Premium is granted by an admin."
+        ),
+    },
+    {
+        "title": "Under the hood",
+        "summary": "Summarization, and the models that run it.",
+        "body": (
+            "**Keeping context manageable**\n"
+            "Long conversations are condensed automatically once they grow past a size threshold: "
+            "older messages are folded into a running summary so the coach keeps the thread without "
+            "the cost growing forever.\n\n"
+            "**The models**\n"
+            "Premium chat runs on a stronger OpenAI model; the free tier and background jobs like "
+            "summarizing use a lighter, cheaper one — high quality where it matters, low cost where "
+            "it doesn't."
+        ),
+    },
+    {
+        "title": "Admin control",
+        "summary": "Tuning the coach without a code deploy.",
+        "body": (
+            "Every prompt the coach uses is editable by an admin in Admin → AI — no code change or "
+            "deploy needed:\n"
+            "- The system prompt — its persona and rules.\n"
+            "- The summarizer and notebook-rewrite prompts.\n"
+            "- The description of each tool.\n\n"
+            "Edits take effect immediately. Any prompt left untouched uses a built-in default."
+        ),
+    },
+    {
+        "title": "Privacy & limits",
+        "summary": "What it sees, and what it isn't.",
+        "body": (
+            "- The coach only ever sees your own training data.\n"
+            "- Every tool is read-only — it can look, never change your plan, logs or results.\n"
+            "- It gives advice only. For real changes to your training, talk to your coach.\n"
+            "- It is not a substitute for medical advice."
+        ),
+    },
 ]

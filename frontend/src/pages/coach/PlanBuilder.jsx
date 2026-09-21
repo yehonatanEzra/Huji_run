@@ -21,7 +21,8 @@ export const WORKOUT_TYPES = [
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
   { value: 'strength',  label: 'Strength',  color: 'bg-amber-100 text-amber-700',     structured: false },
-  { value: 'cycling',   label: 'Cycling',   color: 'bg-cyan-100 text-cyan-700',       structured: false },
+  { value: 'cycling',   label: 'Cycling',   color: 'bg-orange-100 text-orange-700',   structured: false },
+  { value: 'swimming',  label: 'Swimming',  color: 'bg-blue-100 text-blue-700',       structured: false },
 ];
 export const typeMeta = (t) => WORKOUT_TYPES.find((x) => x.value === t) || WORKOUT_TYPES[0];
 const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -40,7 +41,7 @@ const CELL_COLOR = {
   simple: 'bg-slate-500/85', easy: 'bg-emerald-500/85', rest: 'bg-slate-400/80',
   tempo: 'bg-orange-500/85', long: 'bg-purple-500/85', intervals: 'bg-red-500/85',
   fartlek: 'bg-pink-500/85', race: 'bg-indigo-500/85',
-  strength: 'bg-amber-500/85', cycling: 'bg-cyan-500/85',
+  strength: 'bg-amber-500/85', cycling: 'bg-orange-500/85', swimming: 'bg-blue-500/85',
 };
 
 // Sunday (week start) of a yyyy-MM-dd date string. Weeks run Sun–Sat.

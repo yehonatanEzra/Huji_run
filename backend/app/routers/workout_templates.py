@@ -21,14 +21,14 @@ from ..services.notifications import notify_many
 
 router = APIRouter(prefix="/workout-templates", tags=["workout-templates"])
 
-ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling"}
+ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling", "swimming"}
 
 # Human labels per workout type (mirrors WORKOUT_TYPES in PlanBuilder.jsx). Used
 # to default an applied workout's title when the coach left the title blank.
 TYPE_LABELS = {
     "simple": "Other", "easy": "Easy run", "rest": "Rest day", "tempo": "Tempo",
     "long": "Long run", "intervals": "Intervals", "fartlek": "Fartlek",
-    "race": "Race", "strength": "Strength", "cycling": "Cycling",
+    "race": "Race", "strength": "Strength", "cycling": "Cycling", "swimming": "Swimming",
 }
 
 

@@ -20,10 +20,10 @@ export default function ProgressPage() {
           className="flex items-center gap-1.5 text-white/80 text-sm font-medium px-4 py-2 rounded-xl border border-white/10 active:scale-95 transition"
           style={{ background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}
         >
-          <span className="text-base leading-none">‹</span> Training log
+          <span className="text-base leading-none">‹</span> Back
         </button>
-        <h2 className="text-2xl font-bold text-[#e5e2e3]">My progress</h2>
-        <div className="w-[88px]" />{/* spacer to balance the back button */}
+        <h2 className="text-xl font-bold text-[#e5e2e3] whitespace-nowrap">My progress</h2>
+        <div className="w-[72px]" />{/* spacer to balance the back button */}
       </div>
 
       {user?.id ? (

@@ -18,7 +18,8 @@ const WORKOUT_TYPES = [
   { value: 'fartlek',   label: 'Fartlek',   abbr: 'Fart', color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      abbr: 'Race', color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
   { value: 'strength',  label: 'Strength',  abbr: 'Str',  color: 'bg-amber-100 text-amber-700',     structured: false },
-  { value: 'cycling',   label: 'Cycling',   abbr: 'Cyc',  color: 'bg-cyan-100 text-cyan-700',       structured: false },
+  { value: 'cycling',   label: 'Cycling',   abbr: 'Cyc',  color: 'bg-orange-100 text-orange-700',   structured: false },
+  { value: 'swimming',  label: 'Swimming',  abbr: 'Swim', color: 'bg-blue-100 text-blue-700',       structured: false },
 ];
 
 const typeMeta = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];

@@ -15,6 +15,7 @@ export const WORKOUT_TYPES = [
   { value: 'race',      label: 'Race',      abbr: 'Race', structured: true, mainLabel: 'Race' },
   { value: 'strength',  label: 'Strength',  abbr: 'Str',  structured: false },
   { value: 'cycling',   label: 'Cycling',   abbr: 'Cyc',  structured: false },
+  { value: 'swimming',  label: 'Swimming',  abbr: 'Swim', structured: false },
 ];
 export const isStructured = (type) =>
   ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(type);

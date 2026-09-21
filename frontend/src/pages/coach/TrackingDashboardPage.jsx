@@ -14,7 +14,8 @@ const WORKOUT_TYPES = [
   { value: 'fartlek',   label: 'Fartlek',   color: 'bg-pink-100 text-pink-700',       structured: true },
   { value: 'race',      label: 'Race',      color: 'bg-indigo-100 text-indigo-700',   structured: true, mainLabel: 'Race' },
   { value: 'strength',  label: 'Strength',  color: 'bg-amber-100 text-amber-700',     structured: false },
-  { value: 'cycling',   label: 'Cycling',   color: 'bg-cyan-100 text-cyan-700',       structured: false },
+  { value: 'cycling',   label: 'Cycling',   color: 'bg-orange-100 text-orange-700',   structured: false },
+  { value: 'swimming',  label: 'Swimming',  color: 'bg-blue-100 text-blue-700',       structured: false },
 ];
 const typeMetaFor = (t) => WORKOUT_TYPES.find(x => x.value === t) || WORKOUT_TYPES[0];
 const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
@@ -685,6 +686,13 @@ export default function TrackingDashboardPage() {
                             {d.log ? (d.log.completed ? 'V' : d.log.status === 'partial' ? '~' : 'X') : '-'}
                           </span>
                         </span>
+                        {(d.log?.cycling_km > 0 || d.log?.swim_km > 0 || d.log?.did_strength) && (
+                          <span className="flex items-center gap-2">
+                            {d.log?.did_strength && <span className="text-[11px]" title="Strength workout">💪</span>}
+                            {d.log?.swim_km > 0 && <span className="text-[10px] font-bold text-blue-300">{d.log.swim_km.toFixed(1)} km</span>}
+                            {d.log?.cycling_km > 0 && <span className="text-[10px] font-bold text-orange-300">{d.log.cycling_km.toFixed(1)} km</span>}
+                          </span>
+                        )}
                         {multi && plannedKm(d) > 0 && <span className="text-[11px] font-semibold text-white/55">Daily {fmtKm(plannedKm(d))} km</span>}
                       </span>
                     </div>
@@ -702,6 +710,7 @@ export default function TrackingDashboardPage() {
               const monthDays = profileMonth ? profileMonth.weeks.flat().filter(d => isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) : null;
               const days = profileViewMode === 'month' ? monthDays : profileWeek?.days;
               const volume = days ? days.reduce((s, d) => s + (d.log?.distance_km || 0), 0) : 0;
+              const strengthDays = days ? days.reduce((s, d) => s + (d.log?.did_strength ? 1 : 0), 0) : 0;
               const expectedVolume = days ? days.reduce((s, d) => s + plannedKm(d), 0) : 0;
               const volumeLabel = profileViewMode === 'month' ? 'this month' : 'this week';
 
@@ -746,6 +755,9 @@ export default function TrackingDashboardPage() {
                     <span className="text-xs font-bold text-blue-200 bg-blue-500/20 border border-blue-400/30 rounded-full px-2.5 py-0.5">
                       {volume > 0 ? `${volume.toFixed(1)} km ${volumeLabel}` : 'No km logged'}
                     </span>
+                    {strengthDays > 0 && (
+                      <span className="text-xs font-bold text-amber-200">💪 {strengthDays} strength {strengthDays === 1 ? 'day' : 'days'}</span>
+                    )}
                     {expectedVolume > 0 && (
                       <span className="text-xs font-semibold text-white/60">Expected: {fmtKm(expectedVolume)} km</span>
                     )}
@@ -785,7 +797,8 @@ export default function TrackingDashboardPage() {
                           fartlek:   { abbr: 'Fart', color: 'bg-pink-100 text-pink-700' },
                           race:      { abbr: 'Race', color: 'bg-indigo-100 text-indigo-700' },
                           strength:  { abbr: 'Str',  color: 'bg-amber-100 text-amber-700' },
-                          cycling:   { abbr: 'Cyc',  color: 'bg-cyan-100 text-cyan-700' },
+                          cycling:   { abbr: 'Cyc',  color: 'bg-orange-100 text-orange-700' },
+                          swimming:  { abbr: 'Swim', color: 'bg-blue-100 text-blue-700' },
                         };
                         const todayStr = format(new Date(), 'yyyy-MM-dd');
                         return (
@@ -804,6 +817,7 @@ export default function TrackingDashboardPage() {
                             <div className="space-y-4">
                               {profileMonth.weeks.map((week, wi) => {
                                 const weekVolume = week.reduce((s, d) => s + (d.log?.distance_km || 0), 0);
+                                const weekStrength = week.reduce((s, d) => s + (d.log?.did_strength ? 1 : 0), 0);
                                 const expectedKm = week.reduce((s, d) => s + plannedKm(d), 0);
                                 return (
                                   <div key={wi}>
@@ -815,6 +829,7 @@ export default function TrackingDashboardPage() {
                                         {weekHideButtons(week[0].date, true)}
                                         <div className="text-right">
                                           <span className="text-sm font-bold text-white">{weekVolume > 0 ? weekVolume.toFixed(1) : '0'} km</span>
+                                          {weekStrength > 0 && <p className="text-[10px] text-amber-200 font-bold">💪 {weekStrength} strength</p>}
                                           {expectedKm > 0 && <p className="text-[10px] text-white/75 font-normal">exp {fmtKm(expectedKm)} km</p>}
                                         </div>
                                       </div>
@@ -840,8 +855,9 @@ export default function TrackingDashboardPage() {
                                           intervals: { abbr: 'Int', color: 'bg-[#ec6a06]/25 text-[#ffb690]' },
                                           fartlek: { abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200' },
                                           race: { abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
-                                          strength: { abbr: 'Str', color: 'bg-amber-400/20 text-amber-200' },
-                                          cycling: { abbr: 'Cyc', color: 'bg-cyan-400/20 text-cyan-200' },
+                                          strength:  { abbr: 'Str',  color: 'bg-amber-400/20 text-amber-200' },
+                                          cycling:   { abbr: 'Cyc',  color: 'bg-orange-400/20 text-orange-200' },
+                                          swimming:  { abbr: 'Swim', color: 'bg-blue-400/20 text-blue-200' },
                                         };
                                         const typeInfo = activeType ? typeMap[activeType] : null;
                                         const isRace = activeType === 'race';
@@ -871,6 +887,7 @@ export default function TrackingDashboardPage() {
                                                 {typeInfo.abbr}
                                               </span>
                                             )}
+                                            <span className="h-3 flex items-center leading-none text-[10px]">{hasLog?.did_strength ? '💪' : ''}</span>
                                             <span className="text-[9px] font-bold text-[#c0c1ff]">
                                               {hasLog?.distance_km && hasLog.distance_km > 0 ? `${hasLog.distance_km < 10 ? hasLog.distance_km.toFixed(1) : Math.round(hasLog.distance_km)}k` : '-'}
                                             </span>
@@ -1187,7 +1204,7 @@ export default function TrackingDashboardPage() {
                 if (!gw && targets.length === 0) {
                   return <p className="text-sm text-white/40 italic">No workout today</p>;
                 }
-                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling' };
+                const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling', swimming: 'Swimming' };
                 const structured = (ty) => ['tempo', 'long', 'intervals', 'fartlek', 'race'].includes(ty);
                 const gwHidden = !!selected.day.hide_group;
                 const gwCard = gw && (() => {
@@ -1459,7 +1476,7 @@ export default function TrackingDashboardPage() {
             className="overflow-x-auto -mx-2"
             style={{ touchAction: 'pan-x pan-y' }}
           >
-            <div className="px-2" style={{ minWidth: '960px', zoom: expandedZoom }}>
+            <div className="px-2" style={{ minWidth: '1080px', zoom: expandedZoom }}>
               <div className="grid gap-1 mb-1 text-xs text-white/60 text-center font-medium" style={{ gridTemplateColumns: 'repeat(7, 1fr) 120px' }}>
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => <div key={i}>{d}</div>)}
                 <div className="text-right pr-1">Week</div>
@@ -1468,11 +1485,14 @@ export default function TrackingDashboardPage() {
                 {profileMonth.weeks.map((week, wi) => {
                   // Week totals are full Sunday–Saturday — do NOT clamp to the
                   // current month, or a month-boundary week gets split in two.
-                  let wkKm = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
+                  let wkKm = 0, wkCycKm = 0, wkSwimKm = 0, wkStrength = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
                   for (const d of week) {
                     wkExp += plannedKm(d);
                     if (!d.log) continue;
                     if (d.log.distance_km) wkKm += d.log.distance_km;
+                    if (d.log.cycling_km) wkCycKm += d.log.cycling_km;
+                    if (d.log.swim_km) wkSwimKm += d.log.swim_km;
+                    if (d.log.did_strength) wkStrength++;
                     const st = d.log.status || (d.log.completed ? 'completed' : 'missed');
                     if (st === 'completed') wkDone++;
                     else if (st === 'partial') wkPart++;
@@ -1510,7 +1530,8 @@ export default function TrackingDashboardPage() {
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
                         race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
                         strength:  { label: 'Strength',  color: 'bg-amber-400/20 text-amber-200' },
-                        cycling:   { label: 'Cycling',   color: 'bg-cyan-400/20 text-cyan-200' },
+                        cycling:   { label: 'Cycling',   color: 'bg-orange-400/20 text-orange-200' },
+                        swimming:  { label: 'Swimming',  color: 'bg-blue-400/20 text-blue-200' },
                       };
                       const typeChip = active?.workout_type ? TYPE_FULL[active.workout_type] : null;
                       const cellIsRace = active?.workout_type === 'race';
@@ -1579,12 +1600,25 @@ export default function TrackingDashboardPage() {
                                   <p className="text-[10px] text-white/80 leading-tight line-clamp-2 whitespace-pre-wrap flex-1">
                                     {d.log.notes}
                                   </p>
-                                ) : !d.log.distance_km ? (
+                                ) : !d.log.distance_km && !d.log.cycling_km && !d.log.swim_km && !d.log.did_strength ? (
                                   <p className="text-[10px] text-white/40 italic flex-1">No report</p>
                                 ) : <div className="flex-1" />}
-                                {d.log.distance_km > 0 && (
-                                  <p className="text-xs text-[#c0c1ff] font-bold leading-none mt-1 self-end">{d.log.distance_km.toFixed(1)} km</p>
-                                )}
+                                <div className="flex items-end justify-between mt-1">
+                                  <div className="flex flex-col gap-px">
+                                    {d.log.cycling_km > 0 && (
+                                      <p className="text-[9px] text-orange-300 font-bold leading-none">{d.log.cycling_km.toFixed(1)}k cyc</p>
+                                    )}
+                                    {d.log.swim_km > 0 && (
+                                      <p className="text-[9px] text-blue-300 font-bold leading-none">{d.log.swim_km.toFixed(1)}k swim</p>
+                                    )}
+                                  </div>
+                                  {d.log.did_strength && (
+                                    <span className="text-[11px] leading-none self-end" title="Strength workout">💪</span>
+                                  )}
+                                  {d.log.distance_km > 0 && (
+                                    <p className="text-xs text-[#c0c1ff] font-bold leading-none">{d.log.distance_km.toFixed(1)}k</p>
+                                  )}
+                                </div>
                               </>
                             ) : (
                               <p className="text-[10px] text-white/40 italic">No report</p>
@@ -1597,7 +1631,10 @@ export default function TrackingDashboardPage() {
                     })}
                     {/* Week stats column */}
                     <div className="flex flex-col items-end justify-center text-right px-1 text-xs">
-                      <div className="font-bold text-blue-200">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      <div className="font-bold text-blue-200">run: {wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      {wkCycKm > 0 && <div className="text-[11px] font-bold text-orange-300 mt-0.5">cyc: {wkCycKm.toFixed(1)}k</div>}
+                      {wkSwimKm > 0 && <div className="text-[11px] font-bold text-blue-300 mt-0.5">swim: {wkSwimKm.toFixed(1)}k</div>}
+                      {wkStrength > 0 && <div className="text-[11px] font-bold text-amber-200 mt-0.5">strength: {wkStrength}</div>}
                       <div className="flex gap-1.5 mt-1 text-[11px] font-mono">
                         <span className="text-green-300">V{wkDone}</span>
                         <span className="text-yellow-300">~{wkPart}</span>
@@ -1613,12 +1650,15 @@ export default function TrackingDashboardPage() {
 
               {/* Month totals */}
               {(() => {
-                let mKm = 0, mDone = 0, mPart = 0, mMiss = 0;
+                let mKm = 0, mCycKm = 0, mSwimKm = 0, mStrength = 0, mDone = 0, mPart = 0, mMiss = 0;
                 for (const week of profileMonth.weeks) {
                   for (const d of week) {
                     if (!isSameMonth(new Date(d.date + 'T00:00'), profileMonthDate)) continue;
                     if (!d.log) continue;
                     if (d.log.distance_km) mKm += d.log.distance_km;
+                    if (d.log.cycling_km) mCycKm += d.log.cycling_km;
+                    if (d.log.swim_km) mSwimKm += d.log.swim_km;
+                    if (d.log.did_strength) mStrength++;
                     const st = d.log.status || (d.log.completed ? 'completed' : 'missed');
                     if (st === 'completed') mDone++;
                     else if (st === 'partial') mPart++;
@@ -1628,8 +1668,11 @@ export default function TrackingDashboardPage() {
                 return (
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/15">
                     <span className="text-sm font-semibold text-white/85">{format(profileMonthDate, 'MMMM')} totals</span>
-                    <div className="flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-3 text-sm flex-wrap justify-end">
                       <span className="font-bold text-blue-200">{mKm.toFixed(1)} km</span>
+                      {mCycKm > 0 && <span className="font-bold text-orange-300">{mCycKm.toFixed(1)} km cyc</span>}
+                      {mSwimKm > 0 && <span className="font-bold text-blue-300">{mSwimKm.toFixed(1)} km swim</span>}
+                      {mStrength > 0 && <span className="font-bold text-amber-200">💪 {mStrength}</span>}
                       <div className="flex gap-2 text-xs font-mono">
                         <span className="text-green-300">V{mDone}</span>
                         <span className="text-yellow-300">~{mPart}</span>

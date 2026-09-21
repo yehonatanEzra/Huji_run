@@ -71,6 +71,9 @@ class WorkoutLogUpsert(BaseModel):
     date: date
     status: str = "missed"
     distance_km: Optional[float] = None
+    cycling_km: Optional[float] = None
+    swim_km: Optional[float] = None
+    did_strength: bool = False
     notes: Optional[str] = None
     manual_override: bool = False
 
@@ -87,6 +90,9 @@ class WorkoutLogOut(BaseModel):
     completed: bool
     status: str
     distance_km: Optional[float] = None
+    cycling_km: Optional[float] = None
+    swim_km: Optional[float] = None
+    did_strength: bool = False
     notes: Optional[str]
     manual_override: bool = False
     is_auto_marked: bool = False

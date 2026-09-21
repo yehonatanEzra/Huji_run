@@ -105,6 +105,10 @@ export default function AssistantPage() {
   const { user } = useAuth();
   const isPremium = !!user?.ai_access;
   const [tab, setTab] = useState('chat');
+  // Bumping this counter asks the (premium-only) ChatTab to open its history
+  // modal — the History control lives in the tab bar but the modal state is
+  // owned by ChatTab, so we signal it rather than lift all of that state up.
+  const [historyTrigger, setHistoryTrigger] = useState(0);
 
   return (
     <div className="flex flex-col h-[calc(100dvh-9rem)]">
@@ -136,24 +140,34 @@ export default function AssistantPage() {
 
       {/* Tabs */}
       <div className="inline-flex gap-1 mb-3 p-1 rounded-xl bg-black/40 backdrop-blur-md border border-[#38c6ff]/15 self-start">
-        {[['chat', 'Chat'], ['notebook', "Jonny's Notebook"]].map(([v, label]) => (
-          <button key={v} onClick={() => setTab(v)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
-              tab === v ? 'bg-[#c0c1ff] text-[#1000a9] shadow' : 'text-white/70 hover:text-white hover:bg-white/10'
-            }`}>
-            {label}
+        <button onClick={() => setTab('chat')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+            tab === 'chat' ? 'bg-[#c0c1ff] text-[#1000a9] shadow' : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}>
+          Chat
+        </button>
+        {isPremium && (
+          <button onClick={() => { setTab('chat'); setHistoryTrigger((t) => t + 1); }}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium text-white/70 hover:text-white hover:bg-white/10 transition">
+            History
           </button>
-        ))}
+        )}
+        <button onClick={() => setTab('notebook')}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+            tab === 'notebook' ? 'bg-[#c0c1ff] text-[#1000a9] shadow' : 'text-white/70 hover:text-white hover:bg-white/10'
+          }`}>
+          Jonny's Notebook
+        </button>
       </div>
 
       {tab === 'chat'
-        ? <ChatTab isPremium={isPremium} />
+        ? <ChatTab isPremium={isPremium} historyTrigger={historyTrigger} />
         : <NotebookTab isPremium={isPremium} />}
     </div>
   );
 }
 
-function ChatTab({ isPremium }) {
+function ChatTab({ isPremium, historyTrigger = 0 }) {
   const { user } = useAuth();
   const firstName = (user?.full_name || '').trim().split(' ')[0];
   const [messages, setMessages] = useState([]); // {role, content, tools?}
@@ -185,6 +199,12 @@ function ChatTab({ isPremium }) {
       setHistory(data);
     } catch { setHistory([]); }
   };
+
+  // The History control lives in the parent tab bar; it bumps historyTrigger to
+  // open the modal here. Skip the initial 0 so it only fires on real clicks.
+  useEffect(() => {
+    if (isPremium && historyTrigger > 0) openHistory();
+  }, [historyTrigger]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadConversation = async (id) => {
     setShowHistory(false);
@@ -255,21 +275,15 @@ function ChatTab({ isPremium }) {
         </p>
       )}
 
-      {/* Toolbar: reopen past chats (premium), or start a clean one */}
-      <div className="flex items-center gap-2 mb-2">
-        {isPremium && (
-          <button onClick={openHistory}
-            className="text-xs font-semibold text-white/70 bg-white/5 border border-white/15 rounded-full px-3 py-1.5 hover:bg-white/10 transition">
-            🕘 History
-          </button>
-        )}
-        {(messages.length > 0 || conversationId) && (
+      {/* Toolbar: start a clean chat. History lives in the tab bar above. */}
+      {(messages.length > 0 || conversationId) && (
+        <div className="flex items-center gap-2 mb-2">
           <button onClick={newChat}
             className="text-xs font-semibold text-white/70 bg-white/5 border border-white/15 rounded-full px-3 py-1.5 hover:bg-white/10 transition">
             ✏️ New chat
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {showHistory && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setShowHistory(false)}>

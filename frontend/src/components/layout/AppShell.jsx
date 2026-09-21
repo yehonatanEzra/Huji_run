@@ -16,6 +16,9 @@ const ROOT_PATHS = new Set([
   '/profile', '/feed', '/coach/home', '/coach/dashboard', '/coach/requests', '/admin/pending',
 ]);
 
+// Pages where the header is tight / Strava is irrelevant — hide the Strava button.
+const STRAVA_HIDDEN_PATHS = new Set(['/assistant', '/assistant/info', '/info', '/about']);
+
 function TeamSwitcherModal({ teams, currentTeamId, onSwitch, onClose }) {
   const [switching, setSwitching] = useState(false);
 
@@ -217,7 +220,7 @@ export default function AppShell() {
               <span className="text-xs opacity-70 hidden sm:inline">{teamName}</span>
             )
           )}
-          <StravaSyncIconButton />
+          {!STRAVA_HIDDEN_PATHS.has(location.pathname) && <StravaSyncIconButton />}
           <NotificationBell />
           <span className="opacity-80 hidden sm:inline">{user?.full_name}</span>
           <button onClick={logout} className="underline opacity-70 hover:opacity-100">

@@ -73,14 +73,14 @@ export default function CoachAiFab() {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       role="button"
-      aria-label="Coach AI"
-      title="Coach AI — tap to open, drag to move"
+      aria-label="Jonny — Coach AI"
+      title="Jonny — tap to open, drag to move"
     >
-      <div className="w-14 h-14 rounded-full bg-[#c0c1ff] text-[#1000a9] shadow-lg shadow-[#c0c1ff]/40 flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing active:scale-95 transition">
-        <img src="/coach-ai.png" alt="Coach AI" draggable={false} className="w-full h-full object-cover scale-125 pointer-events-none" />
+      <div className="w-14 h-14 rounded-full bg-[#0b1e2d] flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing active:scale-95 transition shadow-[0_0_0_2px_rgba(56,198,255,0.6),0_0_22px_rgba(56,198,255,0.5),0_10px_24px_rgba(0,0,0,0.45)]">
+        <img src="/coach-ai.png" alt="Jonny" draggable={false} className="w-full h-full object-cover scale-125 pointer-events-none" />
       </div>
       <span className="mt-1 text-[10px] font-semibold text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.85)] pointer-events-none">
-        Coach AI
+        Jonny
       </span>
     </div>
   );

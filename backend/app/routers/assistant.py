@@ -3,8 +3,10 @@ DB; each turn the model is grounded in a lean base prompt (profile, PBs, last 7
 days, and — premium only — the athlete's notebook) and can call read-only tools
 (get_load / get_log / get_race_history) to pull deeper history on demand.
 
-Free tier: gpt-4o-mini, capped messages per rolling window, no tools, no notebook.
-Premium (ai_access): gpt-4o, unlimited, all tools, notebook. Read-only throughout."""
+Free tier: gpt-4o-mini, capped messages per rolling window, the read tools with a
+shallow tool depth + 21-day get_log window, no notebook.
+Premium (ai_access): gpt-4o, unlimited, full tool depth + 120-day get_log, notebook.
+Read-only throughout."""
 from __future__ import annotations
 import json
 import math
@@ -12,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,10 +34,12 @@ CHEAPEST_MODEL = "gpt-4o-mini"
 PREMIUM_DEFAULT_MODEL = "gpt-4o"
 ALLOWED_AI_MODELS = ("gpt-4o-mini", "gpt-4o")
 
-FREE_LIMIT = 10
-FREE_WINDOW = timedelta(hours=48)
+FREE_LIMIT = 6
+FREE_WINDOW = timedelta(hours=72)
 
-MAX_TOOL_DEPTH = 5        # tool-call rounds before we force a final answer
+MAX_TOOL_DEPTH = 5        # premium tool-call rounds before we force a final answer
+FREE_TOOL_DEPTH = 2       # free tier: fewer rounds — bounds cost + latency
+FREE_LOG_MAX_DAYS = 21    # free get_log window (premium gets the full 120)
 MAX_HISTORY_MSGS = 20     # prior stored turns replayed to the model
 NOTEBOOK_MAX_CHARS = 1500
 
@@ -42,6 +47,31 @@ NOTEBOOK_MAX_CHARS = 1500
 def _require_athlete(user: User) -> None:
     if user.role != "athlete":
         raise HTTPException(status_code=403, detail="The assistant is available to athletes.")
+
+
+def _require_premium(user: User) -> None:
+    if not user.ai_access:
+        raise HTTPException(status_code=403, detail="Saved conversation history is a premium feature.")
+
+
+CONVERSATION_RETENTION_DAYS = 30
+
+
+def _prune_old_conversations(db: Session, athlete: User, keep_id: Optional[int] = None) -> None:
+    """Delete this athlete's conversations idle for more than the retention window.
+    Called opportunistically on each chat. `keep_id` protects the active one."""
+    cutoff = datetime.utcnow() - timedelta(days=CONVERSATION_RETENTION_DAYS)
+    stale = (
+        db.query(AssistantConversation)
+        .filter(
+            AssistantConversation.athlete_id == athlete.id,
+            AssistantConversation.updated_at < cutoff,
+        )
+        .all()
+    )
+    for conv in stale:
+        if conv.id != keep_id:
+            db.delete(conv)  # cascades messages
 
 
 def _model_for(user: User) -> str:
@@ -83,6 +113,7 @@ class ConversationOut(BaseModel):
     id: int
     created_at: datetime
     updated_at: datetime
+    preview: Optional[str] = None  # first user message, for the history list
 
     model_config = {"from_attributes": True}
 
@@ -138,6 +169,7 @@ def chat(
             )
 
     conv = _get_or_create_conversation(db, current_user, body.conversation_id)
+    _prune_old_conversations(db, current_user, keep_id=conv.id)
 
     # Persist the user's message.
     db.add(AssistantMessage(conversation_id=conv.id, role="user", content=body.message))
@@ -158,10 +190,17 @@ def chat(
         messages.append({"role": m.role, "content": m.content})
     messages.append({"role": "user", "content": body.message})
 
-    tools = tool_schemas(db) if premium else None
+    # Both tiers get the read tools now; free is bounded by a shallower tool
+    # depth and a shorter get_log window (and stays on the cheap model).
+    tools = tool_schemas(db)
     model = _model_for(current_user)
+    depth = MAX_TOOL_DEPTH if premium else FREE_TOOL_DEPTH
+    log_max_days = None if premium else FREE_LOG_MAX_DAYS
 
-    reply, tools_used = _run_model(db, current_user, conv, messages, tools, model)
+    reply, tools_used = _run_model(
+        db, current_user, conv, messages, tools, model,
+        depth=depth, log_max_days=log_max_days,
+    )
 
     # Persist the final assistant message.
     db.add(AssistantMessage(conversation_id=conv.id, role="assistant", content=reply))
@@ -187,15 +226,15 @@ def chat(
     )
 
 
-def _run_model(db, athlete, conv, messages, tools, model) -> tuple[str, list[str]]:
-    """Run the chat completion, resolving up to MAX_TOOL_DEPTH tool-call rounds.
+def _run_model(db, athlete, conv, messages, tools, model, *, depth=MAX_TOOL_DEPTH, log_max_days=None) -> tuple[str, list[str]]:
+    """Run the chat completion, resolving up to `depth` tool-call rounds.
     Persists each tool result as an AssistantMessage. Returns (reply, tools_used)."""
     from openai import OpenAI, OpenAIError
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
     tools_used: list[str] = []
 
     try:
-        for _ in range(MAX_TOOL_DEPTH):
+        for _ in range(depth):
             kwargs = dict(model=model, messages=messages, temperature=0.4, max_tokens=800, timeout=45)
             if tools:  # omit entirely for free tier — the SDK sends `"tools": null` otherwise
                 kwargs["tools"] = tools
@@ -221,7 +260,7 @@ def _run_model(db, athlete, conv, messages, tools, model) -> tuple[str, list[str
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                result = execute_tool(tc.function.name, args, db, athlete)
+                result = execute_tool(tc.function.name, args, db, athlete, log_max_days=log_max_days)
                 tools_used.append(tc.function.name)
                 db.add(AssistantMessage(
                     conversation_id=conv.id, role="tool",
@@ -395,12 +434,39 @@ def list_conversations(
     db: Annotated[Session, Depends(get_db)],
 ):
     _require_athlete(current_user)
-    return (
+    _require_premium(current_user)
+    convs = (
         db.query(AssistantConversation)
         .filter(AssistantConversation.athlete_id == current_user.id)
         .order_by(AssistantConversation.updated_at.desc())
         .all()
     )
+    if not convs:
+        return []
+    # First user message per conversation → the history preview (one batched query).
+    ids = [c.id for c in convs]
+    sub = (
+        db.query(
+            AssistantMessage.conversation_id.label("cid"),
+            func.min(AssistantMessage.id).label("mid"),
+        )
+        .filter(AssistantMessage.conversation_id.in_(ids), AssistantMessage.role == "user")
+        .group_by(AssistantMessage.conversation_id)
+        .subquery()
+    )
+    rows = (
+        db.query(AssistantMessage.conversation_id, AssistantMessage.content)
+        .join(sub, AssistantMessage.id == sub.c.mid)
+        .all()
+    )
+    previews = {cid: (content or "").strip() for cid, content in rows}
+    out = []
+    for c in convs:
+        p = previews.get(c.id)
+        if p and len(p) > 80:
+            p = p[:80].rstrip() + "…"
+        out.append(ConversationOut(id=c.id, created_at=c.created_at, updated_at=c.updated_at, preview=p))
+    return out
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
@@ -410,6 +476,7 @@ def conversation_messages(
     db: Annotated[Session, Depends(get_db)],
 ):
     _require_athlete(current_user)
+    _require_premium(current_user)
     conv = db.get(AssistantConversation, conversation_id)
     if conv is None or conv.athlete_id != current_user.id:
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -420,3 +487,18 @@ def conversation_messages(
         .all()
     )
     return msgs
+
+
+@router.delete("/conversations/{conversation_id}", status_code=204)
+def delete_conversation(
+    conversation_id: int,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    _require_athlete(current_user)
+    _require_premium(current_user)
+    conv = db.get(AssistantConversation, conversation_id)
+    if conv is None or conv.athlete_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    db.delete(conv)  # cascades messages
+    db.commit()

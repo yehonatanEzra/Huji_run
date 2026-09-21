@@ -86,6 +86,73 @@ def _seed_info_sections():
         db.close()
 
 
+def _seed_ai_info_card():
+    """Additively seed the Coach AI info card and its subcards. Idempotent — the
+    parent is created only if absent (never clobbers admin edits), and each subcard
+    is inserted only if a child with that title doesn't already exist. Runs after
+    _seed_info_sections, which may already have created the parent on a fresh DB."""
+    from sqlalchemy import func
+    from .database import SessionLocal
+    from .models.info_section import InfoSection
+    from .services.info_seed import DEFAULT_SECTIONS, AI_SUBCARDS
+    TITLE = "5 · Coach AI"
+    card = next((s for s in DEFAULT_SECTIONS if s["title"] == TITLE), None)
+    if card is None:
+        return
+    db = SessionLocal()
+    try:
+        parent = (
+            db.query(InfoSection)
+            .filter(InfoSection.title == TITLE, InfoSection.parent_id.is_(None))
+            .first()
+        )
+        if parent is None:
+            if db.query(InfoSection).count() == 0:
+                return  # truly fresh DB — _seed_info_sections seeds the parent first
+            max_pos = db.query(func.max(InfoSection.position)).filter(InfoSection.parent_id.is_(None)).scalar()
+            parent = InfoSection(
+                title=card["title"], summary=card.get("summary"),
+                body=card.get("body", ""), position=(max_pos or 0) + 1,
+            )
+            db.add(parent)
+            db.commit()
+            db.refresh(parent)
+
+        existing = {c.title for c in db.query(InfoSection).filter(InfoSection.parent_id == parent.id).all()}
+        max_child = db.query(func.max(InfoSection.position)).filter(InfoSection.parent_id == parent.id).scalar()
+        pos = (max_child + 1) if max_child is not None else 0
+        for sub in AI_SUBCARDS:
+            if sub["title"] in existing:
+                continue
+            db.add(InfoSection(
+                parent_id=parent.id, title=sub["title"],
+                summary=sub.get("summary"), body=sub.get("body", ""), position=pos,
+            ))
+            pos += 1
+        db.commit()
+    finally:
+        db.close()
+
+
+def _prune_stale_ai_conversations():
+    """Safety sweep: delete AI conversations idle for more than 30 days (retention
+    policy). The chat endpoint also prunes lazily per-user; this catches athletes
+    who never return. Cascades their messages."""
+    from datetime import datetime, timedelta
+    from .database import SessionLocal
+    from .models.assistant import AssistantConversation
+    db = SessionLocal()
+    try:
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        stale = db.query(AssistantConversation).filter(AssistantConversation.updated_at < cutoff).all()
+        for conv in stale:
+            db.delete(conv)  # cascades messages
+        if stale:
+            db.commit()
+    finally:
+        db.close()
+
+
 try:
     _bootstrap_admin_and_coach_ids()
 except Exception as e:
@@ -96,6 +163,18 @@ try:
     _seed_info_sections()
 except Exception as e:
     log.warning("seed_info_sections_failed", error=str(e))
+
+
+try:
+    _seed_ai_info_card()
+except Exception as e:
+    log.warning("seed_ai_info_card_failed", error=str(e))
+
+
+try:
+    _prune_stale_ai_conversations()
+except Exception as e:
+    log.warning("prune_stale_conversations_failed", error=str(e))
 
 
 

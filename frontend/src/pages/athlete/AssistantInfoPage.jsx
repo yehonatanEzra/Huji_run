@@ -44,12 +44,12 @@ export default function AssistantInfoPage() {
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-white/60 border border-white/15">Included</span>
           </div>
           <p className="text-sm text-white/75 mb-3">
-            Ask your coach anything about your recent training — up to 10 messages every 48 hours.
+            Ask your coach anything about your training — 6 messages every 72 hours.
           </p>
           <ul className="text-sm text-white/60 space-y-1">
-            <li>• Chat grounded in your last 7 days</li>
-            <li>• Your personal bests</li>
-            <li>• 10 messages / 48h</li>
+            <li>• Grounded in your last 7 days & personal bests</li>
+            <li>• Can pull your weekly load, races & last 3 weeks of workouts</li>
+            <li>• 6 messages / 72h</li>
           </ul>
         </Card>
 
@@ -63,7 +63,7 @@ export default function AssistantInfoPage() {
           </p>
           <ul className="text-sm text-white/75 space-y-1">
             <li>• Unlimited messages, smarter model</li>
-            <li>• Full history: months of load, logs & races on demand</li>
+            <li>• Full history: your whole training log (not just recent weeks)</li>
             <li>• AI Notebook — remembers goals, injuries & patterns across chats</li>
           </ul>
         </Card>
@@ -74,8 +74,8 @@ export default function AssistantInfoPage() {
         <h2 className="text-white font-bold mb-3">How it works</h2>
         <ol className="text-sm text-white/75 space-y-2">
           <li><span className="text-[#c0c1ff] font-bold">1. Context.</span> Every chat starts grounded in your profile, personal bests and last 7 days of training.</li>
-          <li><span className="text-[#c0c1ff] font-bold">2. Tools.</span> When you ask about the bigger picture, the coach pulls exactly what it needs — weekly load, a date range of your log, or your race history — instead of loading everything.</li>
-          <li><span className="text-[#c0c1ff] font-bold">3. Memory.</span> The AI Notebook is a living set of notes about you. It carries the important things forward so the coach doesn't start from zero each time.</li>
+          <li><span className="text-[#c0c1ff] font-bold">2. Tools.</span> When you ask about the bigger picture, the coach pulls exactly what it needs — weekly load, a date range of your log, or your race history — instead of loading everything. Free reaches back a few weeks; premium reaches back months.</li>
+          <li><span className="text-[#c0c1ff] font-bold">3. Memory.</span> Premium's AI Notebook is a living set of notes about you. It carries the important things forward so the coach doesn't start from zero each time.</li>
         </ol>
         <p className="text-xs text-white/45 mt-3">
           Your training data stays in Huji Run. The AI reads it to help you train — it is never sold or shared.

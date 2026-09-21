@@ -47,7 +47,7 @@ def tool_schemas(db: Session) -> list[dict]:
     ]
 
 
-def execute_tool(name: str, args: dict, db: Session, athlete: User) -> str:
+def execute_tool(name: str, args: dict, db: Session, athlete: User, *, log_max_days: int | None = None) -> str:
     if name == "get_load":
         return get_load(db, athlete)
     if name == "get_race_history":
@@ -58,5 +58,6 @@ def execute_tool(name: str, args: dict, db: Session, athlete: User) -> str:
             end = date.fromisoformat(args["end_date"])
         except (KeyError, ValueError):
             return "Invalid dates. Provide start_date and end_date as YYYY-MM-DD."
-        return get_log(db, athlete, start, end)
+        # log_max_days=None → get_log's default (120). Free tier passes a shorter cap.
+        return get_log(db, athlete, start, end, **({"max_days": log_max_days} if log_max_days else {}))
     return f"Unknown tool: {name}"

@@ -6,6 +6,7 @@ import Modal from '../../components/ui/Modal';
 import { listPending, approveRace, rejectRace, approveResult, rejectResult } from '../../api/adminReview';
 import { listAllUsers, patchUser, deleteUser } from '../../api/adminUsers';
 import { adminListStravaUsers, adminDisconnectStrava, adminDisconnectAllStrava, adminGetStravaStatus, adminBlockAllStrava, adminReleaseStrava, adminEnableAllStrava, adminSetStravaEnabled } from '../../api/strava';
+import { listPrompts, updatePrompt, resetPrompt } from '../../api/adminPrompts';
 
 const GLASS = 'bg-[#201f20]/60 backdrop-blur-2xl border border-white/10';
 const GLASS_INPUT = 'w-full bg-[#1c1b1c]/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#c0c1ff] focus:ring-2 focus:ring-[#c0c1ff]/20';
@@ -48,11 +49,13 @@ export default function AdminPage() {
         </button>
         <button onClick={() => setTab('users')} className={`${TAB} ${tab === 'users' ? TAB_ACTIVE : TAB_INACTIVE}`}>Users</button>
         <button onClick={() => setTab('strava')} className={`${TAB} ${tab === 'strava' ? TAB_ACTIVE : TAB_INACTIVE}`}>Strava</button>
+        <button onClick={() => setTab('prompts')} className={`${TAB} ${tab === 'prompts' ? TAB_ACTIVE : TAB_INACTIVE}`}>AI</button>
       </div>
 
       {tab === 'review' && <ReviewTab pending={pending} onChanged={refreshPending} />}
       {tab === 'users' && <UsersTab />}
       {tab === 'strava' && <StravaTab />}
+      {tab === 'prompts' && <PromptsTab />}
     </>
   );
 }
@@ -717,6 +720,131 @@ function StravaTab() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── AI tab: view & edit the assistant's prompt store ──────────────────────────
+const PROMPT_META = {
+  system_prompt: { label: 'System prompt', hint: "The coach's core instructions — persona, rules, what it can and can't do." },
+  summarizer_prompt: { label: 'Conversation summarizer', hint: 'Condenses long chats so the coach keeps context without bloating tokens.' },
+  notebook_rewrite_prompt: { label: 'Notebook rewrite', hint: 'Rewrites the athlete’s AI Notebook from a conversation.' },
+  tool_get_load: { label: 'Tool · get_load', hint: 'Description shown to the model for the weekly-volume tool.' },
+  tool_get_log: { label: 'Tool · get_log', hint: 'Description shown to the model for the training-log tool.' },
+  tool_get_race_history: { label: 'Tool · get_race_history', hint: 'Description shown to the model for the race-history tool.' },
+};
+
+function PromptCard({ prompt, onChanged }) {
+  const meta = PROMPT_META[prompt.key] || { label: prompt.key, hint: '' };
+  const [draft, setDraft] = useState(prompt.content);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const dirty = draft !== prompt.content;
+
+  useEffect(() => { setDraft(prompt.content); }, [prompt.content]);
+
+  const save = async () => {
+    if (!draft.trim() || busy) return;
+    setBusy(true); setNote(null);
+    try {
+      const { data } = await updatePrompt(prompt.key, draft);
+      onChanged(data);
+      setNote({ ok: true, text: 'Saved ✓' });
+    } catch (e) {
+      setNote({ ok: false, text: e?.response?.data?.detail || 'Could not save.' });
+    } finally { setBusy(false); }
+  };
+
+  const reset = async () => {
+    if (busy) return;
+    if (!confirm(`Reset “${meta.label}” to its built-in default? Your edits will be lost.`)) return;
+    setBusy(true); setNote(null);
+    try {
+      const { data } = await resetPrompt(prompt.key);
+      onChanged(data);
+      setDraft(data.content);
+      setNote({ ok: true, text: 'Reset to default ✓' });
+    } catch (e) {
+      setNote({ ok: false, text: e?.response?.data?.detail || 'Could not reset.' });
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className={`${GLASS} rounded-2xl p-4`}>
+      <div className="flex items-start gap-2 mb-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-bold text-white">{meta.label}</p>
+            <span className="text-[10px] font-mono text-white/40">{prompt.key}</span>
+            {prompt.is_default
+              ? <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/10 text-white/55">Default</span>
+              : <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#c0c1ff]/20 text-[#c0c1ff]">Customized</span>}
+          </div>
+          {meta.hint && <p className="text-xs text-white/50 mt-0.5">{meta.hint}</p>}
+        </div>
+      </div>
+
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={Math.min(18, Math.max(5, draft.split('\n').length + 1))}
+        className={`${GLASS_INPUT} font-mono text-xs leading-relaxed`}
+      />
+
+      <div className="flex items-center gap-2 mt-2">
+        <span className="text-[10px] text-white/40">{draft.length} chars</span>
+        {prompt.updated_at && (
+          <span className="text-[10px] text-white/40">· updated {format(new Date(prompt.updated_at), 'PP')}</span>
+        )}
+        {note && <span className={`text-[11px] ${note.ok ? 'text-emerald-300' : 'text-amber-300/90'}`}>{note.text}</span>}
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={reset}
+            disabled={busy || prompt.is_default}
+            className="text-xs font-semibold border border-white/15 text-white/70 rounded-full px-3 py-1.5 hover:bg-white/10 disabled:opacity-30 transition"
+            title={prompt.is_default ? 'Already using the default' : 'Reset to built-in default'}
+          >
+            Reset
+          </button>
+          <button
+            onClick={save}
+            disabled={busy || !dirty || !draft.trim()}
+            className="text-xs font-bold bg-[#c0c1ff] text-[#1000a9] rounded-full px-4 py-1.5 disabled:opacity-40 transition"
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PromptsTab() {
+  const [prompts, setPrompts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true); setError(false);
+    listPrompts().then(({ data }) => setPrompts(data)).catch(() => setError(true)).finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const onChanged = (updated) => {
+    setPrompts((ps) => ps.map((p) => (p.key === updated.key ? updated : p)));
+  };
+
+  if (loading) return <div className="flex justify-center py-16"><Spinner /></div>;
+  if (error) return <p className="text-center text-amber-300/90 py-16 text-sm">Could not load prompts.</p>;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-white/55">
+        These prompts drive the Coach AI. Edits apply immediately — no deploy. Keys with no override use the built-in default.
+      </p>
+      {prompts.map((p) => (
+        <PromptCard key={p.key} prompt={p} onChanged={onChanged} />
+      ))}
     </div>
   );
 }

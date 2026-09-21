@@ -10,6 +10,7 @@ import Spinner from '../../components/ui/Spinner';
 import WorkoutCommentThread from '../../components/WorkoutCommentThread';
 import PageBackground from '../../components/PageBackground';
 import { NoiseBackground } from '../../components/ui/NoiseBackground';
+import CoachAiFab from '../../components/CoachAiFab';
 import { dayWorkouts, dayPlannedKm } from '../../constants/workouts';
 
 // Planned km across all of the day's (visible) workouts.
@@ -480,14 +481,7 @@ export default function CalendarPage() {
       <div className="fixed inset-0 -z-10" style={{ background: 'linear-gradient(180deg, rgba(19,19,20,0.45) 20%, rgba(19,19,20,0.50) 80%)' }} />
 
       {/* Coach AI — lives here, next to the training data it reasons about */}
-      <Link
-        to="/assistant"
-        aria-label="Coach AI"
-        title="Coach AI"
-        className="fixed bottom-28 right-4 z-40 w-14 h-14 rounded-full bg-[#c0c1ff] text-[#1000a9] shadow-lg shadow-[#c0c1ff]/40 flex items-center justify-center text-2xl active:scale-95 hover:scale-[1.03] transition"
-      >
-        🤖
-      </Link>
+      <CoachAiFab />
 
       {/* Date selector */}
       <div className="flex items-center justify-between mb-6">

@@ -17,7 +17,13 @@ const ROOT_PATHS = new Set([
 ]);
 
 // Pages where the header is tight / Strava is irrelevant — hide the Strava button.
-const STRAVA_HIDDEN_PATHS = new Set(['/assistant', '/assistant/info', '/info', '/about']);
+const STRAVA_HIDDEN_PATHS = new Set(['/assistant', '/assistant/info', '/info', '/about', '/progress', '/calendar/volume']);
+
+// True when the Strava button should be hidden. Covers the exact set above plus
+// the stats pages that also exist under dynamic coach routes
+// (/coach/athletes/:id/volume and .../progress), where the header is tight.
+const isStravaHidden = (pathname) =>
+  STRAVA_HIDDEN_PATHS.has(pathname) || pathname.endsWith('/volume') || pathname.endsWith('/progress');
 
 function TeamSwitcherModal({ teams, currentTeamId, onSwitch, onClose }) {
   const [switching, setSwitching] = useState(false);
@@ -220,7 +226,7 @@ export default function AppShell() {
               <span className="text-xs opacity-70 hidden sm:inline">{teamName}</span>
             )
           )}
-          {!STRAVA_HIDDEN_PATHS.has(location.pathname) && <StravaSyncIconButton />}
+          {!isStravaHidden(location.pathname) && <StravaSyncIconButton />}
           <NotificationBell />
           <span className="opacity-80 hidden sm:inline">{user?.full_name}</span>
           <button onClick={logout} className="underline opacity-70 hover:opacity-100">

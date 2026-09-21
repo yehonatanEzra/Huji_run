@@ -238,27 +238,30 @@ function DiagramView({ athleteId }) {
   const weekLabel  = (b) => { const d = new Date(b.start + 'T00:00'); return `${d.getMonth() + 1}/${d.getDate()}`; };
   const monthLabel = (b) => new Date(b.start + 'T00:00').toLocaleString('en', { month: 'short' });
 
-  const kmFn    = sport === 'running' ? (b) => b.km :
-                  sport === 'cycling' ? (b) => b.cycling_km || 0 :
-                                        (b) => b.swim_km    || 0;
-  const barColor = sport === 'running' ? 'bg-gradient-to-t from-[#c0c1ff]/40 to-[#c0c1ff]' :
-                   sport === 'cycling' ? 'bg-gradient-to-t from-orange-400/40 to-orange-400' :
-                                         'bg-gradient-to-t from-blue-400/40 to-blue-400';
-  const titleColor = sport === 'running' ? 'text-[#c0c1ff]' :
-                     sport === 'cycling' ? 'text-orange-300' : 'text-blue-300';
+  const kmFn    = sport === 'running'  ? (b) => b.km :
+                  sport === 'cycling'  ? (b) => b.cycling_km || 0 :
+                  sport === 'swimming' ? (b) => b.swim_km    || 0 :
+                                         (b) => b.strength_days || 0;
+  const barColor = sport === 'running'  ? 'bg-gradient-to-t from-[#c0c1ff]/40 to-[#c0c1ff]' :
+                   sport === 'cycling'  ? 'bg-gradient-to-t from-orange-400/40 to-orange-400' :
+                   sport === 'swimming' ? 'bg-gradient-to-t from-blue-400/40 to-blue-400' :
+                                          'bg-gradient-to-t from-amber-400/40 to-amber-300';
+  const titleColor = sport === 'running'  ? 'text-[#c0c1ff]' :
+                     sport === 'cycling'  ? 'text-orange-300' :
+                     sport === 'swimming' ? 'text-blue-300' : 'text-amber-200';
 
   return (
     <div className="space-y-4">
       <div className={`flex gap-1 p-1 rounded-full ${GLASS}`}>
-        {[['running', 'Running'], ['cycling', 'Cycling'], ['swimming', 'Swimming']].map(([key, label]) => (
+        {[['running', 'Running'], ['cycling', 'Cycling'], ['swimming', 'Swimming'], ['strength', 'Strength']].map(([key, label]) => (
           <button key={key} onClick={() => setSport(key)}
             className={`${TAB} ${sport === key ? TAB_ACTIVE : TAB_INACTIVE}`}>
             {label}
           </button>
         ))}
       </div>
-      <BarChart title="Weekly" buckets={weekBuckets} labelFn={weekLabel} kmFn={kmFn} barColor={barColor} titleColor={titleColor} />
-      <BarChart title="Monthly" buckets={monthBuckets} labelFn={monthLabel} kmFn={kmFn} barColor={barColor} titleColor={titleColor} />
+      <BarChart title={sport === 'strength' ? 'Weekly (strength days)' : 'Weekly'} buckets={weekBuckets} labelFn={weekLabel} kmFn={kmFn} barColor={barColor} titleColor={titleColor} />
+      <BarChart title={sport === 'strength' ? 'Monthly (strength days)' : 'Monthly'} buckets={monthBuckets} labelFn={monthLabel} kmFn={kmFn} barColor={barColor} titleColor={titleColor} />
     </div>
   );
 }

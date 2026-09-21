@@ -7,6 +7,9 @@ class KmBucket(BaseModel):
     start: date
     label: str
     km: float
+    cycling_km: float = 0.0
+    swim_km: float = 0.0
+    strength_days: int = 0
 
 
 class KmSeriesResponse(BaseModel):

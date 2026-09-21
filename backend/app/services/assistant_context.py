@@ -62,7 +62,20 @@ def get_load(db: Session, athlete: User) -> str:
     while wk <= today:
         entries = buckets.get(wk, [])
         km = sum(l.distance_km or 0.0 for l in entries)
-        lines.append(f"Week {n} (of {wk.isoformat()}): {km:g}km, {len(entries)} runs")
+        cyc = sum(l.cycling_km or 0.0 for l in entries)
+        swim = sum(l.swim_km or 0.0 for l in entries)
+        strength = sum(1 for l in entries if l.did_strength)
+        line = f"Week {n} (of {wk.isoformat()}): {km:g}km, {len(entries)} runs"
+        extras = []
+        if cyc:
+            extras.append(f"cycling {cyc:g}km")
+        if swim:
+            extras.append(f"swim {swim:g}km")
+        if strength:
+            extras.append(f"{strength} strength")
+        if extras:
+            line += ", " + ", ".join(extras)
+        lines.append(line)
         wk += timedelta(days=7)
         n += 1
     return "\n".join(lines) if lines else "No training logged yet."
@@ -135,15 +148,28 @@ def _planned_map(db: Session, athlete: User, start: date, end: date) -> dict[dat
     return out
 
 
-def _log_line(log: WorkoutLog, planned: list[str]) -> str:
-    d = log.date
-    plan_str = "; ".join(planned) if planned else "none"
+def _report_str(log: WorkoutLog) -> str:
+    """The athlete's report: status + running/cycling/swim distances + strength
+    flag + notes. Shared by get_log and the last-7-days base context so every
+    cross-training field the athlete can report is visible to the model."""
     done = log.status
     if log.distance_km:
         done += f" {log.distance_km:g}km"
+    if log.cycling_km:
+        done += f", cycling {log.cycling_km:g}km"
+    if log.swim_km:
+        done += f", swim {log.swim_km:g}km"
+    if log.did_strength:
+        done += ", strength"
     if log.notes and log.notes.strip():
         done += f' — "{log.notes.strip()}"'
-    return f"{d.strftime('%Y-%m-%d %a')} | Planned: {plan_str} | Logged: {done}"
+    return done
+
+
+def _log_line(log: WorkoutLog, planned: list[str]) -> str:
+    d = log.date
+    plan_str = "; ".join(planned) if planned else "none"
+    return f"{d.strftime('%Y-%m-%d %a')} | Planned: {plan_str} | Logged: {_report_str(log)}"
 
 
 def get_log(db: Session, athlete: User, start_date: date, end_date: date, max_days: int = LOG_MAX_DAYS) -> str:
@@ -214,14 +240,7 @@ def _last_7_days(db: Session, athlete: User) -> str:
         if not planned and not log:
             continue  # empty/rest day
         plan_str = "; ".join(planned) if planned else "none"
-        if log:
-            done = log.status
-            if log.distance_km:
-                done += f" {log.distance_km:g}km"
-            if log.notes and log.notes.strip():
-                done += f' — "{log.notes.strip()}"'
-        else:
-            done = "not logged"
+        done = _report_str(log) if log else "not logged"
         lines.append(f"{d.strftime('%Y-%m-%d %a')} | Planned: {plan_str} | {done}")
     return "\n".join(lines) if lines else "Nothing planned or logged in the last 7 days."
 

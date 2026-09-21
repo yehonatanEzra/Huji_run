@@ -107,6 +107,11 @@ class WorkoutLog(Base):
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="missed")
     distance_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    cycling_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    swim_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Per-day strength flag: the athlete did a strength session that day. Counted
+    # (not summed) into weekly/monthly "strength days" stats.
+    did_strength: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     manual_override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # True when the row was inserted by the auto-miss backfill (prescribed day

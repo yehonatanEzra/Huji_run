@@ -209,6 +209,9 @@ def submit_log(
         log.status = body.status
         log.completed = body.status == "completed"
         log.distance_km = body.distance_km
+        log.cycling_km = body.cycling_km
+        log.swim_km = body.swim_km
+        log.did_strength = body.did_strength
         log.notes = body.notes
         log.manual_override = body.manual_override
         # Athlete edited an auto-marked row — it's their call now, not the
@@ -221,6 +224,9 @@ def submit_log(
             status=body.status,
             completed=body.status == "completed",
             distance_km=body.distance_km,
+            cycling_km=body.cycling_km,
+            swim_km=body.swim_km,
+            did_strength=body.did_strength,
             notes=body.notes,
             manual_override=body.manual_override,
         )
@@ -248,7 +254,7 @@ def delete_log(
 
 # ── Coach endpoints ───────────────────────────────────────────────────────────
 
-ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling"}
+ALLOWED_TYPES = {"simple", "easy", "tempo", "long", "intervals", "fartlek", "race", "rest", "strength", "cycling", "swimming"}
 
 
 def _clean(s):

@@ -89,6 +89,11 @@ export default function CalendarPage() {
     };
   }, [monthExpanded]);
   const [logForm, setLogForm] = useState({ status: 'missed', notes: '' });
+  const [showCycling, setShowCycling] = useState(true);
+  const [showRunning, setShowRunning] = useState(true);
+  const [showSwim, setShowSwim] = useState(true);
+  const [showStrength, setShowStrength] = useState(true);
+  const [monthMetric, setMonthMetric] = useState('running');
   const [saving, setSaving] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const [autoOpenedToday, setAutoOpenedToday] = useState(false);
@@ -165,6 +170,9 @@ export default function CalendarPage() {
     setLogForm({
       status: day.workout_log?.status || 'missed',
       distance_km: day.workout_log?.distance_km || '',
+      cycling_km: day.workout_log?.cycling_km || '',
+      swim_km: day.workout_log?.swim_km || '',
+      did_strength: day.workout_log?.did_strength || false,
       notes: day.workout_log?.notes || '',
       manual_override: day.workout_log?.manual_override || false,
     });
@@ -184,9 +192,16 @@ export default function CalendarPage() {
         status: logForm.status,
         notes: logForm.notes,
         manual_override: !!logForm.manual_override,
+        did_strength: !!logForm.did_strength,
       };
       if (logForm.distance_km !== '' && logForm.distance_km != null) {
         payload.distance_km = parseFloat(logForm.distance_km);
+      }
+      if (logForm.cycling_km !== '' && logForm.cycling_km != null) {
+        payload.cycling_km = parseFloat(logForm.cycling_km);
+      }
+      if (logForm.swim_km !== '' && logForm.swim_km != null) {
+        payload.swim_km = parseFloat(logForm.swim_km);
       }
       await submitLog(payload);
       closeDay();
@@ -233,7 +248,8 @@ export default function CalendarPage() {
     fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
     race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
     strength:  { label: 'Strength',  color: 'bg-amber-400/20 text-amber-200' },
-    cycling:   { label: 'Cycling',   color: 'bg-cyan-400/20 text-cyan-200' },
+    cycling:   { label: 'Cycling',   color: 'bg-orange-400/20 text-orange-200' },
+    swimming:  { label: 'Swimming',  color: 'bg-blue-400/20 text-blue-200' },
   };
   // Short labels for the compact month-grid cells.
   const TYPE_ABBR_GLASS = {
@@ -246,7 +262,8 @@ export default function CalendarPage() {
     fartlek:   { abbr: 'Fart', color: 'bg-pink-400/20 text-pink-200' },
     race:      { abbr: 'Race', color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
     strength:  { abbr: 'Str',  color: 'bg-amber-400/20 text-amber-200' },
-    cycling:   { abbr: 'Cyc',  color: 'bg-cyan-400/20 text-cyan-200' },
+    cycling:   { abbr: 'Cyc',  color: 'bg-orange-400/20 text-orange-200' },
+    swimming:  { abbr: 'Swim', color: 'bg-blue-400/20 text-blue-200' },
   };
 
   const renderDayCard = (day) => {
@@ -325,7 +342,7 @@ export default function CalendarPage() {
             )}
             {log && (
               <div className="flex items-center gap-1.5">
-                {km > 0 && <span className="text-sm font-semibold text-[#c0c1ff]">{km.toFixed(1)} km</span>}
+                {showRunning && km > 0 && <span className="text-sm font-semibold text-[#c0c1ff]">{km.toFixed(1)} km</span>}
                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
                   log.status === 'completed' ? 'bg-green-400/20 text-green-200' :
                   log.status === 'partial'   ? 'bg-yellow-400/20 text-yellow-100' :
@@ -333,6 +350,13 @@ export default function CalendarPage() {
                 }`}>
                   {log.status === 'completed' ? 'Done' : log.status === 'partial' ? 'Partial' : 'Missed'}
                 </span>
+              </div>
+            )}
+            {((showStrength && log?.did_strength) || (showSwim && log?.swim_km > 0) || (showCycling && log?.cycling_km > 0)) && (
+              <div className="flex items-center gap-2">
+                {showStrength && log?.did_strength && <span className="text-[11px]" title="Strength workout">💪</span>}
+                {showSwim && log?.swim_km > 0 && <span className="text-[10px] font-bold text-blue-300">{log.swim_km.toFixed(1)} km</span>}
+                {showCycling && log?.cycling_km > 0 && <span className="text-[10px] font-bold text-orange-300">{log.cycling_km.toFixed(1)} km</span>}
               </div>
             )}
             {log?.manual_override && (
@@ -352,9 +376,11 @@ export default function CalendarPage() {
       weeks.push(days.slice(i, i + 7));
     }
     const glass = { background: 'rgba(32,31,32,0.6)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' };
-    const monthKm = days.reduce((s, d) =>
-      new Date(d.date + 'T00:00').getMonth() === currentDate.getMonth()
-        ? s + (d.workout_log?.distance_km || 0) : s, 0);
+    const inMonth = (d) => new Date(d.date + 'T00:00').getMonth() === currentDate.getMonth();
+    const monthKm    = days.reduce((s, d) => inMonth(d) ? s + (d.workout_log?.distance_km  || 0) : s, 0);
+    const monthCycKm = days.reduce((s, d) => inMonth(d) ? s + (d.workout_log?.cycling_km   || 0) : s, 0);
+    const monthSwimKm = days.reduce((s, d) => inMonth(d) ? s + (d.workout_log?.swim_km     || 0) : s, 0);
+    const monthStrength = days.reduce((s, d) => inMonth(d) ? s + (d.workout_log?.did_strength ? 1 : 0) : s, 0);
     return (
       <div>
         {/* Monthly volume card — compact, matches the weekly view */}
@@ -363,9 +389,18 @@ export default function CalendarPage() {
             Monthly volume
           </span>
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-bold text-[#c0c1ff]">
-              {monthKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
-            </span>
+            <div className="flex flex-col items-end leading-none">
+              <span className="text-2xl font-bold text-[#c0c1ff]">
+                {monthKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
+              </span>
+              {(monthCycKm > 0 || monthSwimKm > 0 || monthStrength > 0) && (
+                <div className="flex items-center gap-2 mt-1">
+                  {monthStrength > 0 && <span className="text-[9px] font-bold text-amber-200">💪 {monthStrength}</span>}
+                  {monthSwimKm > 0 && <span className="text-[9px] font-bold text-blue-300">{monthSwimKm.toFixed(1)} km</span>}
+                  {monthCycKm > 0 && <span className="text-[9px] font-bold text-orange-300">{monthCycKm.toFixed(1)} km</span>}
+                </div>
+              )}
+            </div>
             <Link
               to="/calendar/volume"
               aria-label="Open volume breakdown"
@@ -387,9 +422,27 @@ export default function CalendarPage() {
            Expand monthly view
         </button>
 
+        {/* Metric cycle button — tap to switch what km value is shown in each cell */}
+        <div className="flex flex-col items-start mb-2 gap-1">
+          <span className="text-[10px] text-white/40 uppercase tracking-widest font-medium">Tap to switch sport</span>
+          <button
+            onClick={() => setMonthMetric(m => m === 'running' ? 'cycling' : m === 'cycling' ? 'swimming' : 'running')}
+            className={`text-[10px] font-bold px-3 py-1 rounded-full border transition active:scale-95 ${
+              monthMetric === 'running'  ? 'bg-[#c0c1ff]/20 border-[#c0c1ff]/40 text-[#c0c1ff]' :
+              monthMetric === 'cycling'  ? 'bg-orange-400/20 border-orange-400/40 text-orange-300' :
+                                           'bg-blue-400/20 border-blue-400/40 text-blue-300'
+            }`}
+          >
+            {monthMetric === 'running' ? 'Running' : monthMetric === 'cycling' ? 'Cycling' : 'Swimming'}
+          </button>
+        </div>
+
         <div className="space-y-6">
         {weeks.map((week, wi) => {
           const weekKm = week.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
+          const weekCycKm = week.reduce((s, d) => s + (d.workout_log?.cycling_km || 0), 0);
+          const weekSwimKm = week.reduce((s, d) => s + (d.workout_log?.swim_km || 0), 0);
+          const weekStrength = week.reduce((s, d) => s + (d.workout_log?.did_strength ? 1 : 0), 0);
           const expectedKm = week.reduce((s, d) => s + plannedKmForDay(d), 0);
           return (
           <div key={wi}>
@@ -399,6 +452,9 @@ export default function CalendarPage() {
               </p>
               <div className="text-right">
                 <span className="text-xs font-bold text-white">{weekKm.toFixed(1)} km</span>
+                {weekCycKm > 0 && <p className="text-[9px] text-orange-300 font-bold mt-0.5">{weekCycKm.toFixed(1)} km cyc</p>}
+                {weekSwimKm > 0 && <p className="text-[9px] text-blue-300 font-bold mt-0.5">{weekSwimKm.toFixed(1)} km swim</p>}
+                {weekStrength > 0 && <p className="text-[9px] text-amber-200 font-bold mt-0.5">💪 {weekStrength} strength</p>}
                 {expectedKm > 0 && <p className="text-[9px] text-white/75 font-normal mt-0.5">exp {fmtKm(expectedKm)} km</p>}
               </div>
             </div>
@@ -443,10 +499,23 @@ export default function CalendarPage() {
                         </span>
                       )}
                     </span>
-                    {/* Km run this day — "-" when zero */}
-                    <span className={`text-[10px] font-bold leading-none mt-0.5 ${hasLog?.distance_km ? 'text-[#c0c1ff]' : 'text-white/35'}`}>
-                      {hasLog?.distance_km ? `${Number(hasLog.distance_km).toFixed(1)}k` : '-'}
+                    {/* Strength marker sits above the km value */}
+                    <span className="h-3 flex items-center leading-none text-[10px]">
+                      {hasLog?.did_strength ? '💪' : ''}
                     </span>
+                    {/* Km for the active metric (toggle button above cycles running/cycling/swimming) */}
+                    {(() => {
+                      const v = monthMetric === 'running' ? hasLog?.distance_km :
+                                monthMetric === 'cycling' ? hasLog?.cycling_km :
+                                hasLog?.swim_km;
+                      const col = monthMetric === 'running' ? 'text-[#c0c1ff]' :
+                                  monthMetric === 'cycling' ? 'text-orange-300' : 'text-blue-300';
+                      return (
+                        <span className={`text-[10px] font-bold leading-none ${v > 0 ? col : 'text-white/35'}`}>
+                          {v > 0 ? `${Number(v).toFixed(1)}k` : '-'}
+                        </span>
+                      );
+                    })()}
                     <span className={`text-xl font-semibold leading-none mt-0.5 ${isToday ? 'text-[#c0c1ff]' : 'text-white'}`}>
                       {format(dayDate, 'd')}
                     </span>
@@ -521,6 +590,9 @@ export default function CalendarPage() {
 
       {!loading && view === 'weekly' && (() => {
         const weekKm = days.reduce((s, d) => s + (d.workout_log?.distance_km || 0), 0);
+        const weekCycKm = days.reduce((s, d) => s + (d.workout_log?.cycling_km || 0), 0);
+        const weekSwimKm = days.reduce((s, d) => s + (d.workout_log?.swim_km || 0), 0);
+        const weekStrength = days.reduce((s, d) => s + (d.workout_log?.did_strength ? 1 : 0), 0);
         const expectedKm = days.reduce((s, d) => s + plannedKmForDay(d), 0);
         return (
           <div
@@ -535,6 +607,13 @@ export default function CalendarPage() {
                 <span className="text-2xl font-bold text-[#c0c1ff]">
                   {weekKm.toFixed(1)} <span className="text-sm font-medium text-white/50">km</span>
                 </span>
+                {((showCycling && weekCycKm > 0) || (showSwim && weekSwimKm > 0) || (showStrength && weekStrength > 0)) && (
+                  <div className="flex items-center gap-2 mt-1">
+                    {showStrength && weekStrength > 0 && <span className="text-[9px] font-bold text-amber-200">💪 {weekStrength}</span>}
+                    {showSwim && weekSwimKm > 0 && <span className="text-[9px] font-bold text-blue-300">{weekSwimKm.toFixed(1)} km</span>}
+                    {showCycling && weekCycKm > 0 && <span className="text-[9px] font-bold text-orange-300">{weekCycKm.toFixed(1)} km</span>}
+                  </div>
+                )}
                 {expectedKm > 0 && (
                   <span className="text-[11px] font-normal text-white/80 mt-1">expected {fmtKm(expectedKm)} km</span>
                 )}
@@ -553,6 +632,35 @@ export default function CalendarPage() {
         );
       })()}
 
+      {!loading && view === 'weekly' && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-4">
+          <button
+            onClick={() => setShowRunning((v) => !v)}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showRunning ? 'bg-[#c0c1ff]/20 border-[#c0c1ff]/40 text-[#c0c1ff]' : 'bg-white/5 border-white/15 text-white/40'}`}
+          >
+            {showRunning ? 'Hide running' : 'Show running'}
+          </button>
+          <button
+            onClick={() => setShowCycling((v) => !v)}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showCycling ? 'bg-orange-400/20 border-orange-400/40 text-orange-300' : 'bg-white/5 border-white/15 text-white/40'}`}
+          >
+            {showCycling ? 'Hide cycling' : 'Show cycling'}
+          </button>
+          <button
+            onClick={() => setShowSwim((v) => !v)}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showSwim ? 'bg-blue-400/20 border-blue-400/40 text-blue-300' : 'bg-white/5 border-white/15 text-white/40'}`}
+          >
+            {showSwim ? 'Hide swim' : 'Show swim'}
+          </button>
+          <button
+            onClick={() => setShowStrength((v) => !v)}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showStrength ? 'bg-amber-400/20 border-amber-400/40 text-amber-200' : 'bg-white/5 border-white/15 text-white/40'}`}
+          >
+            {showStrength ? 'Hide strength' : 'Show strength'}
+          </button>
+        </div>
+      )}
+
       {loading ? <Spinner /> : view === 'weekly' ? (
         <div className="space-y-3">
           {days.map(renderDayCard)}
@@ -563,7 +671,7 @@ export default function CalendarPage() {
         {selectedDay && (
           <div className="space-y-4">
             {(() => {
-              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling' };
+              const TYPE_LABELS = { simple: 'Other', easy: 'Easy run', rest: 'Rest day', tempo: 'Tempo', long: 'Long run', intervals: 'Intervals', fartlek: 'Fartlek', race: 'Race', strength: 'Strength', cycling: 'Cycling', swimming: 'Swimming' };
               const TYPE_COLOR = {
                 simple: 'bg-white/10 text-white/70',
                 easy: 'bg-emerald-400/20 text-emerald-200',
@@ -574,7 +682,8 @@ export default function CalendarPage() {
                 fartlek: 'bg-pink-400/20 text-pink-200',
                 race: 'bg-[#8083ff]/30 text-[#c0c1ff]',
                 strength: 'bg-amber-400/20 text-amber-200',
-                cycling: 'bg-cyan-400/20 text-cyan-200',
+                cycling: 'bg-orange-400/20 text-orange-200',
+                swimming: 'bg-blue-400/20 text-blue-200',
               };
               const cards = dayWorkouts(selectedDay).filter(
                 (w) => w.title || w.content || w.warmup || w.main_session || w.cooldown || (w.distance_km > 0)
@@ -662,34 +771,74 @@ export default function CalendarPage() {
                 })}
               </div>
               {logForm.status !== 'missed' && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-white/60 whitespace-nowrap">Distance (km)</label>
-                  <div className="relative flex-1 min-w-0">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-white/60 whitespace-nowrap w-28">Running (km)</label>
+                    <div className="relative flex-1 min-w-0">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="e.g. 8.5"
+                        value={logForm.distance_km}
+                        onChange={(e) => setLogForm({ ...logForm, distance_km: e.target.value })}
+                        className={`w-full bg-white/10 border border-white/20 rounded-lg pl-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400 ${user?.strava_connected ? 'pr-20' : 'pr-3'}`}
+                      />
+                      {user?.strava_connected && (
+                        <button
+                          type="button"
+                          onClick={() => setLogForm({ ...logForm, manual_override: !logForm.manual_override })}
+                          title={logForm.manual_override
+                            ? 'Manual: Strava sync will not overwrite this day'
+                            : 'Tap to lock — Strava sync will skip this day'}
+                          className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition ${
+                            logForm.manual_override
+                              ? 'bg-emerald-500 text-white shadow'
+                              : 'bg-white/10 text-white/55 hover:bg-white/20 hover:text-white'
+                          }`}
+                        >
+                          Manual
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-orange-300/80 whitespace-nowrap w-28">Cycling (km)</label>
                     <input
                       type="number"
                       step="0.1"
                       min="0"
-                      placeholder="e.g. 8.5"
-                      value={logForm.distance_km}
-                      onChange={(e) => setLogForm({ ...logForm, distance_km: e.target.value })}
-                      className={`w-full bg-white/10 border border-white/20 rounded-lg pl-3 py-2 text-sm text-white placeholder-white/35 focus:outline-none focus:ring-2 focus:ring-blue-400 ${user?.strava_connected ? 'pr-20' : 'pr-3'}`}
+                      placeholder="e.g. 20"
+                      value={logForm.cycling_km}
+                      onChange={(e) => setLogForm({ ...logForm, cycling_km: e.target.value })}
+                      className="flex-1 min-w-0 bg-orange-500/10 border border-orange-400/25 rounded-lg px-3 py-2 text-sm text-orange-100 placeholder-orange-300/30 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
                     />
-                    {user?.strava_connected && (
-                      <button
-                        type="button"
-                        onClick={() => setLogForm({ ...logForm, manual_override: !logForm.manual_override })}
-                        title={logForm.manual_override
-                          ? 'Manual: Strava sync will not overwrite this day'
-                          : 'Tap to lock — Strava sync will skip this day'}
-                        className={`absolute right-1 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition ${
-                          logForm.manual_override
-                            ? 'bg-emerald-500 text-white shadow'
-                            : 'bg-white/10 text-white/55 hover:bg-white/20 hover:text-white'
-                        }`}
-                      >
-                        Manual
-                      </button>
-                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-blue-300/80 whitespace-nowrap w-28">Swimming (km)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="e.g. 1.5"
+                      value={logForm.swim_km}
+                      onChange={(e) => setLogForm({ ...logForm, swim_km: e.target.value })}
+                      className="flex-1 min-w-0 bg-blue-500/10 border border-blue-400/25 rounded-lg px-3 py-2 text-sm text-blue-100 placeholder-blue-300/30 focus:outline-none focus:ring-2 focus:ring-blue-400/50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-amber-300/80 whitespace-nowrap w-28">Strength</label>
+                    <button
+                      type="button"
+                      onClick={() => setLogForm({ ...logForm, did_strength: !logForm.did_strength })}
+                      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium border transition ${
+                        logForm.did_strength
+                          ? 'bg-amber-500/15 border-amber-400/40 text-amber-200'
+                          : 'bg-white/5 border-white/15 text-white/50'
+                      }`}
+                    >
+                      {logForm.did_strength ? <><span className="text-base">💪</span><span>Done</span></> : <span>No strength</span>}
+                    </button>
                   </div>
                 </div>
               )}
@@ -816,15 +965,18 @@ export default function CalendarPage() {
             className="overflow-x-auto -mx-2"
             style={{ touchAction: 'pan-x pan-y' }}
           >
-            <div className="px-2" style={{ minWidth: '960px', zoom: expandedZoom }}>
+            <div className="px-2" style={{ minWidth: '1080px', zoom: expandedZoom }}>
               {/* Month totals (top) */}
               {(() => {
-                let mKm = 0, mDone = 0, mPart = 0, mMiss = 0;
+                let mKm = 0, mCycKm = 0, mSwimKm = 0, mStrength = 0, mDone = 0, mPart = 0, mMiss = 0;
                 for (const d of days) {
                   if (!isSameMonth(new Date(d.date + 'T00:00'), currentDate)) continue;
                   const log = d.workout_log;
                   if (!log) continue;
                   if (log.distance_km) mKm += log.distance_km;
+                  if (log.cycling_km) mCycKm += log.cycling_km;
+                  if (log.swim_km) mSwimKm += log.swim_km;
+                  if (log.did_strength) mStrength++;
                   const st = log.status || (log.completed ? 'completed' : 'missed');
                   if (st === 'completed') mDone++;
                   else if (st === 'partial') mPart++;
@@ -832,14 +984,51 @@ export default function CalendarPage() {
                 }
                 return (
                   <div className="flex items-center justify-between mb-3 pb-3 border-b border-white/15">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-sm font-semibold text-white/85">{format(currentDate, 'MMMM')} totals</span>
-                      <span className="font-bold text-[#c0c1ff]">{mKm.toFixed(1)} km</span>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm font-semibold text-white/85">{format(currentDate, 'MMMM')} totals</span>
+                        {showRunning && <span className="font-bold text-[#c0c1ff]">{mKm.toFixed(1)} km</span>}
+                      </div>
+                      {showCycling && mCycKm > 0 && (
+                        <span className="font-bold text-orange-300 text-sm">{mCycKm.toFixed(1)} km cycling</span>
+                      )}
+                      {showSwim && mSwimKm > 0 && (
+                        <span className="font-bold text-blue-300 text-sm">{mSwimKm.toFixed(1)} km swim</span>
+                      )}
+                      {showStrength && mStrength > 0 && (
+                        <span className="font-bold text-amber-200 text-sm">💪 {mStrength} strength</span>
+                      )}
                     </div>
-                    <div className="flex gap-2 text-xs font-mono">
-                      <span className="text-green-300">V{mDone}</span>
-                      <span className="text-yellow-300">~{mPart}</span>
-                      <span className="text-red-300">X{mMiss}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-2 text-xs font-mono">
+                        <span className="text-green-300">V{mDone}</span>
+                        <span className="text-yellow-300">~{mPart}</span>
+                        <span className="text-red-300">X{mMiss}</span>
+                      </div>
+                      <button
+                        onClick={() => setShowRunning((v) => !v)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showRunning ? 'bg-[#c0c1ff]/20 border-[#c0c1ff]/40 text-[#c0c1ff]' : 'bg-white/5 border-white/15 text-white/40'}`}
+                      >
+                        {showRunning ? 'Hide running' : 'Show running'}
+                      </button>
+                      <button
+                        onClick={() => setShowCycling((v) => !v)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showCycling ? 'bg-orange-400/20 border-orange-400/40 text-orange-300' : 'bg-white/5 border-white/15 text-white/40'}`}
+                      >
+                        {showCycling ? 'Hide cycling' : 'Show cycling'}
+                      </button>
+                      <button
+                        onClick={() => setShowSwim((v) => !v)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showSwim ? 'bg-blue-400/20 border-blue-400/40 text-blue-300' : 'bg-white/5 border-white/15 text-white/40'}`}
+                      >
+                        {showSwim ? 'Hide swim' : 'Show swim'}
+                      </button>
+                      <button
+                        onClick={() => setShowStrength((v) => !v)}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition ${showStrength ? 'bg-amber-400/20 border-amber-400/40 text-amber-200' : 'bg-white/5 border-white/15 text-white/40'}`}
+                      >
+                        {showStrength ? 'Hide strength' : 'Show strength'}
+                      </button>
                     </div>
                   </div>
                 );
@@ -854,7 +1043,7 @@ export default function CalendarPage() {
                   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
                   return weeks;
                 })().map((week, wi) => {
-                  let wkKm = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
+                  let wkKm = 0, wkCycKm = 0, wkSwimKm = 0, wkStrength = 0, wkExp = 0, wkDone = 0, wkPart = 0, wkMiss = 0;
                   // Week totals are full Sunday–Saturday — do NOT clamp to the
                   // current month, or a month-boundary week gets split in two.
                   for (const d of week) {
@@ -862,6 +1051,9 @@ export default function CalendarPage() {
                     const log = d.workout_log;
                     if (!log) continue;
                     if (log.distance_km) wkKm += log.distance_km;
+                    if (log.cycling_km) wkCycKm += log.cycling_km;
+                    if (log.swim_km) wkSwimKm += log.swim_km;
+                    if (log.did_strength) wkStrength++;
                     const st = log.status || (log.completed ? 'completed' : 'missed');
                     if (st === 'completed') wkDone++;
                     else if (st === 'partial') wkPart++;
@@ -899,7 +1091,8 @@ export default function CalendarPage() {
                         fartlek:   { label: 'Fartlek',   color: 'bg-pink-400/20 text-pink-200' },
                         race:      { label: 'Race',      color: 'bg-[#8083ff]/30 text-[#c0c1ff]' },
                         strength:  { label: 'Strength',  color: 'bg-amber-400/20 text-amber-200' },
-                        cycling:   { label: 'Cycling',   color: 'bg-cyan-400/20 text-cyan-200' },
+                        cycling:   { label: 'Cycling',   color: 'bg-orange-400/20 text-orange-200' },
+                        swimming:  { label: 'Swimming',  color: 'bg-blue-400/20 text-blue-200' },
                       };
                       const typeChip = active?.workout_type ? TYPE_FULL[active.workout_type] : null;
                       const cellIsRace = active?.workout_type === 'race';
@@ -951,9 +1144,9 @@ export default function CalendarPage() {
                               return (
                                 <div className={`flex items-end mt-auto ${showPer ? 'justify-between' : 'justify-end'}`}>
                                   {showPer && (
-                                    <span className="text-[10px] text-white/50 font-semibold leading-none">{fmtKm(active.distance_km)} km</span>
+                                    <span className="text-[10px] text-white/50 font-semibold leading-none">{fmtKm(active.distance_km)}k</span>
                                   )}
-                                  <span className="text-[11px] font-bold leading-none text-white">{fmtKm(totalKm)} km</span>
+                                  <span className="text-[11px] font-bold leading-none text-white">{fmtKm(totalKm)}k</span>
                                 </div>
                               );
                             })()}
@@ -968,12 +1161,25 @@ export default function CalendarPage() {
                               <>
                                 {d.workout_log.notes ? (
                                   <p className="text-[10px] text-white/80 leading-tight line-clamp-2 whitespace-pre-wrap flex-1">{d.workout_log.notes}</p>
-                                ) : !d.workout_log.distance_km ? (
+                                ) : !d.workout_log.distance_km && !d.workout_log.cycling_km && !d.workout_log.swim_km && !d.workout_log.did_strength ? (
                                   <p className="text-[10px] text-white/40 italic flex-1">No report</p>
                                 ) : <div className="flex-1" />}
-                                {d.workout_log.distance_km > 0 && (
-                                  <p className="text-xs text-[#c0c1ff] font-bold leading-none mt-1 self-end">{d.workout_log.distance_km.toFixed(1)} km</p>
-                                )}
+                                <div className="flex items-end justify-between mt-1">
+                                  <div className="flex flex-col gap-px">
+                                    {showCycling && d.workout_log.cycling_km > 0 && (
+                                      <p className="text-[9px] text-orange-300 font-bold leading-none">{d.workout_log.cycling_km.toFixed(1)}k cyc</p>
+                                    )}
+                                    {showSwim && d.workout_log.swim_km > 0 && (
+                                      <p className="text-[9px] text-blue-300 font-bold leading-none">{d.workout_log.swim_km.toFixed(1)}k swim</p>
+                                    )}
+                                  </div>
+                                  {showStrength && d.workout_log.did_strength && (
+                                    <span className="text-[11px] leading-none self-end" title="Strength workout">💪</span>
+                                  )}
+                                  {showRunning && d.workout_log.distance_km > 0 && (
+                                    <p className="text-xs text-[#c0c1ff] font-bold leading-none">{d.workout_log.distance_km.toFixed(1)}k</p>
+                                  )}
+                                </div>
                               </>
                             ) : (
                               <p className="text-[10px] text-white/40 italic">No report</p>
@@ -986,7 +1192,16 @@ export default function CalendarPage() {
                     })}
                     {/* Week stats column */}
                     <div className="flex flex-col items-end justify-center text-right px-1 text-xs">
-                      <div className="font-bold text-[#c0c1ff]">{wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>
+                      {showRunning && <div className="font-bold text-[#c0c1ff]">run: {wkKm > 0 ? `${wkKm.toFixed(1)}k` : '—'}</div>}
+                      {showCycling && wkCycKm > 0 && (
+                        <div className="text-[11px] font-bold text-orange-300 mt-0.5">cyc: {wkCycKm.toFixed(1)}k</div>
+                      )}
+                      {showSwim && wkSwimKm > 0 && (
+                        <div className="text-[11px] font-bold text-blue-300 mt-0.5">swim: {wkSwimKm.toFixed(1)}k</div>
+                      )}
+                      {showStrength && wkStrength > 0 && (
+                        <div className="text-[11px] font-bold text-amber-200 mt-0.5">strength: {wkStrength}</div>
+                      )}
                       <div className="flex gap-1.5 mt-1 text-[11px] font-mono">
                         <span className="text-green-300">V{wkDone}</span>
                         <span className="text-yellow-300">~{wkPart}</span>

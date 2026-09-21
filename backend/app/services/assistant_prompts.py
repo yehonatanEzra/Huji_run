@@ -102,14 +102,16 @@ most impactful information.
 Return ONLY the updated notebook text, nothing else."""
 
 TOOL_GET_LOAD_DESC = (
-    "Get the athlete's weekly training volume (total km and number of runs per "
-    "week) for roughly the last 6 months. Use for load, volume, and overtraining "
-    "questions. Takes no arguments."
+    "Get the athlete's weekly training volume (running km and number of runs per "
+    "week, plus any cross-training that week: cycling km, swim km, and number of "
+    "strength sessions) for roughly the last 6 months. Use for load, volume, and "
+    "overtraining questions. Takes no arguments."
 )
 
 TOOL_GET_LOG_DESC = (
     "Get the athlete's day-by-day training log for a date range: the planned "
-    "workout, what they actually did, distance, and their notes. Only days the "
+    "workout, what they actually did, running distance, any cross-training "
+    "(cycling km, swim km, strength session), and their notes. Only days the "
     "athlete logged something are returned. Maximum range is 120 days."
 )
 

@@ -151,7 +151,7 @@ def get_weekly_volume(
 
     first = (
         db.query(func.min(WorkoutLog.date))
-        .filter(WorkoutLog.athlete_id == athlete.id, WorkoutLog.distance_km.isnot(None))
+        .filter(WorkoutLog.athlete_id == athlete.id)
         .scalar()
     )
     if not first:
@@ -167,24 +167,33 @@ def get_weekly_volume(
         weeks.append(s)
         s -= timedelta(days=7)
 
-    bucket_for = {w: 0.0 for w in weeks}
+    run_for = {w: 0.0 for w in weeks}
+    cyc_for = {w: 0.0 for w in weeks}
+    swim_for = {w: 0.0 for w in weeks}
+    strength_for = {w: 0 for w in weeks}
     rows = (
-        db.query(WorkoutLog.date, WorkoutLog.distance_km)
+        db.query(WorkoutLog.date, WorkoutLog.distance_km, WorkoutLog.cycling_km,
+                 WorkoutLog.swim_km, WorkoutLog.did_strength)
         .filter(
             WorkoutLog.athlete_id == athlete.id,
-            WorkoutLog.distance_km.isnot(None),
             WorkoutLog.date >= first_ws,
             WorkoutLog.date < cur_ws + timedelta(days=7),
         )
         .all()
     )
-    for d, km in rows:
+    for d, km, cyc, swim, strength in rows:
         ws = _week_start(d)
-        if ws in bucket_for:
-            bucket_for[ws] += float(km or 0)
+        if ws in run_for:
+            run_for[ws] += float(km or 0)
+            cyc_for[ws] += float(cyc or 0)
+            swim_for[ws] += float(swim or 0)
+            if strength:
+                strength_for[ws] += 1
 
     buckets = [
-        KmBucket(start=w, label=w.strftime("%b %d, %Y"), km=round(bucket_for[w], 1))
+        KmBucket(start=w, label=w.strftime("%b %d, %Y"), km=round(run_for[w], 1),
+                 cycling_km=round(cyc_for[w], 1), swim_km=round(swim_for[w], 1),
+                 strength_days=strength_for[w])
         for w in weeks
     ]
     return WeeklyVolumeResponse(buckets=buckets)
@@ -218,24 +227,33 @@ def get_monthly_volume(
     year = min(year, latest_year)
 
     starts = [date(year, m, 1) for m in range(1, 13)]
-    bucket_for = {s: 0.0 for s in starts}
+    run_for = {s: 0.0 for s in starts}
+    cyc_for = {s: 0.0 for s in starts}
+    swim_for = {s: 0.0 for s in starts}
+    strength_for = {s: 0 for s in starts}
     rows = (
-        db.query(WorkoutLog.date, WorkoutLog.distance_km)
+        db.query(WorkoutLog.date, WorkoutLog.distance_km, WorkoutLog.cycling_km,
+                 WorkoutLog.swim_km, WorkoutLog.did_strength)
         .filter(
             WorkoutLog.athlete_id == athlete.id,
-            WorkoutLog.distance_km.isnot(None),
             WorkoutLog.date >= date(year, 1, 1),
             WorkoutLog.date < date(year + 1, 1, 1),
         )
         .all()
     )
-    for d, km in rows:
+    for d, km, cyc, swim, strength in rows:
         ms = date(d.year, d.month, 1)
-        if ms in bucket_for:
-            bucket_for[ms] += float(km or 0)
+        if ms in run_for:
+            run_for[ms] += float(km or 0)
+            cyc_for[ms] += float(cyc or 0)
+            swim_for[ms] += float(swim or 0)
+            if strength:
+                strength_for[ms] += 1
 
     buckets = [
-        KmBucket(start=s, label=s.strftime("%b"), km=round(bucket_for[s], 1))
+        KmBucket(start=s, label=s.strftime("%b"), km=round(run_for[s], 1),
+                 cycling_km=round(cyc_for[s], 1), swim_km=round(swim_for[s], 1),
+                 strength_days=strength_for[s])
         for s in starts
     ]
     return MonthlyVolumeResponse(

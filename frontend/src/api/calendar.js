@@ -23,6 +23,14 @@ export const updateGroupWorkoutById = (workoutId, body = {}) =>
 export const deleteGroupWorkoutById = (workoutId) =>
   client.delete(`/calendar/group-workouts/${workoutId}`);
 
+// Move (or swap) a whole day's group workouts to another date.
+export const moveGroupDay = (groupId, fromDate, toDate) =>
+  client.post(`/calendar/group/${groupId}/move-day`, { from_date: fromDate, to_date: toDate });
+
+// Move (or swap) a whole day's personal targets for one athlete to another date.
+export const moveTargetDay = (athleteId, fromDate, toDate) =>
+  client.post(`/calendar/targets/${athleteId}/move-day`, { from_date: fromDate, to_date: toDate });
+
 export const upsertTarget = (athleteId, date, body) => {
   // Backward-compat: callers can pass (note, override) as positional args
   if (typeof body === 'string') {

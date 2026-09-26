@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth } from 'date-fns';
 import { getAthleteWeek } from '../../api/coach';
-import { createTarget, updateTargetById, deleteTargetById, setGroupVisibility } from '../../api/calendar';
+import { createTarget, updateTargetById, deleteTargetById, setGroupVisibility, moveTargetDay } from '../../api/calendar';
 import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm, tracksDistance } from '../../constants/workouts';
 import Modal from '../ui/Modal';
 import Spinner from '../ui/Spinner';
@@ -38,6 +38,10 @@ export default function AthleteLogModal({ athlete, onClose }) {
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [zoom, setZoom] = useState(0.75);
+  // Drag-to-swap personal targets between days (expanded month view).
+  const [dragDate, setDragDate] = useState(null);
+  const [overDate, setOverDate] = useState(null);
+  const [swapping, setSwapping] = useState(false);
   const scrollRef = useRef(null);
   const pinchRef = useRef({ startDist: 0, startZoom: 1 });
 
@@ -184,6 +188,23 @@ export default function AthleteLogModal({ athlete, onClose }) {
       await refetchInto(editDay.date);
     } catch (err) { console.error(err); }
     finally { setSaving(false); }
+  };
+
+  // Swap (or move) this athlete's personal targets between two days. Only the
+  // personal targets move — the group workout stays put on its date.
+  const handleSwapDays = async (from, to) => {
+    if (!from || !to || from === to || swapping) { setDragDate(null); setOverDate(null); return; }
+    setSwapping(true);
+    try {
+      await moveTargetDay(athlete.id, from, to);
+      await fetchMonth();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSwapping(false);
+      setDragDate(null);
+      setOverDate(null);
+    }
   };
 
   // Calendar weeks (rows of 7 dates) from calStart..calEnd.
@@ -433,6 +454,8 @@ export default function AthleteLogModal({ athlete, onClose }) {
             <button onClick={() => setMonthDate(addMonths(monthDate, 1))} className="text-[#c0c1ff] hover:text-white text-sm transition">Next ›</button>
           </div>
 
+          <p className="text-[11px] text-[#c0c1ff]/80 mb-2">{swapping ? 'Swapping days…' : 'Tip: drag a day onto another to move or swap this athlete’s personal workouts. Group workouts stay put.'}</p>
+
           {!dayMap ? <Spinner /> : (
             <div ref={scrollRef} className="overflow-x-auto -mx-2" style={{ touchAction: 'pan-x pan-y' }}>
               <div className="px-2" style={{ minWidth: '900px', zoom }}>
@@ -469,9 +492,18 @@ export default function AthleteLogModal({ athlete, onClose }) {
                           status === 'partial' ? 'bg-yellow-500/25 border-yellow-400/35' :
                           status === 'missed' ? 'bg-red-500/25 border-red-400/35' :
                           'bg-[#201f20]/50 border-white/15';
+                        const isDragging = dragDate === key;
+                        const isDropTarget = overDate === key && dragDate && dragDate !== key;
                         return (
-                          <button key={key} onClick={() => day && (setExpanded(false), openEdit(day))}
-                            className={`text-left rounded-lg border p-1.5 transition hover:brightness-125 flex flex-col ${bg} ${hidden ? 'text-white/50' : ''}`}
+                          <button key={key}
+                            draggable={!!day}
+                            onClick={() => day && (setExpanded(false), openEdit(day))}
+                            onDragStart={(e) => { if (!day) return; setDragDate(key); setOverDate(null); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', key); } catch { /* Safari */ } }}
+                            onDragOver={(e) => { if (dragDate && dragDate !== key) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverDate(key); } }}
+                            onDragLeave={() => setOverDate((o) => (o === key ? null : o))}
+                            onDrop={(e) => { e.preventDefault(); handleSwapDays(dragDate, key); }}
+                            onDragEnd={() => { setDragDate(null); setOverDate(null); }}
+                            className={`text-left rounded-lg border p-1.5 transition hover:brightness-125 flex flex-col cursor-grab active:cursor-grabbing ${bg} ${hidden ? 'text-white/50' : ''} ${isDragging ? 'opacity-40' : ''} ${isDropTarget ? 'ring-2 ring-[#c0c1ff] ring-offset-1 ring-offset-[#131314]' : ''} ${swapping ? 'pointer-events-none' : ''}`}
                             style={{ height: 130 }}>
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-bold text-white">{format(d, 'd')}</span>

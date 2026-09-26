@@ -23,7 +23,7 @@ const DEFAULT_TITLES = new Set(WORKOUT_TYPES.map(t => t.label));
 // workout unless hidden for the day, plus 'additional' personal workouts).
 const plannedKm = (d) => visibleDayPlannedKm(d);
 const fmtKm = (n) => Number(n.toFixed(1)).toString();
-import { createTarget, updateTargetById, deleteTargetById, promoteTarget, setGroupVisibility, setWeekVisibility } from '../../api/calendar';
+import { createTarget, updateTargetById, deleteTargetById, promoteTarget, setGroupVisibility, setWeekVisibility, moveTargetDay } from '../../api/calendar';
 import { dayWorkouts, visibleDayWorkouts, visibleDayPlannedKm, tracksDistance } from '../../constants/workouts';
 import { toggleKudos } from '../../api/kudos';
 import { getAthleteStravaActivities } from '../../api/strava';
@@ -67,6 +67,10 @@ export default function TrackingDashboardPage() {
   // Week-start ('YYYY-MM-DD') of a Hide/Show-week action currently in flight.
   const [savingWeek, setSavingWeek] = useState(null);
   const [monthExpanded, setMonthExpanded] = useState(false);
+  // Drag-to-swap personal targets between days (expanded training log).
+  const [dragDate, setDragDate] = useState(null);
+  const [overDate, setOverDate] = useState(null);
+  const [swapping, setSwapping] = useState(false);
   // Carousel index per day in the expanded monthly grid: { 'YYYY-MM-DD': index }.
   // Lets a cell with multiple workouts switch which single one it displays.
   const [cellIdx, setCellIdx] = useState({});
@@ -319,6 +323,20 @@ export default function TrackingDashboardPage() {
       fetchData();
     } catch (err) { console.error(err); }
     finally { setSavingWeek(null); }
+  };
+
+  // Drag-to-swap: move/swap the open athlete's personal targets between two days.
+  // Group workouts stay put; only IndividualTarget rows move.
+  const handleSwapDays = async (from, to) => {
+    if (!profile || !from || !to || from === to || swapping) { setDragDate(null); setOverDate(null); return; }
+    setSwapping(true);
+    try {
+      await moveTargetDay(profile.id, from, to);
+      const m = await fetchProfileMonth(profile.id, profileMonthDate);
+      setProfileMonth(m);
+      fetchData();
+    } catch (err) { console.error(err); }
+    finally { setSwapping(false); setDragDate(null); setOverDate(null); }
   };
 
   // Compact "Hide week / Show week" button pair for a given Sunday date string.
@@ -1471,6 +1489,7 @@ export default function TrackingDashboardPage() {
               >Next &rarr;</button>
             </div>
 
+          <p className="text-[11px] text-[#c0c1ff]/80 mb-2">{swapping ? 'Swapping days…' : 'Tip: drag a day onto another to move or swap this athlete’s personal workouts. Group workouts stay put.'}</p>
           <div
             ref={expandedScrollRef}
             className="overflow-x-auto -mx-2"
@@ -1537,11 +1556,19 @@ export default function TrackingDashboardPage() {
                       const cellIsRace = active?.workout_type === 'race';
                       const kmParts = allWorkouts.map((w) => w.distance_km || 0).filter((k) => k > 0);
                       const totalKm = kmParts.reduce((a, b) => a + b, 0);
+                      const isDragging = dragDate === d.date;
+                      const isDropTarget = overDate === d.date && dragDate && dragDate !== d.date;
                       return (
                         <button
                           key={d.date}
+                          draggable
                           onClick={() => openCell({ id: profile.id, full_name: profile.full_name, group_name: profile.group_name }, d, true)}
-                          className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                          onDragStart={(e) => { setDragDate(d.date); setOverDate(null); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', d.date); } catch { /* Safari */ } }}
+                          onDragOver={(e) => { if (dragDate && dragDate !== d.date) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverDate(d.date); } }}
+                          onDragLeave={() => setOverDate((o) => (o === d.date ? null : o))}
+                          onDrop={(e) => { e.preventDefault(); handleSwapDays(dragDate, d.date); }}
+                          onDragEnd={() => { setDragDate(null); setOverDate(null); }}
+                          className={`rounded-lg ${cellIsRace ? 'border-2 border-indigo-500' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-40' : ''} ${isDropTarget ? 'ring-2 ring-[#c0c1ff] ring-offset-1 ring-offset-[#0a0a0a]' : ''} ${swapping ? 'pointer-events-none' : ''}`}
                           style={{ minHeight: `${cellHeight}px` }}
                         >
                           {/* Date row + type chip */}

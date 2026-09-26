@@ -1,7 +1,45 @@
 // World Athletics points — public API over the embedded 2025 scoring tables.
-import { EVENTS, EVENT_BY_ID, pointsFor } from './waScoringTables.js';
+import { COEFFS, EVENTS, EVENT_BY_ID, pointsFor as rawPointsFor } from './waScoringTables.js';
 
-export { EVENTS, EVENT_BY_ID, pointsFor };
+export { COEFFS, EVENTS, EVENT_BY_ID };
+
+/**
+ * World Athletics points for a result. The raw quadratic (a·x²+b·x+c) is an
+ * upward parabola, so for TIME events it only scores on the decreasing branch
+ * (faster than the vertex). Beyond the vertex a slower time would wrongly score
+ * higher, so we return null there — the result is slower than the tables score.
+ * @returns {number|null}
+ */
+export function pointsFor(eventId, gender, x) {
+  const ev = EVENT_BY_ID[eventId];
+  const table = COEFFS[gender];
+  if (!ev || !table || !table[eventId] || !(x > 0)) return null;
+  if (ev.type === 'time') {
+    const [a, b] = table[eventId];
+    if (x >= -b / (2 * a)) return null; // at/after the vertex: too slow to score
+  }
+  return rawPointsFor(eventId, gender, x);
+}
+
+/**
+ * Inverse of pointsFor: the result that scores `points` in an event. Solves
+ * a·x² + b·x + (c − points) = 0 and picks the athletically-real branch — the
+ * faster (smaller) root for time events, the larger root for distance/combined.
+ * @returns {number|null} seconds | metres | points total, or null if unattainable.
+ */
+export function resultForPoints(eventId, gender, points) {
+  const table = COEFFS[gender];
+  const ev = EVENT_BY_ID[eventId];
+  if (!table || !table[eventId] || !ev || !(points > 0)) return null;
+  const [a, b, c] = table[eventId];
+  const disc = b * b - 4 * a * (c - points);
+  if (disc < 0) return null;
+  const sq = Math.sqrt(disc);
+  const lo = (-b - sq) / (2 * a);
+  const hi = (-b + sq) / (2 * a);
+  const x = ev.type === 'time' ? (lo > 0 ? lo : hi) : Math.max(lo, hi);
+  return x > 0 ? x : null;
+}
 
 export const CATEGORY_LABELS = {
   track: 'Track',
@@ -55,6 +93,19 @@ export function runSelfCheck() {
   // out-of-range / invalid -> null
   if (pointsFor('100m', 'men', 0) !== null) throw new Error('FAIL: zero result should be null');
   if (pointsFor('nope', 'men', 10) !== null) throw new Error('FAIL: unknown event should be null');
+  // Regression: times past the parabola vertex must NOT score (100m vertex ~17s).
+  if (pointsFor('100m', 'men', 21) !== null) throw new Error(`FAIL: slow 100m 21s should be null, got ${pointsFor('100m', 'men', 21)}`);
+  if (pointsFor('100m', 'men', 50) !== null) throw new Error(`FAIL: slow 100m 50s should be null, got ${pointsFor('100m', 'men', 50)}`);
+  console.log('ok  slow times past vertex -> null');
+  // Inverse round-trips: result -> points -> result.
+  const rt = (ev, g) => {
+    const p = 1000;
+    const x = resultForPoints(ev, g, p);
+    const back = pointsFor(ev, g, x);
+    if (x == null || Math.abs(back - p) > 1) throw new Error(`FAIL round-trip ${ev}/${g}: ${x} -> ${back}`);
+    console.log(`ok  round-trip ${ev} ${g}: 1000pts -> ${x.toFixed(2)} -> ${back}`);
+  };
+  rt('100m', 'men'); rt('5000m', 'men'); rt('LJ', 'women'); rt('Road Marathon', 'men');
   console.log('waPoints self-check passed');
 }
 

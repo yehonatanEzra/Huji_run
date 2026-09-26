@@ -870,9 +870,9 @@ export default function CalendarPage() {
               )}
               <Link
                 to="/tools/calculator?tab=zones"
-                className="mt-2 w-full flex items-center justify-center gap-1.5 rounded-full border border-white/20 bg-white/5 text-white/70 py-2.5 text-sm font-semibold hover:text-white hover:bg-white/10 active:scale-95 transition"
+                className="mt-2 w-full flex items-center justify-center rounded-full border border-white/20 bg-white/5 text-white/70 py-2.5 text-sm font-semibold hover:text-white hover:bg-white/10 active:scale-95 transition"
               >
-                <span>🎯</span> Training pace calculator
+                Training pace calculator
               </Link>
             </div>
 

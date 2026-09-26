@@ -44,41 +44,35 @@ export function splitSecFromVelocity(v, distM) {
   return (distM / v) * 60;
 }
 
-// Training zones as a fraction of VDOT (target VO2 = pct · VDOT). Higher pct is
-// a harder effort and therefore a faster pace.
+// Five training zones, each a fraction of VDOT (target VO2 = pct · VDOT). Higher
+// pct is a harder effort and therefore a faster pace. Zone 5 spans VO2max-interval
+// to repetition pace (the old 5a/5b), shown as one range.
 export const ZONES = [
-  { key: '1', label: 'Recovery', sub: 'Very easy', pct: [0.58], kind: 'ceiling' },
-  { key: '2', label: 'Easy', sub: 'Aerobic base', pct: [0.62, 0.70], kind: 'range' },
-  { key: '3', label: 'Marathon', sub: 'Steady', pct: [0.80], kind: 'single' },
-  { key: '4', label: 'Threshold', sub: 'Lactate threshold', pct: [0.88], kind: 'single', splits: true },
-  { key: '5a', label: 'Interval', sub: 'VO2max', pct: [0.975], kind: 'single', splits: true },
-  { key: '5b', label: 'Repetition', sub: 'Speed', pct: [1.05], kind: 'single', splits: true },
+  { key: '1', label: 'Zone 1', sub: 'Recovery', pct: [0.58], kind: 'ceiling' },
+  { key: '2', label: 'Zone 2', sub: 'Easy / aerobic base', pct: [0.62, 0.70], kind: 'range' },
+  { key: '3', label: 'Zone 3', sub: 'Marathon / steady', pct: [0.80], kind: 'single' },
+  { key: '4', label: 'Zone 4', sub: 'Threshold', pct: [0.88], kind: 'single', splits: true },
+  { key: '5', label: 'Zone 5', sub: 'Interval to repetition', pct: [0.975, 1.05], kind: 'range', splits: true },
 ];
 
-const paceFromPct = (vdot, pct) => paceSecPerKmFromVelocity(velocityForVO2(pct * vdot));
-
 /**
- * Full zone breakdown for a VDOT value. Each zone carries pace(s) in sec/km and,
- * where relevant, 400 m / 1000 m track splits in seconds.
+ * Full zone breakdown for a VDOT value. Each zone carries one or two "points"
+ * (per pct), each with pace in sec/km and 400 m / 1000 m track splits in seconds.
  * @param {number} vdot
  */
 export function zonePaces(vdot) {
   if (!(vdot > 0)) return [];
   return ZONES.map((z) => {
-    const out = { key: z.key, label: z.label, sub: z.sub, kind: z.kind };
-    if (z.kind === 'range') {
-      // pct[0] < pct[1] -> pace[0] is the slower (aerobic) end, pace[1] the faster.
-      out.paceSlow = paceFromPct(vdot, z.pct[0]);
-      out.paceFast = paceFromPct(vdot, z.pct[1]);
-    } else {
-      out.pace = paceFromPct(vdot, z.pct[0]);
-    }
-    if (z.splits) {
-      const v = velocityForVO2(z.pct[0] * vdot);
-      out.split400 = splitSecFromVelocity(v, 400);
-      out.split1000 = splitSecFromVelocity(v, 1000);
-    }
-    return out;
+    const points = z.pct.map((p) => {
+      const v = velocityForVO2(p * vdot);
+      return {
+        pace: paceSecPerKmFromVelocity(v),
+        split400: splitSecFromVelocity(v, 400),
+        split1000: splitSecFromVelocity(v, 1000),
+      };
+    });
+    // For ranges, pct is ascending -> points[0] is the slower end, last the faster.
+    return { key: z.key, label: z.label, sub: z.sub, kind: z.kind, splits: !!z.splits, points };
   });
 }
 
@@ -106,7 +100,7 @@ export function runSelfCheck() {
   approx(vdotFor(3000, 12 * 60), 47.5, 1.0, '3K 12:00 -> VDOT');
   // Threshold pace for VDOT 50 is ~4:15/km per Daniels tables (255 s/km ±5)
   const z = zonePaces(50).find((x) => x.key === '4');
-  approx(z.pace, 255, 8, 'VDOT 50 threshold pace (s/km)');
+  approx(z.points[0].pace, 255, 8, 'VDOT 50 threshold pace (s/km)');
   console.log('vdot self-check passed');
 }
 

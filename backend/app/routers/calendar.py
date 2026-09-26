@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..dependencies import get_current_user, require_coach
@@ -395,6 +396,79 @@ def edit_group_workout(
     db.commit()
     db.refresh(gw)
     return _serialize_gw(db, gw)
+
+
+class GroupDayMove(BaseModel):
+    from_date: date
+    to_date: date
+
+
+@router.post("/group/{group_id}/move-day", response_model=list[GroupWorkoutOut])
+def move_or_swap_group_day(
+    group_id: int,
+    body: GroupDayMove,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    """Move or swap a whole day's group workouts. Everything on from_date moves to
+    to_date; anything already on to_date moves back to from_date (a swap). An empty
+    to_date makes it a plain move. Recipients ride along (same rows, new date)."""
+    if not _coach_owns_group(coach, db, group_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    if body.from_date == body.to_date:
+        raise HTTPException(status_code=400, detail="Pick a different day")
+    src = db.query(GroupWorkout).filter(
+        GroupWorkout.training_group_id == group_id, GroupWorkout.date == body.from_date
+    ).all()
+    dst = db.query(GroupWorkout).filter(
+        GroupWorkout.training_group_id == group_id, GroupWorkout.date == body.to_date
+    ).all()
+    if not src and not dst:
+        raise HTTPException(status_code=404, detail="Nothing to move")
+    for gw in src:
+        gw.date = body.to_date
+    for gw in dst:
+        gw.date = body.from_date
+    db.commit()
+    moved = db.query(GroupWorkout).filter(
+        GroupWorkout.training_group_id == group_id, GroupWorkout.date == body.to_date
+    ).all()
+    return [_serialize_gw(db, gw) for gw in moved]
+
+
+@router.post("/targets/{athlete_id}/move-day", response_model=list[IndividualTargetOut])
+def move_or_swap_target_day(
+    athlete_id: int,
+    body: GroupDayMove,
+    coach: User = Depends(require_coach),
+    db: Session = Depends(get_db),
+):
+    """Move or swap a whole day's personal targets for one athlete. Mirrors the
+    group version: everything on from_date moves to to_date, anything already on
+    to_date moves back (swap); empty target = plain move. The targets' own flags
+    (override_group / additional) ride along, so the group/no-group rules are
+    preserved — group workouts and hides are untouched."""
+    if not _coach_owns_athlete(coach, db, athlete_id):
+        raise HTTPException(status_code=404, detail="Athlete not found")
+    if body.from_date == body.to_date:
+        raise HTTPException(status_code=400, detail="Pick a different day")
+    src = db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == athlete_id, IndividualTarget.date == body.from_date
+    ).all()
+    dst = db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == athlete_id, IndividualTarget.date == body.to_date
+    ).all()
+    if not src and not dst:
+        raise HTTPException(status_code=404, detail="Nothing to move")
+    for t in src:
+        t.date = body.to_date
+    for t in dst:
+        t.date = body.from_date
+    db.commit()
+    moved = db.query(IndividualTarget).filter(
+        IndividualTarget.athlete_id == athlete_id, IndividualTarget.date == body.to_date
+    ).all()
+    return [IndividualTargetOut.model_validate(t) for t in moved]
 
 
 @router.delete("/group-workouts/{workout_id}", status_code=204)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { format, addDays, startOfWeek, startOfMonth, endOfMonth, subWeeks, addWeeks, subMonths, addMonths, isSameMonth } from 'date-fns';
-import { getCoachGroupWeek, createGroupWorkout, updateGroupWorkoutById, deleteGroupWorkoutById } from '../../api/calendar';
+import { getCoachGroupWeek, createGroupWorkout, updateGroupWorkoutById, deleteGroupWorkoutById, moveGroupDay } from '../../api/calendar';
 import { getGroup, listAthletes, listSubgroups } from '../../api/coach';
 import Modal from '../../components/ui/Modal';
 import SubgroupChips from '../../components/coach/SubgroupChips';
@@ -50,6 +50,10 @@ export default function GroupWorkoutsTab({ group }) {
   const [editingId, setEditingId] = useState(null);
   // Which day-list workout has its athlete roster expanded (toggled by 👥 button).
   const [athletesOpenId, setAthletesOpenId] = useState(null);
+  // Drag-to-swap in the expanded month view.
+  const [dragDate, setDragDate] = useState(null);
+  const [overDate, setOverDate] = useState(null);
+  const [swapping, setSwapping] = useState(false);
   const [form, setForm] = useState({
     workout_type: 'simple',
     title: '',
@@ -177,6 +181,23 @@ export default function GroupWorkoutsTab({ group }) {
     setDays((prev) => prev.map(d => d.date === date ? updated : d));
     setSelectedDay(updated);
     return updated;
+  };
+
+  // Swap (or move) all group workouts between two days — used by drag-and-drop
+  // in the expanded month view. Empty source+target is a no-op.
+  const handleSwapDays = async (from, to) => {
+    if (!from || !to || from === to || swapping) { setDragDate(null); setOverDate(null); return; }
+    setSwapping(true);
+    try {
+      await moveGroupDay(group.id, from, to);
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSwapping(false);
+      setDragDate(null);
+      setOverDate(null);
+    }
   };
 
   useEffect(() => { fetchData(); }, [currentDate, view, group?.id]);
@@ -971,7 +992,8 @@ export default function GroupWorkoutsTab({ group }) {
       >
         {group && (
           <div>
-            <p className="text-xs text-white/60 -mt-2 mb-3">{group.name}</p>
+            <p className="text-xs text-white/60 -mt-2 mb-1">{group.name}</p>
+            <p className="text-[11px] text-[#c0c1ff]/80 mb-3">{swapping ? 'Swapping days…' : 'Tip: drag a day onto another to swap their workouts.'}</p>
 
             {/* Zoom controls */}
             <div className="flex items-center justify-end gap-2 mb-2">
@@ -1048,11 +1070,19 @@ export default function GroupWorkoutsTab({ group }) {
                           hasPublished ? 'bg-green-500/30 border-green-400/40 hover:bg-green-500/40' :
                           draftOnly ? 'bg-yellow-500/25 border-yellow-400/40 hover:bg-yellow-500/35' :
                           'bg-black/45 border-white/10 hover:bg-black/35';
+                        const isDragging = dragDate === d.date;
+                        const isDropTarget = overDate === d.date && dragDate && dragDate !== d.date;
                         return (
                           <button
                             key={d.date}
+                            draggable
                             onClick={() => { setMonthExpanded(false); openDay(d); }}
-                            className={`rounded-lg backdrop-blur-2xl ${cellIsRace ? 'border-2 border-[#8083ff]/60' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden`}
+                            onDragStart={(e) => { setDragDate(d.date); setOverDate(null); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', d.date); } catch { /* Safari */ } }}
+                            onDragOver={(e) => { if (dragDate && dragDate !== d.date) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverDate(d.date); } }}
+                            onDragLeave={() => setOverDate((o) => (o === d.date ? null : o))}
+                            onDrop={(e) => { e.preventDefault(); handleSwapDays(dragDate, d.date); }}
+                            onDragEnd={() => { setDragDate(null); setOverDate(null); }}
+                            className={`rounded-lg backdrop-blur-2xl ${cellIsRace ? 'border-2 border-[#8083ff]/60' : 'border'} ${bg} relative flex flex-col text-left transition overflow-hidden cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-40' : ''} ${isDropTarget ? 'ring-2 ring-[#c0c1ff] ring-offset-1 ring-offset-[#131314]' : ''} ${swapping ? 'pointer-events-none' : ''}`}
                             style={{ minHeight: `${cellHeight}px` }}
                           >
                             <div className="flex items-start justify-between px-2 pt-1.5">

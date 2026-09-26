@@ -75,6 +75,9 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
   // Carousel index per cell ("week-dow" -> index) so a multi-workout day can show
   // the main first and switch through the rest, like the athlete training log.
   const [cellIdx, setCellIdx] = useState({});
+  // Drag-to-swap cells (keys are "week-dow"). Local only — persists on Save.
+  const [dragKey, setDragKey] = useState(null);
+  const [overKey, setOverKey] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
@@ -141,6 +144,22 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
       const next = { ...prev };
       if (!list || list.length === 0) delete next[cellKey(week, dow)];
       else next[cellKey(week, dow)] = list;
+      return next;
+    });
+  };
+
+  // Drag-to-swap: exchange two cells' workout lists (move if the target is empty).
+  // Local only — the plan persists when the coach saves.
+  const swapCells = (fromKey, toKey) => {
+    setDragKey(null);
+    setOverKey(null);
+    if (!fromKey || !toKey || fromKey === toKey) return;
+    setDayMap((prev) => {
+      const next = { ...prev };
+      const a = prev[fromKey];
+      const b = prev[toKey];
+      if (b && b.length) next[fromKey] = b; else delete next[fromKey];
+      if (a && a.length) next[toKey] = a; else delete next[toKey];
       return next;
     });
   };
@@ -416,6 +435,7 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
           >+</button>
           </div>
         </div>
+        <p className="text-[11px] text-[#c0c1ff]/80 mb-2 px-1">Tip: drag a day onto another to move or swap workouts. Changes save when you save the plan.</p>
         <div ref={expandedScrollRef} className="overflow-x-auto -mx-2" style={{ touchAction: 'pan-x pan-y' }}>
           <div className="px-2" style={{ minWidth: '880px', zoom: expandedZoom }}>
             {/* Plan total */}
@@ -458,13 +478,21 @@ export default function TemplateBuilder({ initial, onClose, onSaved, lockedGroup
                       // (e.g. an old intervals main_session) don't leak into an easy run.
                       const body = active ? (meta.structured ? (active.main_session || active.warmup || active.cooldown || '') : (active.content || '')) : '';
                       const activeKm = active ? (parseFloat(active.distance_km) || 0) : 0;
+                      const isDragging = dragKey === key;
+                      const isDropTarget = overKey === key && dragKey && dragKey !== key;
                       return (
                         <button
                           key={dow}
+                          draggable
                           onClick={() => setEditCell({ week, dow })}
-                          className={`rounded-lg ${isRace ? 'border-2 border-[#8083ff]' : 'border border-white/10'} flex flex-col text-left transition overflow-hidden ${
+                          onDragStart={(e) => { setDragKey(key); setOverKey(null); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', key); } catch { /* Safari */ } }}
+                          onDragOver={(e) => { if (dragKey && dragKey !== key) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverKey(key); } }}
+                          onDragLeave={() => setOverKey((o) => (o === key ? null : o))}
+                          onDrop={(e) => { e.preventDefault(); swapCells(dragKey, key); }}
+                          onDragEnd={() => { setDragKey(null); setOverKey(null); }}
+                          className={`rounded-lg ${isRace ? 'border-2 border-[#8083ff]' : 'border border-white/10'} flex flex-col text-left transition overflow-hidden cursor-grab active:cursor-grabbing ${
                             active ? 'bg-white/[0.07] hover:bg-white/[0.12]' : 'bg-white/[0.02] hover:bg-white/[0.06] border-dashed'
-                          }`}
+                          } ${isDragging ? 'opacity-40' : ''} ${isDropTarget ? 'ring-2 ring-[#c0c1ff] ring-offset-1 ring-offset-[#131314]' : ''}`}
                           style={{ minHeight: '116px' }}
                         >
                           <div className="flex items-start justify-between px-2 pt-1.5 gap-1">

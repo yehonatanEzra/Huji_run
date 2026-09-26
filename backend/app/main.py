@@ -33,11 +33,12 @@ from .models.athlete_transfer import AthleteTransfer  # noqa: F401
 from .models.info_section import InfoSection  # noqa: F401
 from .models.workout_template import WorkoutTemplate, WorkoutTemplateDay  # noqa: F401
 from .models.goal import Goal  # noqa: F401
+from .models.todo import Todo  # noqa: F401
 from .models.email_verification import EmailVerification  # noqa: F401
 from .models.app_setting import AppSetting  # noqa: F401
 from .models.assistant import AssistantConversation, AssistantMessage, AthleteNotebook, SystemPrompt  # noqa: F401
 from .routers import auth, calendar, races, leaderboard, profile, coach, kudos
-from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams, group_coach, reporting, analytics, workout_templates, goals, info, assistant, admin_prompts
+from .routers import health_wellness, feed, challenges, workout_comments, home, coaching, admin_review, admin_users, strava, notifications, stats, teams, group_coach, reporting, analytics, workout_templates, goals, info, assistant, admin_prompts, todos
 
 Base.metadata.create_all(bind=engine)
 
@@ -225,6 +226,7 @@ app.include_router(goals.router, prefix=API_PREFIX)
 app.include_router(info.router, prefix=API_PREFIX)
 app.include_router(assistant.router, prefix=API_PREFIX)
 app.include_router(admin_prompts.router, prefix=API_PREFIX)
+app.include_router(todos.router, prefix=API_PREFIX)
 
 
 @app.get("/health")

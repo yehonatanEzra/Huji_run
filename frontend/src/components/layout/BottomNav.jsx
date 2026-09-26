@@ -16,6 +16,7 @@ const athletePairedItems = [
   { to: '/races',         label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },
   { to: '/hall-of-fame',  label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
+  { to: '/tools',         label: 'Tools',       icon: '🧰', image: '/icons/tools.jpg' },
   { to: '/profile',       label: 'Profile',     icon: '👤', image: '/icons/profile.jpg', isTransfer: true },
 ];
 
@@ -26,6 +27,7 @@ const athleteUnpairedItems = [
   { to: '/races',         label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness', label: 'Health',    icon: '🏥', image: '/icons/health.jpg' },
   { to: '/hall-of-fame',  label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
+  { to: '/tools',         label: 'Tools',       icon: '🧰', image: '/icons/tools.jpg' },
   { to: '/profile',       label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
@@ -40,6 +42,7 @@ const coachItems = [
   { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
   { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
+  { to: '/tools',              label: 'Tools',       icon: '🧰', image: '/icons/tools.jpg' },
   { to: '/profile',            label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
 ];
 
@@ -54,6 +57,7 @@ const adminItems = [
   { to: '/races',              label: 'Races',       icon: '🏆', image: '/icons/races.jpg' },
   { to: '/health-wellness',    label: 'Health',      icon: '🏥', image: '/icons/health.jpg' },
   { to: '/hall-of-fame',       label: 'Hall of Fame',icon: '🥇', image: '/icons/hall-of-fame.jpg' },
+  { to: '/tools',              label: 'Tools',       icon: '🧰', image: '/icons/tools.jpg' },
   { to: '/profile',            label: 'Profile',     icon: '👤', image: '/icons/profile.jpg' },
   { to: '/admin',              label: 'Admin',       icon: '⚖️', image: '/icons/review.jpg', isPending: true },
 ];

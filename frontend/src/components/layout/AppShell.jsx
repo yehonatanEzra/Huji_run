@@ -13,7 +13,7 @@ const EMAIL_VERIFICATION_UI = false;
 
 const ROOT_PATHS = new Set([
   '/home', '/find-coach', '/calendar', '/races', '/hall-of-fame', '/health-wellness',
-  '/profile', '/feed', '/coach/home', '/coach/dashboard', '/coach/requests', '/admin/pending',
+  '/profile', '/feed', '/coach/home', '/coach/dashboard', '/coach/requests', '/admin/pending', '/tools',
 ]);
 
 // Pages where the header is tight / Strava is irrelevant — hide the Strava button.

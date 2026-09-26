@@ -32,6 +32,9 @@ import HealthWellnessPage from './pages/HealthWellnessPage';
 import FeedPage from './pages/FeedPage';
 import AboutPage from './pages/AboutPage';
 import InfoPage from './pages/InfoPage';
+import TodosPage from './pages/TodosPage';
+import ToolsHubPage from './pages/tools/ToolsHubPage';
+import CalculatorPage from './pages/tools/CalculatorPage';
 
 export default function App() {
   const { user } = useAuth();
@@ -65,6 +68,11 @@ export default function App() {
         <Route path="/health-wellness" element={<HealthWellnessPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/info" element={<InfoPage />} />
+        <Route path="/tools" element={<ToolsHubPage />} />
+        <Route path="/tools/todos" element={<TodosPage />} />
+        <Route path="/tools/calculator" element={<CalculatorPage />} />
+        {/* Todos moved under the Tools hub — keep the old path working */}
+        <Route path="/todos" element={<Navigate to="/tools/todos" replace />} />
         <Route path="/profile" element={<ProfilePage />} />
 
         {/* Workout authoring moved into the Group hub's Workouts tab */}
